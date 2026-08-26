@@ -29,10 +29,14 @@ second interface to keep in step with 24 routes forever.
 | **Verified** | the QR carried `#fp=` (PLAN Phase 1) | checked against a value that never crossed the network |
 | **Trust on first use** | read off the server, confirmed by the parent against `nestwatch fingerprint` | only as good as that comparison |
 
-No nestwatch has shipped `#fp=` yet, so every pairing today takes the second route. The
-app records which one happened (`PinProvenance`) and keeps saying so — a warning shown
-once at pairing and then forgotten would make the weaker trust indistinguishable from the
-stronger one forever after.
+**Both routes now work against a real server.** nestwatch `e7b90b7` emits `#fp=` in the
+QR (and deliberately *not* in the printed URL below it — only a scanning client can use a
+fingerprint, and printing it wraps an 80-column console). `tool/prove_phase1.dart` runs
+the verified route end to end against that server's own `pair_url` output.
+
+The app records which route happened (`PinProvenance`) and keeps saying so — a warning
+shown once at pairing and then forgotten would make the weaker trust indistinguishable
+from the stronger one forever after.
 
 ## The one dependency rule
 

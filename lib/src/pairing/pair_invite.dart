@@ -4,7 +4,8 @@
 ///
 ///     https://{host}:{port}/p/{token}
 ///
-/// and PLAN.md §4 adds a fingerprint as a URL *fragment* once Phase 1 lands:
+/// and since nestwatch `e7b90b7` (PLAN.md Phase 1) it appends the certificate fingerprint
+/// as a URL *fragment*:
 ///
 ///     https://192.168.1.42:8443/p/EG629F4DQDDHS44V#fp=AB:CD:...
 ///

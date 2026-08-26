@@ -154,10 +154,20 @@ mutate "token: normalisation stops uppercasing" \
   "    .toUpperCase();" \
   "    .toLowerCase();"
 
-mutate "poll: notify before persisting (re-announces after a crash)" \
+mutate "poll: persist before announcing (loses a request if notify throws)" \
   lib/src/background/poll_logic.dart \
-  "  await store.save(diff.next);" \
-  "  await Future<void>.delayed(Duration.zero);"
+  "  if (diff.fresh.isNotEmpty) {
+    await notify(pending.where((r) => diff.fresh.contains(r.id)).toList());
+  }
+
+  // Reached only once the announcement succeeded. A throw above leaves the store
+  // untouched, which is what makes the next round a retry rather than a loss.
+  await store.save(diff.next);" \
+  "  await store.save(diff.next);
+
+  if (diff.fresh.isNotEmpty) {
+    await notify(pending.where((r) => diff.fresh.contains(r.id)).toList());
+  }"
 
 mutate "login: posts a form instead of JSON" \
   lib/src/api/nestwatch_api.dart \

@@ -71,10 +71,46 @@ void main() {
       final text = explainMismatch(
         rejectionWithCertAge(const Duration(hours: 1)),
       );
-      expect(text, contains('If you just re-ran'));
-      expect(text, contains('If you did not'));
       expect(text.toLowerCase(), isNot(contains('verified')));
       expect(text.toLowerCase(), isNot(contains('safe to')));
+      expect(text.toLowerCase(), isNot(contains('this is expected')));
+    });
+
+    test('does not lead with the comfortable explanation', () {
+      // Certificates change rarely, and deliberately so: `install` reuses the existing
+      // one while its addresses still cover the PC, because reissuing on every routine
+      // upgrade "trains the parent to click through warnings without looking — the exact
+      // habit the fingerprint check depends on them not having" (nestwatch
+      // src/install.rs). An earlier version of this copy opened with "if you just
+      // re-ran nestwatch install, this is expected", which tilts a parent toward the
+      // innocent reading at the moment that costs most.
+      final text = explainMismatch(
+        rejectionWithCertAge(const Duration(hours: 1)),
+      );
+      final firstLine = text.split('\n').firstWhere((l) => l.trim().isNotEmpty);
+      expect(
+        firstLine.toLowerCase(),
+        isNot(contains('if you just')),
+        reason: 'the opening sentence must not be a reassurance',
+      );
+
+      // The two narrow innocent causes are named — but as the exceptions they are.
+      expect(text, contains('--new-cert'));
+      expect(text.toLowerCase(), contains('address'));
+      expect(text.toLowerCase(), contains('nothing else should'));
+    });
+
+    test('never suggests re-scanning a QR to clear the warning', () {
+      // Re-scanning adopts whatever is being presented. It is the one action that turns
+      // a refusal into silent trust, so the copy must not offer it as a remedy.
+      for (final age in [
+        const Duration(hours: 1),
+        const Duration(days: 30),
+        const Duration(hours: -5),
+      ]) {
+        final text = explainMismatch(rejectionWithCertAge(age)).toLowerCase();
+        expect(text, isNot(contains('re-scan the pairing qr')), reason: '$age');
+      }
     });
 
     test('always sends the parent to the PC itself', () {

@@ -94,16 +94,24 @@ String explainMismatch(PinRejection rejection) {
 
   switch (story) {
     case MismatchStory.consistentWithReinstall:
+      // Deliberately does NOT lead with the reassuring cause. Certificates change
+      // rarely: `install` reuses the existing one while its addresses still cover the
+      // PC, and nestwatch says why — reissuing on every routine upgrade "trains the
+      // parent to click through warnings without looking, the exact habit the
+      // fingerprint check depends on them not having". So the innocent explanations are
+      // narrow, and naming them first would tilt a parent toward the comfortable one at
+      // the moment that costs most.
       buffer
         ..writeln(
-          'If you just re-ran `nestwatch install` on that PC and it issued a new '
-          'certificate, this is expected. Re-scan the pairing QR.',
+          'Certificates do not normally change. Two ordinary things cause it: you ran '
+          '`nestwatch install --new-cert`, or that PC\'s address on your network '
+          'changed. Nothing else should.',
         )
         ..writeln()
         ..writeln(
-          'If you did not, something on your network may be impersonating it. '
-          'Check the fingerprint below against `nestwatch fingerprint` run on the PC '
-          'itself before you trust it.',
+          'Run `nestwatch fingerprint` on the PC itself and compare it with the value '
+          'below. Only trust this connection if they match — and do not re-scan a QR '
+          'to make the warning go away.',
         );
     case MismatchStory.inconsistentWithReinstall:
       buffer
@@ -113,9 +121,9 @@ String explainMismatch(PinRejection rejection) {
         )
         ..writeln()
         ..writeln(
-          'You may be pointed at a different PC than the one you paired with. '
-          'Check the fingerprint below against `nestwatch fingerprint` run on the PC '
-          'you mean to reach.',
+          'You may be pointed at a different PC than the one you paired with. Run '
+          '`nestwatch fingerprint` on the PC you mean to reach and compare it with the '
+          'value below before trusting anything.',
         );
     case MismatchStory.unknown:
       buffer.writeln(

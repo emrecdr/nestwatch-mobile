@@ -202,7 +202,8 @@ viewer on the parent's phone. Same ambiguity the doc already flagged; comply whe
 | Token: 16 chars, 15-min TTL, **single-use**, only SHA-256 stored | `src/pairing.rs:31`, `:34`, `:96` |
 | `fingerprint(der)` = SHA-256, `AB:CD:` uppercase hex | `src/cert.rs:133-141` (private) |
 | `read_fingerprint(path)` — public, same format | `src/cert.rs:119` |
-| `generate()` makes a **new key and cert**; `install` rotates both | `src/cert.rs:41` |
+| `generate()` makes a **new key and cert** (so SPKI pinning gains nothing over leaf-DER) | `src/cert.rs:41` |
+| **`install` usually does NOT reissue** — it reuses while `cert_sans == reachable_hosts()`, reissuing only on `--new-cert` or an address change ‡ | `src/install.rs` grep `let reuse =` |
 | Cookie `hh_session`: Secure, HttpOnly, SameSite=Strict, 30-day sliding | `src/server.rs:57-61` |
 | Session expiry refreshed at most every 5 days | `src/auth.rs:509` |
 | **`require_same_origin` fails open when `Sec-Fetch-Site` is absent** | `src/security.rs:93-99` |
@@ -211,6 +212,13 @@ viewer on the parent's phone. Same ambiguity the doc already flagged; comply whe
 | `GET /session` — **unauthenticated**, returns `{authenticated, version}` | `src/auth.rs:493-501` |
 | `GET /api/time-requests` → `Vec<PendingRequest>{id,ts,minutes,reason}`, max 5 | `src/api.rs` grep `fn list_time_requests`, `src/timereq.rs:25,31` |
 | Approve/deny are server-side idempotent under a mutex | `src/timereq.rs:43-49` |
+
+‡ **Corrected after the fact.** Both marked claims were wrong in this document as originally
+written, and were caught while building Phase 2: a deliberate certificate-rotation test produced an
+identical fingerprint, because `install` had reused the cert. They are corrected here rather than
+left for a future session to re-derive — the second one especially, since copy that leads with a
+reassuring cause is worse than no guidance at all. §3's line numbers were verified at nestwatch
+`5b1b8d4` and Phase 1 has since moved `src/install.rs`; grep the symbol.
 
 ### Endpoints the app uses
 
@@ -338,9 +346,18 @@ Designed around traps 2–4.
 The 30-day sliding expiry means a regularly-used app never re-authenticates. A `401` from `/api/*`
 means the session lapsed — re-prompt for the password, do not re-pair.
 
-On **pin mismatch**, say which of the two things happened: *"This PC's certificate changed. If you
-just re-ran `nestwatch install`, re-scan the QR. If you didn't, something on your network may be
-impersonating it."* Both are real, and only the parent can tell them apart.
+On **pin mismatch**, do not hand the parent a reassuring explanation first. ‡ Re-running `install`
+is *not* a routine cause: it reuses the existing certificate while `cert_sans` still covers the
+reachable addresses, reissuing only on `--new-cert` or an address change. nestwatch does that
+deliberately, and says why — reissuing "makes EVERY paired phone and laptop show the 'not trusted'
+warning again … trains the parent to click through warnings without looking — the exact habit the
+fingerprint check depends on them not having."
+
+So the innocent explanations are narrow and specific: the parent ran `--new-cert`, or the PC's
+address moved. Everything else is worth alarm. Name those two, say plainly that nothing else should
+change a certificate, and send them to the PC to run `nestwatch fingerprint` rather than to a
+re-scan. Only the parent can tell the cases apart, and the copy must not tilt them toward the
+comfortable one.
 
 ### Screens — three, and only three
 

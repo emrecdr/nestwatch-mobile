@@ -72,10 +72,12 @@ void main() {
   String request(String id) =>
       '{"id":"$id","ts":"2026-08-26T10:00:00Z","minutes":5,"reason":"r"}';
 
-  test('the seen-set is persisted BEFORE anything is announced', () async {
-    // If a crash lands between the two, the next round re-announces. "Told twice" is
-    // the worse failure: it is what teaches a parent to swipe the notification away
-    // unread, and an unread notification is the same as none.
+  test('the parent is announced to BEFORE the seen-set is persisted', () async {
+    // This assertion was the other way round, defended by the belief that a failure
+    // between the two would re-announce and that "told twice" is the worse outcome.
+    // Re-announcing is what THIS ordering costs; the other one loses the request
+    // outright, because `diffPending` marks every pending id seen and a `notify` that
+    // throws then leaves `fresh` empty forever.
     body = '[${request("a")}]';
     final log = <String>[];
     final store = _RecordingStore(log);
@@ -89,12 +91,47 @@ void main() {
 
     expect(log, contains('notify(1)'));
     expect(
-      log.indexOf('save(1)'),
-      lessThan(log.indexOf('notify(1)')),
-      reason:
-          'saving after notifying would re-announce every round after a crash',
+      log.indexOf('notify(1)'),
+      lessThan(log.indexOf('save(1)')),
+      reason: 'saving first loses the request entirely if notify throws',
     );
   });
+
+  test(
+    'a request announced but not recorded is announced again, not lost',
+    () async {
+      // The same property as the test above, but as behaviour rather than call order —
+      // which is the one worth having. `[]` on the second poll would be a parent never
+      // being told, silently, while a child waits.
+      body = '[${request("a")}]';
+      final store = _RecordingStore(<String>[]);
+
+      await expectLater(
+        pollOnce(
+          client: client,
+          store: store,
+          notify: (_) async => throw const SocketException('channel down'),
+          cancel: (_) async {},
+        ),
+        throwsA(isA<SocketException>()),
+      );
+
+      final announced = <int>[];
+      await pollOnce(
+        client: client,
+        store: store,
+        notify: (r) async => announced.add(r.length),
+        cancel: (_) async {},
+      );
+
+      expect(
+        announced,
+        [1],
+        reason:
+            'a request whose announcement failed must not be silently dropped',
+      );
+    },
+  );
 
   test('a second poll over the same queue announces nothing', () async {
     body = '[${request("a")}]';
