@@ -9,6 +9,23 @@
          tells nobody. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- The opt-in "watch now" tier (PLAN §5): a dataSync foreground service the parent
+         starts when they are actively waiting for an answer.
+
+         Android 15 (API 35) allows dataSync a total of SIX HOURS per 24, shared across
+         every dataSync service the app runs, and only counts time while the app is in
+         the background. On exceeding it the system calls Service.onTimeout(int, int) and
+         gives a few seconds to stopSelf() before throwing
+         RemoteServiceException: "A foreground service of type dataSync did not stop
+         within its timeout". targetSdk here is 36, so this applies to us.
+
+         That budget is the whole reason this is the OPT-IN tier and not the baseline:
+         a service polling round the clock would be deaf for three quarters of the day.
+
+         Declaring the type ALSO requires a Play Console declaration — updates are
+         rejected for omitting it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <application
         android:label="Nestwatch"
         android:name="${applicationName}"
@@ -42,6 +59,14 @@
              EVERY version code across EVERY track — including the first internal-test
              upload, because a track that has ever shipped without it stays blocked.
              See docs/PLAN.md §5, "Store paperwork from day one". -->
+        <!-- flutter_foreground_task's service, declared with the dataSync type. The
+             plugin ships the class; the type has to be named here, in the app manifest,
+             because it is the app that Play judges. -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
         <meta-data
             android:name="isMonitoringTool"
             android:value="child_monitoring" />

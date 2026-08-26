@@ -11,9 +11,11 @@ import 'package:flutter/material.dart';
 
 import '../background/background_poll.dart';
 import '../background/notifications.dart';
+import '../background/watch_now.dart';
 
 class NotificationsSheet extends StatefulWidget {
-  const NotificationsSheet({super.key});
+  final String authority;
+  const NotificationsSheet({super.key, required this.authority});
 
   @override
   State<NotificationsSheet> createState() => _NotificationsSheetState();
@@ -21,17 +23,53 @@ class NotificationsSheet extends StatefulWidget {
 
 class _NotificationsSheetState extends State<NotificationsSheet> {
   bool? _enabled;
+  bool _watching = false;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
+    initWatchService();
     _refresh();
   }
 
   Future<void> _refresh() async {
     final on = await notificationsEnabled();
-    if (mounted) setState(() => _enabled = on);
+    final watching = await isWatching();
+    if (mounted) {
+      setState(() {
+        _enabled = on;
+        _watching = watching;
+      });
+    }
+  }
+
+  Future<void> _toggleWatch(bool wanted) async {
+    setState(() => _busy = true);
+    try {
+      if (!wanted) {
+        await stopWatching();
+      } else {
+        // The persistent notification is the service's; posting it needs the same
+        // permission as the request alerts, so ask here too rather than starting a
+        // service whose notification Android will not show.
+        if (!await notificationsEnabled() &&
+            !await requestNotificationPermission()) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Watching needs notifications switched on.'),
+              ),
+            );
+          }
+          return;
+        }
+        await startWatching(widget.authority);
+      }
+      await _refresh();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _toggle(bool wanted) async {
@@ -104,6 +142,25 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
             'minutes for an app that is not running, so this is a heads-up rather than '
             'an alert. If you are waiting for an answer, open this app — the Requests '
             'screen checks every minute while it is on screen.',
+            style: theme.textTheme.bodySmall,
+          ),
+          const Divider(height: 36),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _watching,
+            onChanged: _busy ? null : _toggleWatch,
+            title: const Text('Watch now'),
+            subtitle: Text(
+              'Check every ${watchPollInterval.inSeconds} seconds for the next '
+              '${watchSessionLimit.inMinutes} minutes.',
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'For when you are waiting on an answer. It shows a notification while it '
+            'runs and stops on its own — Android allows this kind of check a total of '
+            'six hours a day, so leaving it on would use up the allowance and leave '
+            'none for later.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 16),

@@ -73,7 +73,8 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () => showModalBottomSheet<void>(
               context: context,
               showDragHandle: false,
-              builder: (_) => const NotificationsSheet(),
+              builder: (_) =>
+                  NotificationsSheet(authority: widget.identity.authority),
             ),
           ),
           IconButton(

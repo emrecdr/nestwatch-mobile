@@ -15,8 +15,8 @@ Walking skeleton (PLAN §9), **steps 2–3 of 5**:
 - **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback.
 - **step 4** — token redemption, password login, and a session that survives a restart.
 - **step 5** — three screens: time requests, today's usage, the screenshot.
-- **notifications (baseline tier)** — a WorkManager periodic poll that tells the parent a
-  request is waiting.
+- **notifications** — both tiers: a WorkManager periodic poll, and an opt-in "watch now"
+  `dataSync` foreground service.
 
 The walking skeleton is complete. Rules, routines, curfew and the audit log stay in the
 browser, deliberately — configuration is done rarely, and each screen added here is a
@@ -141,6 +141,19 @@ so a second run inside one period is not reachable from the shell. That branch i
 headlessly by `prove_background.dart` check 3 and by `test/seen_requests_test.dart`, both
 exercising the same `pollOnce`.
 
+Verified for the watch-now tier, on the same emulator: the service starts as a genuine
+foreground service (`isForeground=true`, channel `nestwatch.watching`,
+`targetSdkVersion:36`); its own isolate installs the pin and polls at 60 s **while the app
+is backgrounded**, posting the alert alongside the persistent indicator; and toggling it
+off removes the service and withdraws that indicator, with no restart after.
+
+Not verified for that tier: the timeout path. `Service.onTimeout` is API 35 and only fires
+after six hours of background foreground-service time, which no emulator session here can
+reach. That the `allowAutoRestart: false` guard prevents the restart loop rests on reading
+`ForegroundService.onDestroy` — note that the clean-stop test above does *not* exercise it,
+because a Dart-initiated stop skips the restart branch by way of `isCorrectlyStopped()`
+instead.
+
 Also still unverified anywhere: the QR camera path, which needs real hardware.
 
 That harness is deliberately re-runnable. A pairing token is single-use with a 15-minute
@@ -235,6 +248,33 @@ installs the pin before anything else.
 
 The same rule bars writing the polling in Kotlin: native HTTP never enters `dart:io`, so it
 cannot be pinned by this mechanism at all — exactly why `cronet_http` is banned.
+
+### The opt-in "watch now" tier
+
+A `dataSync` foreground service the parent starts when actively waiting, polling at 60 s
+instead of 15 min, stopping itself after 30 minutes.
+
+Android 15 allows `dataSync` **6 hours per 24**, shared across every one of the app's
+services, counted while the app is in the background. Exceeding it calls
+`Service.onTimeout(int, int)` and allows a few seconds to `stopSelf()` before throwing
+`RemoteServiceException: "A foreground service of type dataSync did not stop within its
+timeout"`. Our `targetSdk` is 36, so this applies.
+
+The 30-minute session limit is chosen against the budget, not the platform maximum: at
+least four sessions must fit in a day, or the first watch of the morning would leave the
+evening with none. A test asserts that arithmetic.
+
+**`allowAutoRestart: false` is load-bearing.** `flutter_foreground_task` implements both
+`onTimeout` overloads correctly — but `ForegroundService.onDestroy` restarts the service
+when `allowAutoRestart && !isCorrectlyStopped`, and `isCorrectlyStopped()` is true only
+when the *Dart* side called `stopService()` (stored action `API_STOP`). A system timeout
+leaves it at `API_START`. So on the shipped defaults: hit the 6-hour cap → `onTimeout` →
+`stopSelf()` → `onDestroy` sees an "incorrect" stop → restart alarm in 5 seconds →
+relaunch already over budget → timed out again. A restart loop against a system that just
+said stop, reached *through* a correct `onTimeout`.
+
+Turning auto-restart off is right for this feature anyway: watching is deliberate and
+brief, and auto-restart exists for always-on trackers — the design §5 rejects.
 
 ### Permissions WorkManager brings with it
 
