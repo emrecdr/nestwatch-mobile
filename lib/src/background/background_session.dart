@@ -24,6 +24,8 @@ import '../pairing/secure_identity_store.dart';
 import '../pairing/server_identity.dart';
 import '../pairing/session_store.dart';
 import '../pinning/pinned_http_overrides.dart';
+import 'notifications.dart';
+import 'poll_logic.dart';
 
 /// A pinned client and the server it belongs to, or `null` when this device is not
 /// paired and signed in.
@@ -62,4 +64,26 @@ Future<BackgroundSession?> openBackgroundSession({
     };
 
   return (identity: identity, client: client);
+}
+
+/// Open a session and poll it — which is the whole of what both notification tiers do.
+///
+/// Returns false when there is nothing to poll: unpaired, or signed out. The two callers
+/// want different things from that, which is why it is reported rather than handled here.
+/// The fifteen-minute round treats it as an ordinary quiet result; the foreground service
+/// stops itself, rather than leave a persistent notification claiming to watch nothing.
+///
+/// The wiring below is the point. Written out per tier, the store, the notifier and the
+/// canceller were two places to keep in step and one to forget — and the tier that
+/// forgot would go on polling while announcing nothing.
+Future<bool> pollPairedServer() async {
+  final session = await openBackgroundSession();
+  if (session == null) return false;
+  await pollOnce(
+    client: session.client,
+    store: const SecureSeenRequestStore(),
+    notify: notifyTimeRequests,
+    cancel: cancelForRequest,
+  );
+  return true;
 }

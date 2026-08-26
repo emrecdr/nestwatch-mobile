@@ -36,10 +36,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
-import '../pairing/secure_identity_store.dart';
 import 'background_session.dart';
-import 'notifications.dart';
-import 'poll_logic.dart';
 
 /// How long a watch session runs before stopping itself.
 ///
@@ -149,20 +146,9 @@ class _WatchTaskHandler extends TaskHandler {
       return;
     }
 
-    final session = await openBackgroundSession();
-    if (session == null) {
-      // Unpaired or signed out — watching cannot mean anything. Stop rather than
-      // leaving a persistent notification claiming to watch nothing.
-      await FlutterForegroundTask.stopService();
-      return;
-    }
-
-    await pollOnce(
-      client: session.client,
-      store: const SecureSeenRequestStore(),
-      notify: notifyTimeRequests,
-      cancel: cancelForRequest,
-    );
+    // Unpaired or signed out — watching cannot mean anything. Stop rather than leaving
+    // a persistent notification claiming to watch nothing.
+    if (!await pollPairedServer()) await FlutterForegroundTask.stopService();
   }
 
   @override

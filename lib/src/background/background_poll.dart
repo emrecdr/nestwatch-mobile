@@ -19,9 +19,7 @@ library;
 
 import 'package:workmanager/workmanager.dart';
 
-import '../pairing/secure_identity_store.dart';
 import 'background_session.dart';
-import 'notifications.dart';
 import 'poll_logic.dart';
 
 /// Re-exported so callers need only one import for the baseline tier.
@@ -58,18 +56,9 @@ void callbackDispatcher() {
 Future<bool> runBackgroundPoll() async {
   // Installs the pin in THIS isolate. See background_session.dart — statics do not
   // cross isolates, so without this the poll would run unpinned.
-  final session = await openBackgroundSession();
-  // Not paired, or not signed in: nothing to do, and not an error.
-  if (session == null) {
-    return true;
-  }
-
-  await pollOnce(
-    client: session.client,
-    store: const SecureSeenRequestStore(),
-    notify: notifyTimeRequests,
-    cancel: cancelForRequest,
-  );
+  // Not paired or not signed in is nothing to do, and not an error — so the result is
+  // discarded here, where both answers mean the same thing.
+  await pollPairedServer();
 
   // Always true, and stated here rather than inside `pollOnce` because this is the only
   // frame that WorkManager is listening to. False asks for a retry with backoff, and
