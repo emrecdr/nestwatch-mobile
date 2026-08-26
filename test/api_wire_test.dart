@@ -36,6 +36,11 @@ void main() {
   /// When true, `/api/screenshot` answers as `AppError::Control` does.
   var captureFails = false;
 
+  /// When true, every path answers 403 — what `require_lan_peer` does to a phone that
+  /// has stopped looking like it is on the LAN. It gates the whole server, not one
+  /// route, so the stub refuses everything.
+  var lanRefused = false;
+
   /// What the stub reports in `X-Shot-Tier`. `null` stands in for a server predating
   /// the header.
   String? servedTier = 'preview';
@@ -51,6 +56,7 @@ void main() {
   setUp(() async {
     seen.clear();
     captureFails = false;
+    lanRefused = false;
     servedTier = 'preview';
     final context = SecurityContext()
       ..useCertificateChain('$dir/server.cert.pem')
@@ -64,6 +70,14 @@ void main() {
     server.listen((request) async {
       seen.add(request);
       final response = request.response;
+      if (lanRefused) {
+        // Before auth, before routing: require_lan_peer is a layer, not a handler.
+        response
+          ..statusCode = HttpStatus.forbidden
+          ..write('{"error":"forbidden"}');
+        await response.close();
+        return;
+      }
       if (request.uri.path.startsWith('/p/')) {
         // Trap 2: nestwatch answers 302 to `/` identically on success and failure.
         // The stub has to actually redirect, or a test asserting "we do not follow it"
@@ -233,6 +247,41 @@ void main() {
         client.screenshotPreview,
         isNot(isA<Future<Object?> Function()>()),
         reason: 'neither parameter may acquire a default',
+      );
+    });
+  });
+
+  group('403 means the same thing on every path', () {
+    // A phone on a VPN stops looking like a LAN peer, and `require_lan_peer` refuses the
+    // whole server before auth runs. §6 asks for that to be said in those words, because
+    // "could not reach that PC" sends a parent to reboot a router over a setting on the
+    // phone in their hand.
+    //
+    // This asserts a shape rather than a status. `screenshotPreview` used to build its
+    // own request instead of going through the shared one, and the copy had no 403
+    // branch — so the single endpoint a parent reaches for when they are away from the
+    // house was the one that could not tell them why it had failed.
+    test('including the screenshot, which used to build its own request', () async {
+      lanRefused = true;
+
+      await expectLater(
+        client.session(),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.notOnLan,
+          ),
+        ),
+      );
+
+      await expectLater(
+        client.screenshotPreview(onTimer: false),
+        throwsA(
+          isA<NestwatchException>()
+              .having((e) => e.failure, 'failure', NestwatchFailure.notOnLan)
+              .having((e) => e.message, 'names the cause', contains('VPN')),
+        ),
       );
     });
   });

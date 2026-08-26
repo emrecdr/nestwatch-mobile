@@ -364,27 +364,22 @@ class NestwatchClient {
   Future<Frame> screenshotPreview({required bool onTimer}) async {
     final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';
     try {
-      final request = await _client
-          .getUrl(Uri.parse('https://$authority/api/screenshot$query'))
-          .timeout(timeout);
-      final held = _cookie;
-      if (held != null) request.cookies.add(held.toCookie());
+      return await _mappingTransportFailures(() async {
+        final response = await _open('GET', '/api/screenshot$query');
+        _requireOk(response);
 
-      final response = await request.close().timeout(timeout);
-      _adoptFrom(response);
-      _requireOk(response);
-
-      // The server names the tier it actually served, so a client can record what it
-      // *got* rather than what it asked for. Reported rather than refused: a frame at
-      // the wrong tier is still a real, current picture, and the cost worth guarding
-      // against is the stream — which the caller stops — not the single frame. Absent on
-      // a server predating the header, which reads as "no disagreement to report".
-      final served = response.headers.value('x-shot-tier');
-      final chunks = await response.toList();
-      return Frame(
-        bytes: Uint8List.fromList(chunks.expand((c) => c).toList()),
-        servedTier: served,
-      );
+        // The server names the tier it actually served, so a client can record what it
+        // *got* rather than what it asked for. Reported rather than refused: a frame at
+        // the wrong tier is still a real, current picture, and the cost worth guarding
+        // against is the stream — which the caller stops — not the single frame. Absent
+        // on a server predating the header, which reads as "no disagreement to report".
+        final served = response.headers.value('x-shot-tier');
+        final chunks = await response.toList();
+        return Frame(
+          bytes: Uint8List.fromList(chunks.expand((c) => c).toList()),
+          servedTier: served,
+        );
+      });
     } on NestwatchException catch (e) {
       // A 500 from anywhere means `AppError::Control` or `AppError::Internal`, and the
       // body is deliberately uninformative. This is the one call site that knows the
@@ -399,16 +394,6 @@ class NestwatchClient {
         'the screen-capture API is simply absent, and every screenshot fails while '
         'everything else on this app keeps working. Updating Windows on that PC fixes '
         'it.',
-      );
-    } on HandshakeException {
-      throw const NestwatchException(
-        NestwatchFailure.pinMismatch,
-        'The certificate did not match.',
-      );
-    } on SocketException catch (e) {
-      throw NestwatchException(
-        NestwatchFailure.unreachable,
-        'Could not reach $authority. ${e.osError?.message ?? e.message}',
       );
     }
   }
@@ -453,45 +438,60 @@ class NestwatchClient {
     _requireOk(response);
   }
 
-  /// One request: attach the session, send, capture any session change.
-  Future<(HttpClientResponse, String)> _send(
+  /// One request: attach the session, send, take what it says about the session.
+  ///
+  /// Separate from [_send] because [screenshotPreview] wants the same request and a
+  /// different body — JPEG bytes rather than decoded text. It used to build its own, and
+  /// the copy lacked the 403 branch below, so a phone behind a VPN was told
+  /// "HTTP 403" instead of the thing §6 asks it to be told. One place builds a request.
+  Future<HttpClientResponse> _open(
     String method,
     String path, {
     Map<String, Object?>? jsonBody,
     bool followRedirects = true,
   }) async {
+    final request = await _client
+        .openUrl(method, Uri.parse('https://$authority$path'))
+        .timeout(timeout);
+    request.followRedirects = followRedirects;
+
+    final held = _cookie;
+    if (held != null) request.cookies.add(held.toCookie());
+
+    if (jsonBody != null) {
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(jsonBody));
+    }
+
+    final response = await request.close().timeout(timeout);
+
+    // Adopt before inspecting the status: a 401 that also clears the cookie has to
+    // drop the stored one, or the app retries forever with a dead session.
+    _adoptFrom(response);
+
+    if (response.statusCode == HttpStatus.forbidden) {
+      await response.drain<void>();
+      throw const NestwatchException(
+        NestwatchFailure.notOnLan,
+        'That PC refused the connection because this phone does not look like it is '
+        'on the same home network. If a VPN is switched on, turn it off — nestwatch '
+        'only answers devices on the LAN.',
+      );
+    }
+
+    return response;
+  }
+
+  /// The two failures that are about the wire rather than about the endpoint.
+  ///
+  /// Takes the whole call rather than wrapping [_open] alone, because reading the body is
+  /// as much of the request as sending it: a connection dropped halfway through a
+  /// response arrives as a [SocketException] from the *stream*, long after
+  /// `HttpClientRequest.close` returned. Wrapping only the send would map the failures
+  /// that happen before the first byte and let the ones after it through raw.
+  Future<T> _mappingTransportFailures<T>(Future<T> Function() run) async {
     try {
-      final request = await _client
-          .openUrl(method, Uri.parse('https://$authority$path'))
-          .timeout(timeout);
-      request.followRedirects = followRedirects;
-
-      final held = _cookie;
-      if (held != null) request.cookies.add(held.toCookie());
-
-      if (jsonBody != null) {
-        request.headers.contentType = ContentType.json;
-        request.write(jsonEncode(jsonBody));
-      }
-
-      final response = await request.close().timeout(timeout);
-
-      // Adopt before inspecting the status: a 401 that also clears the cookie has to
-      // drop the stored one, or the app retries forever with a dead session.
-      _adoptFrom(response);
-
-      if (response.statusCode == HttpStatus.forbidden) {
-        await response.drain<void>();
-        throw const NestwatchException(
-          NestwatchFailure.notOnLan,
-          'That PC refused the connection because this phone does not look like it is '
-          'on the same home network. If a VPN is switched on, turn it off — nestwatch '
-          'only answers devices on the LAN.',
-        );
-      }
-
-      final body = await response.transform(utf8.decoder).join();
-      return (response, body);
+      return await run();
     } on HandshakeException {
       throw const NestwatchException(
         NestwatchFailure.pinMismatch,
@@ -504,4 +504,21 @@ class NestwatchClient {
       );
     }
   }
+
+  /// One request, read as text. Every endpoint but the screenshot wants this.
+  Future<(HttpClientResponse, String)> _send(
+    String method,
+    String path, {
+    Map<String, Object?>? jsonBody,
+    bool followRedirects = true,
+  }) => _mappingTransportFailures(() async {
+    final response = await _open(
+      method,
+      path,
+      jsonBody: jsonBody,
+      followRedirects: followRedirects,
+    );
+    final body = await response.transform(utf8.decoder).join();
+    return (response, body);
+  });
 }
