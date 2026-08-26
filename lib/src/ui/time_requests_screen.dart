@@ -1,0 +1,223 @@
+/// Screen one: pending "can I have more time" requests, with approve and deny.
+library;
+
+import 'package:flutter/material.dart';
+
+import '../api/models.dart';
+import '../api/nestwatch_api.dart';
+import 'poller.dart';
+
+class TimeRequestsScreen extends StatefulWidget {
+  final NestwatchClient client;
+  final bool visible;
+  final void Function(NestwatchException) onFailure;
+
+  const TimeRequestsScreen({
+    super.key,
+    required this.client,
+    required this.visible,
+    required this.onFailure,
+  });
+
+  @override
+  State<TimeRequestsScreen> createState() => _TimeRequestsScreenState();
+}
+
+class _TimeRequestsScreenState extends State<TimeRequestsScreen> {
+  late final Poller _poller = Poller(interval: dataCadence, tick: _load);
+
+  List<TimeRequest>? _requests;
+  String? _error;
+
+  /// Ids with a decision in flight.
+  ///
+  /// PLAN.md §5 asks for a debounce even though the server is safe, and nestwatch's own
+  /// comment says why the server had to be made safe: "six concurrent approvals of one
+  /// request all returned `Some` — so a parent double-tapping Approve on a phone granted
+  /// the minutes twice". The gate fixed the grant; this stops the second tap ever being
+  /// sent, which also stops the 400 it would come back with.
+  final _deciding = <String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.visible) _poller.start();
+  }
+
+  @override
+  void didUpdateWidget(TimeRequestsScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.visible == old.visible) return;
+    widget.visible ? _poller.start() : _poller.stop();
+  }
+
+  @override
+  void dispose() {
+    _poller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final requests = await widget.client.timeRequests();
+      if (!mounted) return;
+      setState(() {
+        _requests = requests;
+        _error = null;
+      });
+    } on NestwatchException catch (e) {
+      if (!mounted) return;
+      if (e.failure == NestwatchFailure.sessionExpired) {
+        widget.onFailure(e);
+        return;
+      }
+      setState(() => _error = e.message);
+    }
+  }
+
+  Future<void> _decide(TimeRequest request, {required bool approve}) async {
+    if (!_deciding.add(request.id)) return;
+    setState(() {});
+    try {
+      final acted = approve
+          ? await widget.client.approveTimeRequest(request.id)
+          : await widget.client.denyTimeRequest(request.id);
+      if (!mounted) return;
+      if (!acted) {
+        // 400: somebody already resolved it — the browser dashboard, or another phone.
+        // An ordinary race, not something to put in front of a parent. Just re-read.
+        _snack('That request had already been handled.');
+      } else {
+        _snack(
+          approve
+              ? 'Approved — ${request.minutes} more minutes today.'
+              : 'Denied.',
+        );
+      }
+    } on NestwatchException catch (e) {
+      if (!mounted) return;
+      if (e.failure == NestwatchFailure.sessionExpired) {
+        widget.onFailure(e);
+        return;
+      }
+      _snack(e.message);
+    } finally {
+      _deciding.remove(request.id);
+      if (mounted) await _load();
+    }
+  }
+
+  void _snack(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+
+  @override
+  Widget build(BuildContext context) {
+    final requests = _requests;
+    if (requests == null) {
+      return _error != null
+          ? _errorPane(_error!)
+          : const Center(child: CircularProgressIndicator());
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: requests.isEmpty
+          ? ListView(
+              // Must scroll even when empty, or pull-to-refresh has nothing to grab.
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: [
+                const SizedBox(height: 120),
+                Icon(
+                  Icons.check_circle_outline,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.outline,
+                ),
+                const SizedBox(height: 12),
+                const Center(child: Text('Nothing waiting.')),
+              ],
+            )
+          : ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              itemCount: requests.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, i) => _card(context, requests[i]),
+            ),
+    );
+  }
+
+  Widget _card(BuildContext context, TimeRequest request) {
+    final busy = _deciding.contains(request.id);
+    final at = request.submittedAt;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '${request.minutes} more minutes',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const Spacer(),
+                if (at != null)
+                  Text(_ago(at), style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+            if (request.reason.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(request.reason),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: busy
+                        ? null
+                        : () => _decide(request, approve: true),
+                    child: Text(busy ? '…' : 'Approve'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: busy
+                        ? null
+                        : () => _decide(request, approve: false),
+                    child: const Text('Deny'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _errorPane(String message) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(message, textAlign: TextAlign.center),
+          const SizedBox(height: 16),
+          OutlinedButton(onPressed: _load, child: const Text('Try again')),
+        ],
+      ),
+    ),
+  );
+
+  static String _ago(DateTime at) {
+    final d = DateTime.now().difference(at);
+    if (d.inMinutes < 1) return 'just now';
+    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
+    if (d.inHours < 24) return '${d.inHours} h ago';
+    return '${d.inDays} d ago';
+  }
+}

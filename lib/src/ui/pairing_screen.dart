@@ -3,7 +3,6 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../api/nestwatch_api.dart';
 import '../pairing/pair_invite.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
@@ -88,11 +87,9 @@ class _PairingScreenState extends State<PairingScreen> {
     PairingBusy(:final what) => _busy(what),
     PairingNeedsFingerprintCheck(:final invite, :final observed) =>
       _confirmFirstUse(context, invite, observed),
-    PairingConnected(:final identity, :final session) => _connected(
-      context,
-      identity,
-      session,
-    ),
+    // Handled by the root widget, which swaps this screen for HomeScreen. The arm
+    // exists so the switch stays exhaustive if that ever changes.
+    PairingConnected() => const Center(child: CircularProgressIndicator()),
     PairingNeedsPassword(:final authority, :final reason, :final message) =>
       _needsPassword(context, authority, reason, message),
     PairingRefused(:final rejection, :final explanation) => _refused(
@@ -200,40 +197,6 @@ class _PairingScreenState extends State<PairingScreen> {
       ],
     );
   }
-
-  Widget _connected(
-    BuildContext context,
-    ServerIdentity identity,
-    SessionInfo session,
-  ) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Icon(Icons.lock, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Connected to ${identity.authority}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16),
-      _pairedSummary(context, identity),
-      const SizedBox(height: 16),
-      Text(
-        'nestwatch ${session.version} · '
-        '${session.authenticated ? "signed in" : "not signed in yet"}',
-      ),
-      const SizedBox(height: 24),
-      const Text(
-        'Signing in and the three screens come next — this build stops at proving the '
-        'connection is pinned.',
-      ),
-    ],
-  );
 
   Widget _refused(
     BuildContext context,

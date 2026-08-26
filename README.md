@@ -14,8 +14,11 @@ Walking skeleton (PLAN §9), **steps 2–3 of 5**:
 - **step 2** — the pinned `HttpClient`, proven by failure.
 - **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback.
 - **step 4** — token redemption, password login, and a session that survives a restart.
+- **step 5** — three screens: time requests, today's usage, the screenshot.
 
-Step 5 (the three screens) is not built.
+The walking skeleton is complete. Rules, routines, curfew and the audit log stay in the
+browser, deliberately — configuration is done rarely, and each screen added here is a
+second interface to keep in step with 24 routes forever.
 
 ### Two ways to end up pinned
 
@@ -79,6 +82,11 @@ Four checks, and check 4 is the one that keeps it honest: it re-runs the same ri
 sink's own certificate pinned and requires the body to arrive. Without it, a broken rig that
 reports "no bytes" for any reason would pass check 3 against any implementation.
 
+That is not hypothetical — it has caught a false pass twice. Most recently a leftover sink
+from an earlier run still owned port 9443, the new one died on bind, and check 3 passed
+against an empty log. `prove_pin.dart` now refuses to start unless the sink's log says it
+is listening; if it stops, run `lsof -ti :9443 | xargs kill`.
+
 Step 3 has its own live proof, covering both routes and — the check that matters — that a
 QR naming the *wrong* certificate is refused rather than quietly downgraded to a
 trust-on-first-use prompt, which would make Phase 1's fingerprint decorative:
@@ -96,6 +104,15 @@ cd ../nestwatch && NESTWATCH_DATA_DIR=/tmp/nestwatch-dev cargo run -- pair
 dart run tool/prove_login.dart --pin "$FINGERPRINT" --password "$PW" [--token TOK]
 ```
 
+Step 5 covers the three screens' data paths:
+
+```bash
+dart run tool/prove_screens.dart --pin "$FINGERPRINT" --password "$PW"
+```
+
+It checks the preview tier **by JPEG dimensions**, because the wrong tier also returns 200
+with a valid image — size is the only thing that can tell them apart.
+
 That harness is deliberately re-runnable. A pairing token is single-use with a 15-minute
 TTL, and a deliberate wrong-password check spends one of the five attempts before
 nestwatch locks an IP out for a minute — so `--token` is optional and skips *aloud* when
@@ -109,6 +126,49 @@ pairing state machine deposits no Flutter imports, so the part of this app that 
 what to trust stays testable against a live server on every change. `ServerIdentityStore`
 is abstract for the same reason — the Keystore-backed implementation lives apart, in
 `secure_identity_store.dart`.
+
+## The three screens
+
+| screen | endpoint | cadence |
+|---|---|---|
+| Requests | `GET /api/time-requests`, `POST …/approve`, `…/deny` | 60 s |
+| Today | `GET /api/usage/today` | 60 s |
+| Screen | `GET /api/screenshot?tier=preview` | 5 s, **off by default** |
+
+60 s and 5 s mirror `_pollMs` and `_refreshMs` in nestwatch `assets/app.js`. Every screen
+stops polling when its tab is not showing **and** when the app is backgrounded — a phone
+in a pocket must not keep asking for frames, not least because each one writes to that
+PC's audit log.
+
+Three things that look like details and are not:
+
+**`?tier=preview` has no error path.** `ShotTier::from_arg` is
+`Some("preview") => Preview, _ => Full`, so omitting the parameter returns a perfectly
+valid JPEG at the expensive tier. Measured: 1280×720 / 62,795 bytes without it against
+960×540 / 21,985 with it — and on a real 4K desktop that gap is the "20 MB a frame" recent
+work removed. Worse, a Full capture writes `screenshot_taken` to the audit log one-for-one,
+where previews coalesce into one `live_view` entry, "because a per-frame line evicts the
+entire security history in about 57 hours of live viewing". The tier is therefore hard-coded
+inside `screenshotPreview()`, with no parameter and no Full equivalent: an argument with a
+default is exactly how the wrong tier gets sent.
+
+**A second approve returns 400, not 200.** The mutex in `TimeRequests::resolve` makes the
+*grant* happen exactly once — it does not make the second call succeed. So `approve` returns
+`bool` for "was this the call that acted", and a 400 refreshes the list instead of showing
+a parent an error. The button is debounced too; nestwatch's own comment records why the gate
+exists: "six concurrent approvals of one request all returned `Some` — so a parent
+double-tapping Approve on a phone granted the minutes twice".
+
+**`used_mins: 0` is ambiguous.** It means both "nobody used the PC" and "nothing was
+watching". `enforcer_age_secs` and `focus_missing` are the only things that separate them,
+and both carry a comment in `rules.rs` saying so — "rendering silence as zero is the failure
+this codebase has already fixed twice". Both are surfaced *above* the numbers they qualify,
+and a missing heartbeat reads as the warning, never as health.
+
+`Image.network` is deliberately unused for the screenshot despite PLAN §2 proving it is
+pinned: `ImageCache` keys on the URL, this URL never changes, and a 5-second refresh would
+redisplay one cached frame forever. Fetching bytes through the pinned client and rendering
+`Image.memory` also avoids threading the session cookie in as a raw header.
 
 ## Unit tests
 

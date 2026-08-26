@@ -31,7 +31,14 @@ ctx.load_cert_chain(CERT, KEY)
 
 srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-srv.bind(("127.0.0.1", PORT))
+try:
+    srv.bind(("127.0.0.1", PORT))
+except OSError as e:
+    # A leftover sink from an earlier run still owns the port. Say so as data, on the
+    # same channel as everything else, so the harness can stop instead of reading an
+    # empty log as "no bytes crossed the wire" -- which looks exactly like a pass.
+    emit(event="bind_failed", port=PORT, detail=str(e))
+    sys.exit(1)
 srv.listen(8)
 emit(event="listening", port=PORT)
 

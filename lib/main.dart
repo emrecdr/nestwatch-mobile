@@ -1,11 +1,11 @@
-/// Walking skeleton, steps 2-3 (docs/PLAN.md §9).
+/// Walking skeleton, complete (docs/PLAN.md §9).
 ///
-/// Step 2 put a certificate pin over every `dart:io` socket in the process and proved by
-/// refusal that a wrong certificate is rejected during the handshake, before any request
-/// body exists. Step 3 decides *which* certificate to pin, from a scanned QR — verified
-/// when the code carries `#fp=`, trust-on-first-use when it does not.
+///   2. a pinned `HttpClient` over every `dart:io` socket, proven by refusal
+///   3. QR scan, `#fp=` parsing, and the trust-on-first-use fallback
+///   4. token redemption, password login, and a session that survives a restart
+///   5. three screens: time requests, today's usage, the screenshot
 ///
-/// The three screens (§5) come after step 4's login.
+/// Rules, routines, curfew and the audit log stay in the browser, deliberately (§5).
 library;
 
 import 'dart:io';
@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'src/pairing/pairing_controller.dart';
 import 'src/pairing/secure_identity_store.dart';
 import 'src/pinning/pinned_http_overrides.dart';
+import 'src/ui/home_screen.dart';
 import 'src/ui/pairing_screen.dart';
 
 /// The process-wide pin.
@@ -35,8 +36,8 @@ Future<void> main() async {
     identities: const SecureServerIdentityStore(),
     sessions: const SecureSessionStore(),
   );
-  // Re-apply a stored pin before the first frame, so the process is never briefly
-  // unpinned while a previously-paired server is reachable.
+  // Re-apply a stored pin and session before the first frame, so the process is never
+  // briefly unpinned while a previously-paired server is reachable.
   await controller.restore();
 
   runApp(NestwatchApp(controller: controller));
@@ -47,17 +48,65 @@ class NestwatchApp extends StatelessWidget {
   const NestwatchApp({super.key, required this.controller});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Nestwatch',
-    theme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E6F5E)),
-    ),
-    darkTheme: ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF2E6F5E),
-        brightness: Brightness.dark,
+  Widget build(BuildContext context) {
+    const seed = Color(0xFF2E6F5E);
+    return MaterialApp(
+      title: 'Nestwatch',
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: seed)),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: seed,
+          brightness: Brightness.dark,
+        ),
       ),
-    ),
-    home: PairingScreen(controller: controller),
-  );
+      home: _Root(controller: controller),
+    );
+  }
+}
+
+/// Swaps the pairing flow for the three screens once there is a signed-in session.
+///
+/// Done here rather than inside [PairingScreen] so the two never nest: the three screens
+/// own a `Scaffold` with its own navigation bar, and pairing is a different shape of
+/// thing entirely — a linear flow with one way forward.
+class _Root extends StatefulWidget {
+  final PairingController controller;
+  const _Root({required this.controller});
+
+  @override
+  State<_Root> createState() => _RootState();
+}
+
+class _RootState extends State<_Root> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChange);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChange);
+    super.dispose();
+  }
+
+  void _onChange() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final state = widget.controller.state;
+    final client = widget.controller.client;
+
+    if (state is PairingConnected && client != null) {
+      return HomeScreen(
+        // Keyed on the server so switching PCs rebuilds the screens rather than showing
+        // one PC's frames under another's name.
+        key: ValueKey(state.identity.authority),
+        controller: widget.controller,
+        client: client,
+        identity: state.identity,
+      );
+    }
+    return PairingScreen(controller: widget.controller);
+  }
 }

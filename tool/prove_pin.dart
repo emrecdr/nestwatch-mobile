@@ -55,6 +55,26 @@ Future<void> main(List<String> argv) async {
   HttpOverrides.global = overrides;
 
   stdout.writeln('Pinned to $pin\n');
+  // Preflight the sink before trusting anything it says.
+  //
+  // Its log is the evidence for check 3, and an ABSENT log is indistinguishable from
+  // "no bytes crossed the wire" -- it reads as a pass. That happened: a leftover sink
+  // from an earlier run still owned the port, the new one died on bind, and check 3
+  // passed on an empty file. Check 4 caught it, which is what check 4 is for; this
+  // stops it being a puzzle in the first place.
+  final sinkLog = File('/tmp/nestwatch-sink.log');
+  final sinkLines = sinkLog.existsSync()
+      ? sinkLog.readAsLinesSync()
+      : <String>[];
+  if (!sinkLines.any((l) => l.contains('"listening"'))) {
+    stdout.writeln(
+      '  [STOP] The byte-counting sink is not listening on port $sinkPort.\n'
+      '         ${sinkLines.isEmpty ? "Its log is empty or missing." : sinkLines.last}\n'
+      '         Start it first (see README), and check nothing else owns that port:\n'
+      '           lsof -ti :$sinkPort | xargs kill',
+    );
+    exit(2);
+  }
 
   // ---------------------------------------------------------------- 1. admits
   stdout.writeln('1. The pinned client reaches the real server');

@@ -7,7 +7,9 @@ library;
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'models.dart';
 import 'session_cookie.dart';
 
 /// `GET /session` — unauthenticated and LAN-gated (nestwatch `auth::me`).
@@ -49,6 +51,10 @@ enum NestwatchFailure {
 
   /// The session lapsed. §5: re-prompt for the password, do NOT re-pair.
   sessionExpired,
+
+  /// The thing acted on is no longer there — an approve or deny for a request that
+  /// somebody already resolved. Not really a failure; see [NestwatchClient.approve].
+  alreadyResolved,
 
   unreachable,
   unexpectedResponse,
@@ -93,6 +99,16 @@ class NestwatchClient {
 
   /// Called whenever the session changes, so it can be persisted.
   void Function(SessionCookie?)? onSessionChanged;
+
+  /// Take whatever the response says about the session.
+  void _adoptFrom(HttpClientResponse response) {
+    if (SessionCookie.clearsSession(response)) {
+      _adopt(null);
+      return;
+    }
+    final issued = SessionCookie.fromResponse(response);
+    if (issued != null) _adopt(issued);
+  }
 
   void _adopt(SessionCookie? next) {
     if (next == _cookie) return;
@@ -166,6 +182,119 @@ class NestwatchClient {
     }
   }
 
+  /// `GET /api/time-requests` → at most 5 pending, newest first.
+  Future<List<TimeRequest>> timeRequests() async {
+    final (response, body) = await _send('GET', '/api/time-requests');
+    _requireOk(response);
+    final list = jsonDecode(body) as List;
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(TimeRequest.fromJson)
+        .toList();
+  }
+
+  /// `POST /api/time-requests/{id}/approve`.
+  ///
+  /// Returns `true` when this call is the one that granted the minutes, `false` when the
+  /// request had already been resolved.
+  ///
+  /// That distinction exists because the server answers **400** — not 200 — to a second
+  /// approve (`"no such pending request"`, confirmed on the wire). The mutex in
+  /// `TimeRequests::resolve` makes the *grant* happen exactly once; it does not make the
+  /// second call succeed. nestwatch's own comment records why the gate is there:
+  /// "six concurrent approvals of one request all returned `Some` — so a parent
+  /// double-tapping Approve on a phone granted the minutes twice".
+  ///
+  /// So a 400 here is an ordinary race, not something to show a parent. The screen
+  /// refreshes instead.
+  Future<bool> approveTimeRequest(String id) =>
+      _resolveTimeRequest(id, 'approve');
+
+  /// `POST /api/time-requests/{id}/deny`. Same 400-means-already-resolved shape.
+  Future<bool> denyTimeRequest(String id) => _resolveTimeRequest(id, 'deny');
+
+  Future<bool> _resolveTimeRequest(String id, String verb) async {
+    final (response, _) = await _send(
+      'POST',
+      '/api/time-requests/${Uri.encodeComponent(id)}/$verb',
+    );
+    if (response.statusCode == HttpStatus.badRequest) return false;
+    _requireOk(response);
+    return true;
+  }
+
+  /// `GET /api/usage/today`.
+  Future<UsageToday> usageToday() async {
+    final (response, body) = await _send('GET', '/api/usage/today');
+    _requireOk(response);
+    return UsageToday.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
+  /// `GET /api/screenshot?tier=preview` → JPEG bytes.
+  ///
+  /// **The tier is spelled out here and nowhere else**, because forgetting it is trap 4
+  /// and the failure is silent. `ShotTier::from_arg` is `Some("preview") => Preview,
+  /// _ => Full` (nestwatch `src/control/mod.rs`), so an omitted parameter does not error
+  /// — it quietly returns the expensive tier. Measured against the fake backend: 62,795
+  /// bytes at 1280x720 without it against 21,985 at 960x540 with it, and on a real 4K
+  /// desktop the gap is the "20 MB a frame" recent work removed.
+  ///
+  /// Worse than the bytes is the audit log. A Full capture records `screenshot_taken`
+  /// one-for-one — it is meant to be a deliberate human act — while Preview frames
+  /// coalesce into a single `live_view` entry, "because a per-frame line evicts the
+  /// entire security history in about 57 hours of live viewing". A viewer that omitted
+  /// the parameter would destroy the record of every login, kill and shutdown.
+  ///
+  /// There is deliberately no `tier` parameter on this method and no Full equivalent:
+  /// the app has no reason to ask for one, and an argument with a default is exactly how
+  /// the wrong tier gets sent.
+  Future<Uint8List> screenshotPreview() async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final request = await client
+          .getUrl(Uri.parse('https://$authority/api/screenshot?tier=preview'))
+          .timeout(timeout);
+      final held = _cookie;
+      if (held != null) request.cookies.add(held.toCookie());
+
+      final response = await request.close().timeout(timeout);
+      _adoptFrom(response);
+      _requireOk(response);
+
+      final chunks = await response.toList();
+      return Uint8List.fromList(chunks.expand((c) => c).toList());
+    } on HandshakeException {
+      throw const NestwatchException(
+        NestwatchFailure.pinMismatch,
+        'The certificate did not match.',
+      );
+    } on SocketException catch (e) {
+      throw NestwatchException(
+        NestwatchFailure.unreachable,
+        'Could not reach $authority. ${e.osError?.message ?? e.message}',
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Every `/api/*` path is behind `require_auth`, which answers 401 once the session
+  /// lapses. §5 is explicit about what that means: re-prompt for the password, do NOT
+  /// re-pair — the certificate is still trusted, only the session went.
+  void _requireOk(HttpClientResponse response) {
+    if (response.statusCode == HttpStatus.ok) return;
+    if (response.statusCode == HttpStatus.unauthorized) {
+      throw const NestwatchException(
+        NestwatchFailure.sessionExpired,
+        'That sign-in expired.',
+      );
+    }
+    throw NestwatchException(
+      NestwatchFailure.unexpectedResponse,
+      'That PC answered with HTTP ${response.statusCode}.',
+    );
+  }
+
   /// One request: attach the session, send, capture any session change.
   Future<(HttpClientResponse, String)> _send(
     String method,
@@ -192,12 +321,7 @@ class NestwatchClient {
 
       // Adopt before inspecting the status: a 401 that also clears the cookie has to
       // drop the stored one, or the app retries forever with a dead session.
-      if (SessionCookie.clearsSession(response)) {
-        _adopt(null);
-      } else {
-        final issued = SessionCookie.fromResponse(response);
-        if (issued != null) _adopt(issued);
-      }
+      _adoptFrom(response);
 
       if (response.statusCode == HttpStatus.forbidden) {
         await response.drain<void>();
