@@ -184,20 +184,40 @@ void main() {
       },
     );
 
-    test('a full frame served against a preview request is refused', () async {
-      // X-Shot-Tier names what was actually served. A mismatch means full frames on a
-      // 5-second timer: no error, no failing test, just the cost back.
-      servedTier = 'full';
-      await expectLater(
-        client.screenshotPreview(onTimer: true),
-        throwsA(isA<NestwatchException>()),
-      );
-    });
+    test(
+      'a full frame served against a preview request is reported, not dropped',
+      () async {
+        // X-Shot-Tier names what was actually served. A mismatch is worth knowing about —
+        // full frames on a 5-second timer produce no error and no failing test, just the
+        // cost back — but the frame itself is a real, current picture of the child's
+        // screen, and refusing it serves nobody. The caller stops the timer instead.
+        servedTier = 'full';
+        final frame = await client.screenshotPreview(onTimer: true);
+        expect(
+          frame.bytes,
+          isNotEmpty,
+          reason: 'the picture is still delivered',
+        );
+        expect(frame.isPreview, isFalse);
+        expect(frame.servedTier, 'full');
+      },
+    );
 
-    test('and an older server with no X-Shot-Tier still works', () async {
-      servedTier = null;
-      expect(await client.screenshotPreview(onTimer: true), isNotEmpty);
-    });
+    test(
+      'and an older server with no X-Shot-Tier reads as no disagreement',
+      () async {
+        servedTier = null;
+        final frame = await client.screenshotPreview(onTimer: true);
+        expect(frame.bytes, isNotEmpty);
+        expect(frame.servedTier, isNull);
+        expect(
+          frame.isPreview,
+          isTrue,
+          reason:
+              'a server that does not say must not be treated as disagreeing',
+        );
+      },
+    );
 
     test('the client offers no way to ask for another tier', () {
       // A tier parameter with a default is exactly how the wrong one gets sent, so this
@@ -207,7 +227,7 @@ void main() {
       // a deliberate edit here.
       expect(
         client.screenshotPreview,
-        isA<Future<Object?> Function({required bool onTimer})>(),
+        isA<Future<Frame> Function({required bool onTimer})>(),
       );
       expect(
         client.screenshotPreview,

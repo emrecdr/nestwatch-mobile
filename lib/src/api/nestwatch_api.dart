@@ -12,6 +12,25 @@ import 'dart:typed_data';
 import 'models.dart';
 import 'session_cookie.dart';
 
+/// One screenshot, and what the server said it actually sent.
+///
+/// The tier is returned alongside the bytes rather than checked and thrown on. A frame
+/// served at the wrong tier is still a real, current picture of the child's screen, and
+/// dropping it serves nobody — the runaway cost is the *stream*, not the frame, so the
+/// caller stops the timer and shows what it has.
+class Frame {
+  final Uint8List bytes;
+
+  /// From `X-Shot-Tier`, which names the tier actually served rather than the one asked
+  /// for. `null` on a server predating the header.
+  final String? servedTier;
+
+  const Frame({required this.bytes, required this.servedTier});
+
+  /// True when the server gave what was asked for, or did not say.
+  bool get isPreview => servedTier == null || servedTier == 'preview';
+}
+
 /// `GET /session` — unauthenticated and LAN-gated (nestwatch `auth::me`).
 ///
 /// §5 picks this as the first call for three reasons at once: it needs no credentials,
@@ -342,7 +361,7 @@ class NestwatchClient {
   /// [onTimer] therefore has no default either. It is not "is this a live view" — it is
   /// "did a timer ask for this, or did a person", which is the question the audit is
   /// answering.
-  Future<Uint8List> screenshotPreview({required bool onTimer}) async {
+  Future<Frame> screenshotPreview({required bool onTimer}) async {
     final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';
     try {
       final request = await _client
@@ -356,21 +375,16 @@ class NestwatchClient {
       _requireOk(response);
 
       // The server names the tier it actually served, so a client can record what it
-      // *got* rather than what it asked for. A mismatch means full frames on a timer —
-      // no error, no failing test, just the cost back — so it is worth failing loudly
-      // rather than streaming megabytes and finding out from a bandwidth bill.
-      // Checked only when present, so an older server without the header still works.
+      // *got* rather than what it asked for. Reported rather than refused: a frame at
+      // the wrong tier is still a real, current picture, and the cost worth guarding
+      // against is the stream — which the caller stops — not the single frame. Absent on
+      // a server predating the header, which reads as "no disagreement to report".
       final served = response.headers.value('x-shot-tier');
-      if (served != null && served != 'preview') {
-        await response.drain<void>();
-        throw NestwatchException(
-          NestwatchFailure.unexpectedResponse,
-          'That PC sent a "$served" frame when this app asked for a preview.',
-        );
-      }
-
       final chunks = await response.toList();
-      return Uint8List.fromList(chunks.expand((c) => c).toList());
+      return Frame(
+        bytes: Uint8List.fromList(chunks.expand((c) => c).toList()),
+        servedTier: served,
+      );
     } on NestwatchException catch (e) {
       // A 500 from anywhere means `AppError::Control` or `AppError::Internal`, and the
       // body is deliberately uninformative. This is the one call site that knows the

@@ -122,10 +122,10 @@ mutate "screenshot: timer frames omit live=1 (audit-log eviction)" \
   "    final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';" \
   "    final query = '?tier=preview';"
 
-mutate "screenshot: a served 'full' tier is accepted silently" \
+mutate "screenshot: the served tier is not reported" \
   lib/src/api/nestwatch_api.dart \
-  "      if (served != null && served != 'preview') {" \
-  "      if (false) {"
+  "        servedTier: served," \
+  "        servedTier: null,"
 
 mutate "cookie: toString leaks the session token" \
   lib/src/api/session_cookie.dart \

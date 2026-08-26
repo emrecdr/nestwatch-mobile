@@ -95,13 +95,24 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
   Future<void> _load({required bool onTimer}) async {
     try {
       // ?tier=preview is inside the client, with no way to ask for anything else.
-      final bytes = await widget.client.screenshotPreview(onTimer: onTimer);
+      final frame = await widget.client.screenshotPreview(onTimer: onTimer);
       if (!mounted) return;
       setState(() {
-        _frame = bytes;
+        _frame = frame.bytes;
         _frameAt = DateTime.now();
-        _error = null;
+        _error = frame.isPreview
+            ? null
+            // Show the picture anyway — it is real and current, and refusing it serves
+            // nobody. What is worth stopping is the *stream*: full frames every five
+            // seconds is the cost this screen exists to avoid, and one frame is not.
+            : 'That PC sent a full-size frame when this app asked for a preview. '
+                  'Showing it, but live view has stopped so it does not keep '
+                  'arriving at that size.';
       });
+      if (!frame.isPreview && _live) {
+        setState(() => _live = false);
+        _poller.stop();
+      }
     } on NestwatchException catch (e) {
       if (!mounted) return;
       if (e.failure == NestwatchFailure.sessionExpired) {

@@ -180,7 +180,7 @@ Future<void> main(List<String> argv) async {
 
   // ---------------------------------------------------------- 5. the tier
   stdout.writeln('\n5. The screenshot is the PREVIEW tier');
-  final preview = await client.screenshotPreview(onTimer: true);
+  final preview = (await client.screenshotPreview(onTimer: true)).bytes;
   final previewSize = jpegSize(preview);
   _check(
     previewSize != null,
