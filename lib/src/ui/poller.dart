@@ -32,7 +32,27 @@ class Poller {
 
   Timer? _timer;
   AppLifecycleListener? _lifecycle;
+
+  /// Three independent reasons to be running, all of which must hold.
+  ///
+  /// The gate was already two-input — wanted and foreground — reconciled in one place by
+  /// [_sync]. Visibility was the third, and it lived outside: `PolledScreenState` mapped
+  /// it onto [start]/[stop], which collapses a predicate into a command and left the
+  /// screenshot screen, which has two reasons of its own, re-deriving the conjunction by
+  /// hand in three places.
+  ///
+  /// Keeping all three here also puts the rule somewhere a plain test can reach it.
+  /// PLAN §5 — "stop both when not visible" — was defended by nothing while it lived in
+  /// a mixin that cannot exist without a widget.
   bool _wanted = false;
+
+  /// Starts **false**, so a poller runs only once it has been told all three reasons
+  /// hold. Defaulting it to true opened a window: `wanted = true` before
+  /// `visible = false` starts the timer and fires once, which for a tab that opens
+  /// off-screen is a real request to that PC — three of them at app start, four tabs
+  /// deep. The first test written against this gate found exactly that, in the change
+  /// that made the gate testable.
+  bool _visible = false;
   bool _foreground = true;
 
   /// Guards against overlap: a tick slower than [interval] must not stack up. The
@@ -50,18 +70,24 @@ class Poller {
     );
   }
 
-  /// Start polling, and fire once immediately — a screen that waits a full minute for
-  /// its first paint looks broken.
-  void start() {
-    _wanted = true;
+  /// Whether anybody has asked for this — a tab that is on screen, a parent who pressed
+  /// Start. Not the same question as whether it is *reachable*.
+  set wanted(bool value) {
+    if (_wanted == value) return;
+    _wanted = value;
     _sync();
-    unawaited(_fire());
   }
 
-  void stop() {
-    _wanted = false;
+  /// Whether the surface this polls for is the one being looked at. An [IndexedStack]
+  /// keeps every child alive, so a screen that is off-screen still has a live State and
+  /// would otherwise go on asking that PC for things nobody is reading.
+  set visible(bool value) {
+    if (_visible == value) return;
+    _visible = value;
     _sync();
   }
+
+  bool get isRunning => _timer != null;
 
   void dispose() {
     _wanted = false;
@@ -72,9 +98,13 @@ class Poller {
   }
 
   void _sync() {
-    final shouldRun = _wanted && _foreground;
+    final shouldRun = _wanted && _visible && _foreground;
     if (shouldRun && _timer == null) {
       _timer = Timer.periodic(interval, (_) => unawaited(_fire()));
+      // Fire on the transition into running, not on whoever set the last flag. A screen
+      // that waits a full minute for its first paint looks broken, and which of the three
+      // reasons arrived last is not something a caller should have to think about.
+      unawaited(_fire());
     } else if (!shouldRun && _timer != null) {
       _timer!.cancel();
       _timer = null;

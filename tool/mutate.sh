@@ -189,6 +189,18 @@ mutate "session: a 401 from /api reads as an unexpected answer" \
 
 # The UI layer had no mutation at all until the screens were deduped — no widget tests
 # either, so the rule deciding whether a parent can get back in was defended by nothing.
+# PLAN §5's "stop both when not visible" — argued for at length in poller.dart and
+# defended by nothing until the gate moved out of a widget mixin and into Poller.
+mutate "poller: an off-screen tab keeps asking that PC" \
+  lib/src/ui/poller.dart \
+  "    final shouldRun = _wanted && _visible && _foreground;" \
+  "    final shouldRun = _wanted && _foreground;"
+
+mutate "poller: a poller runs before it is told it is visible" \
+  lib/src/ui/poller.dart \
+  "  bool _visible = false;" \
+  "  bool _visible = true;"
+
 mutate "screens: a lapsed session is drawn instead of handed up" \
   lib/src/ui/screen_load.dart \
   "    if (e.failure == NestwatchFailure.sessionExpired) return HandedBack(e);" \

@@ -63,16 +63,18 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
   bool _live = false;
 
   @override
+  void initState() {
+    super.initState();
+    _poller.visible = widget.visible;
+  }
+
+  @override
   void didUpdateWidget(ScreenshotScreen old) {
     super.didUpdateWidget(old);
-    if (widget.visible == old.visible) return;
-    // Leaving the tab always stops the stream; returning does not restart it, because
-    // _live is the parent's decision and a tab swipe is not.
-    if (!widget.visible) {
-      _poller.stop();
-    } else if (_live) {
-      _poller.start();
-    }
+    // Leaving the tab stops the stream; returning does not restart it, because `wanted`
+    // is the parent's decision and a tab swipe is not. That used to be an if/else that
+    // re-derived the conjunction; now it is two independent facts and the Poller decides.
+    _poller.visible = widget.visible;
   }
 
   @override
@@ -83,7 +85,7 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
 
   void _toggleLive() {
     setState(() => _live = !_live);
-    _live ? _poller.start() : _poller.stop();
+    _poller.wanted = _live;
   }
 
   /// Stop the stream without the parent having asked to.
@@ -96,7 +98,7 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
   void _stopLive() {
     if (!_live) return;
     setState(() => _live = false);
-    _poller.stop();
+    _poller.wanted = false;
   }
 
   /// [onTimer] distinguishes the two callers, and the distinction is auditable.

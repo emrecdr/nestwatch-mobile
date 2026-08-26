@@ -58,14 +58,17 @@ mixin PolledScreenState<W extends PolledScreen, T> on State<W> {
   @override
   void initState() {
     super.initState();
-    if (widget.visible) poller.start();
+    // A data tab always wants to be polling; whether it gets to is visibility's business
+    // and the Poller's to reconcile.
+    poller
+      ..wanted = true
+      ..visible = widget.visible;
   }
 
   @override
   void didUpdateWidget(W oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.visible == oldWidget.visible) return;
-    widget.visible ? poller.start() : poller.stop();
+    poller.visible = widget.visible;
   }
 
   @override
