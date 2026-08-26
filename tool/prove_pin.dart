@@ -23,28 +23,17 @@ import 'package:crypto/crypto.dart';
 
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
 /// Recognisable bytes to look for on the wire. If this string ever shows up in the
 /// sink's log while the wrong certificate is pinned, the pin let a request body out.
 const _marker = 'THIS-BODY-MUST-NEVER-REACH-AN-IMPOSTOR';
 
-int _failures = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  final mark = ok ? 'PASS' : 'FAIL';
-  stdout.writeln(
-    '  [$mark] $label${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
+  final args = parseArgs(argv, known: {'impostor', 'pin', 'real', 'sink'});
 
-  final pin = Fingerprint.parse(args['pin']!);
+  final pin = Fingerprint.parse(requireArg(args, 'pin'));
   final realPort = int.parse(args['real'] ?? '8443');
   final impostorPort = int.parse(args['impostor'] ?? '8444');
   final sinkPort = int.parse(args['sink'] ?? '9443');
@@ -81,37 +70,37 @@ Future<void> main(List<String> argv) async {
   try {
     final body = await _get('https://127.0.0.1:$realPort/session');
     final json = jsonDecode(body) as Map<String, dynamic>;
-    _check(
+    check(
       json.containsKey('authenticated') && json.containsKey('version'),
       'GET /session over the pinned client',
       'server said: $body',
     );
   } on Object catch (e) {
-    _check(false, 'GET /session over the pinned client', 'threw: $e');
+    check(false, 'GET /session over the pinned client', 'threw: $e');
   }
 
   // -------------------------------------------------------------- 2. excludes
   stdout.writeln('\n2. It refuses a different certificate on the same LAN');
   try {
     await _get('https://127.0.0.1:$impostorPort/session');
-    _check(
+    check(
       false,
       'impostor refused',
       'the request SUCCEEDED — the pin is not holding',
     );
   } on HandshakeException catch (e) {
     final r = overrides.rejectionFor('127.0.0.1:$impostorPort');
-    _check(
+    check(
       true,
       'impostor refused with HandshakeException',
       '${e.message.split(':').first}; presented ${r?.observed}',
     );
-    _check(
+    check(
       r != null && !r.observed.matches(pin.bytes),
       'the refusal recorded a fingerprint, and it differs from the pin',
     );
   } on Object catch (e) {
-    _check(
+    check(
       false,
       'impostor refused with HandshakeException',
       'threw the wrong type: ${e.runtimeType}: $e',
@@ -121,39 +110,35 @@ Future<void> main(List<String> argv) async {
   // ------------------------------------------------------- 3. nothing on wire
   stdout.writeln('\n3. Nothing crossed the wire when it refused');
   final refused = await _sinkAttempt(overrides, sinkPort, expectAccept: false);
-  _check(
+  check(
     refused.handshakeFailed,
     'the sink saw the handshake fail',
     refused.events.join('\n         '),
   );
-  _check(refused.appBytes == 0, 'the sink received 0 application bytes');
-  _check(!refused.sawMarker, 'the request body never reached the impostor');
+  check(refused.appBytes == 0, 'the sink received 0 application bytes');
+  check(!refused.sawMarker, 'the request body never reached the impostor');
 
   // ------------------------------------------------ 4. the rig is not vacuous
   stdout.writeln(
     '\n4. Control — the same rig DOES see a body when the pin admits',
   );
   final admitted = await _sinkAttempt(overrides, sinkPort, expectAccept: true);
-  _check(
+  check(
     admitted.handshakeOk,
     'handshake completed once the sink cert was pinned',
   );
-  _check(
+  check(
     admitted.appBytes > 0,
     'the sink received ${admitted.appBytes} application bytes',
   );
-  _check(
+  check(
     admitted.sawMarker,
     'and the marker header was in them — so check 3 was a real observation',
   );
 
-  stdout.writeln('\n${'-' * 68}');
-  stdout.writeln(
-    _failures == 0
-        ? 'All checks passed. The pin refuses a wrong certificate before any body is sent.'
-        : '$_failures check(s) FAILED.',
+  finish(
+    'All checks passed. The pin refuses a wrong certificate before any body is sent.',
   );
-  exit(_failures == 0 ? 0 : 1);
 }
 
 Future<String> _get(String url) async {

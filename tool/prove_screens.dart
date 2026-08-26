@@ -26,16 +26,8 @@ import 'dart:io';
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
-int _failures = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  stdout.writeln(
-    '  [${ok ? 'PASS' : 'FAIL'}] $label'
-    '${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 /// Width and height out of a JPEG's SOF marker.
 ///
@@ -83,22 +75,19 @@ Future<void> submitAsChild(String authority, int minutes, String reason) async {
 }
 
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
+  final args = parseArgs(argv, known: {'audit', 'password', 'pin', 'real'});
   final port = int.parse(args['real'] ?? '8443');
   final authority = '127.0.0.1:$port';
-  final password = args['password']!;
+  final password = requireArg(args, 'password');
 
   HttpOverrides.global = PinnedHttpOverrides()
-    ..trust(Fingerprint.parse(args['pin']!));
+    ..trust(Fingerprint.parse(requireArg(args, 'pin')));
 
   final client = NestwatchClient(authority);
   stdout.writeln('0. Sign in');
   try {
     await client.login(password);
-    _check(client.hasSession, 'signed in, cookie held');
+    check(client.hasSession, 'signed in, cookie held');
   } on NestwatchException catch (e) {
     stdout.writeln('  [STOP] ${e.message}');
     exit(2);
@@ -109,29 +98,29 @@ Future<void> main(List<String> argv) async {
   await submitAsChild(authority, 15, 'one more level');
   await submitAsChild(authority, 30, 'homework video');
   final pending = await client.timeRequests();
-  _check(
+  check(
     pending.length >= 2,
     'the queue lists what the child submitted',
     '${pending.length} pending',
   );
-  _check(pending.length <= 5, 'and never exceeds the server-side cap of 5');
+  check(pending.length <= 5, 'and never exceeds the server-side cap of 5');
   final first = pending.first;
-  _check(
+  check(
     first.id.isNotEmpty && first.minutes > 0,
     'a request parses',
     '${first.minutes} min — "${first.reason}"',
   );
-  _check(first.submittedAt != null, 'and its timestamp parses');
+  check(first.submittedAt != null, 'and its timestamp parses');
 
   // -------------------------------------------- 2. approve, then approve again
   stdout.writeln('\n2. Approve grants once');
   final before = await client.usageToday();
   final granted = await client.approveTimeRequest(first.id);
-  _check(granted, 'the first approve reports that it acted');
+  check(granted, 'the first approve reports that it acted');
   final again = await client.approveTimeRequest(first.id);
-  _check(!again, 'the second reports "already resolved" instead of throwing');
+  check(!again, 'the second reports "already resolved" instead of throwing');
   final after = await client.usageToday();
-  _check(
+  check(
     after.extraMinutes == before.extraMinutes + first.minutes,
     'the minutes were granted exactly once',
     '${before.extraMinutes} -> ${after.extraMinutes} '
@@ -142,21 +131,21 @@ Future<void> main(List<String> argv) async {
   stdout.writeln('\n3. Deny resolves without granting');
   final remaining = await client.timeRequests();
   if (remaining.isEmpty) {
-    _check(false, 'there was a second request to deny');
+    check(false, 'there was a second request to deny');
   } else {
     final target = remaining.first;
     final denied = await client.denyTimeRequest(target.id);
-    _check(denied, 'deny reports that it acted');
-    _check(
+    check(denied, 'deny reports that it acted');
+    check(
       !await client.denyTimeRequest(target.id),
       'and a second deny reports "already resolved"',
     );
     final afterDeny = await client.usageToday();
-    _check(
+    check(
       afterDeny.extraMinutes == after.extraMinutes,
       'no minutes were granted by denying',
     );
-    _check(
+    check(
       !(await client.timeRequests()).any((r) => r.id == target.id),
       'and it left the queue',
     );
@@ -165,13 +154,13 @@ Future<void> main(List<String> argv) async {
   // --------------------------------------------------------------- 4. usage
   stdout.writeln("\n4. Today's usage");
   final usage = await client.usageToday();
-  _check(usage.day != null, 'the day parses', usage.day ?? '');
-  _check(
+  check(usage.day != null, 'the day parses', usage.day ?? '');
+  check(
     usage.isUnlimited == (usage.remainingMinutes == null),
     'an unlimited budget reads as null remaining, not zero',
     'budget=${usage.budgetMinutes} remaining=${usage.remainingMinutes}',
   );
-  _check(
+  check(
     usage.enforcerAgeSeconds != null,
     'enforcer_age_secs is carried — the only thing separating a quiet day from a '
         'dead enforcer',
@@ -182,12 +171,12 @@ Future<void> main(List<String> argv) async {
   stdout.writeln('\n5. The screenshot is the PREVIEW tier');
   final preview = (await client.screenshotPreview(onTimer: true)).bytes;
   final previewSize = jpegSize(preview);
-  _check(
+  check(
     previewSize != null,
     'the response is a JPEG',
     '${preview.length} bytes',
   );
-  _check(
+  check(
     previewSize?.width == 960,
     'and its width is PREVIEW_W (960), so ?tier=preview was sent',
     '${previewSize?.width}x${previewSize?.height}',
@@ -207,7 +196,7 @@ Future<void> main(List<String> argv) async {
   final rowsAfter = audit.existsSync()
       ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
       : 0;
-  _check(
+  check(
     rowsAfter == rowsBefore,
     'five timer frames added NO screenshot_taken rows',
     'they coalesce into live_view; without live=1 this would be +5, and ~720 an hour',
@@ -217,7 +206,7 @@ Future<void> main(List<String> argv) async {
   final rowsPerson = audit.existsSync()
       ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
       : 0;
-  _check(
+  check(
     rowsPerson == rowsAfter + 1,
     'and one person-requested frame added exactly one',
     'a deliberate look at a child screen is meant to be on the record',
@@ -226,7 +215,7 @@ Future<void> main(List<String> argv) async {
   // What the same call looks like WITHOUT the parameter — the trap, measured.
   final full = await rawShot(authority, client, '');
   final fullSize = jpegSize(full);
-  _check(
+  check(
     fullSize != null && fullSize.width != previewSize?.width,
     'omitting ?tier= returns a DIFFERENT, larger frame — a valid JPEG either way, '
         'which is why only the size can tell',
@@ -245,9 +234,9 @@ Future<void> main(List<String> argv) async {
   ]) {
     try {
       await call.$2();
-      _check(false, '${call.$1} refuses without a session');
+      check(false, '${call.$1} refuses without a session');
     } on NestwatchException catch (e) {
-      _check(
+      check(
         e.failure == NestwatchFailure.sessionExpired,
         '${call.$1} reports sessionExpired',
         e.failure.name,
@@ -255,14 +244,10 @@ Future<void> main(List<String> argv) async {
     }
   }
 
-  stdout.writeln('\n${'-' * 70}');
-  stdout.writeln(
-    _failures == 0
-        ? 'All checks passed. Approve grants once, the tier is preview, and a lapsed '
-              'session is named as one.'
-        : '$_failures check(s) FAILED.',
+  finish(
+    'All checks passed. Approve grants once, the tier is preview, and a lapsed '
+              'session is named as one.',
   );
-  exit(_failures == 0 ? 0 : 1);
 }
 
 /// Fetch a screenshot with an arbitrary query, to demonstrate the trap the app avoids.

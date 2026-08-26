@@ -40,35 +40,18 @@ import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
-int _failures = 0;
-int _skipped = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  stdout.writeln(
-    '  [${ok ? 'PASS' : 'FAIL'}] $label'
-    '${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 /// Coverage this run did not achieve, said out loud.
 ///
 /// A harness that quietly drops a check reads afterwards as though it covered
 /// everything. Skips are counted and reprinted in the summary.
-void _skip(String label, String why) {
-  stdout.writeln('  [SKIP] $label\n         $why');
-  _skipped++;
-}
-
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
+  final args = parseArgs(argv, known: {'password', 'pin', 'real', 'token'});
   final port = int.parse(args['real'] ?? '8443');
-  final pin = Fingerprint.parse(args['pin']!);
-  final password = args['password']!;
+  final pin = Fingerprint.parse(requireArg(args, 'pin'));
+  final password = requireArg(args, 'password');
   final token = args['token'];
   final authority = '127.0.0.1:$port';
 
@@ -93,7 +76,7 @@ Future<void> main(List<String> argv) async {
   stdout.writeln('0. Preflight');
   try {
     final info = await NestwatchClient(authority).session();
-    _check(true, 'server reachable and pinned', 'nestwatch ${info.version}');
+    check(true, 'server reachable and pinned', 'nestwatch ${info.version}');
   } on NestwatchException catch (e) {
     stdout.writeln('  [STOP] ${e.message}');
     exit(2);
@@ -104,7 +87,7 @@ Future<void> main(List<String> argv) async {
   // probed with a deliberately wrong password and steadily starved its own re-runs.
   try {
     await NestwatchClient(authority).login(password);
-    _check(true, 'the control password is accepted, and the limiter is clear');
+    check(true, 'the control password is accepted, and the limiter is clear');
   } on NestwatchException catch (e) {
     switch (e.failure) {
       case NestwatchFailure.rateLimited:
@@ -130,12 +113,12 @@ Future<void> main(List<String> argv) async {
   stdout.writeln('\n1. A real pairing token redeems');
   var controller = controllerOn(overrides);
   if (token == null) {
-    _skip(
+    skip(
       'token redemption',
       'no --token given. A token is single-use with a 15-minute TTL, so this is '
           'opt-in; mint one with `nestwatch pair` to cover it.',
     );
-    _skip('the same token again is spent', 'depends on the check above');
+    skip('the same token again is spent', 'depends on the check above');
   } else {
     await controller.begin(
       PairInvite.parse('https://$authority/p/$token#fp=$pin'),
@@ -143,23 +126,23 @@ Future<void> main(List<String> argv) async {
     final s1 = controller.state;
     if (s1 is PairingNeedsPassword &&
         s1.reason == PasswordPrompt.tokenSpentOrExpired) {
-      _skip(
+      skip(
         'token redemption',
         'that token was already spent or has expired — mint a fresh one with '
             '`nestwatch pair`. (Not a product failure: this is exactly the '
             'fallback check 2 asserts.)',
       );
-      _skip('the same token again is spent', 'depends on the check above');
+      skip('the same token again is spent', 'depends on the check above');
     } else {
-      _check(s1 is PairingConnected, 'connected and signed in', '$s1');
+      check(s1 is PairingConnected, 'connected and signed in', '$s1');
       if (s1 is PairingConnected) {
-        _check(s1.session.authenticated, '/session reports authenticated');
-        _check(
+        check(s1.session.authenticated, '/session reports authenticated');
+        check(
           s1.identity.provenance == PinProvenance.verifiedFromQrCode,
           'pinned from the QR fingerprint',
         );
       }
-      _check(await sessions.load() != null, 'the cookie was persisted');
+      check(await sessions.load() != null, 'the cookie was persisted');
 
       stdout.writeln('\n2. The SAME token again — spent, and not an error');
       await sessions.clear();
@@ -168,18 +151,18 @@ Future<void> main(List<String> argv) async {
       final c2 = controllerOn(o2);
       await c2.begin(PairInvite.parse('https://$authority/p/$token#fp=$pin'));
       final s2 = c2.state;
-      _check(
+      check(
         s2 is PairingNeedsPassword,
         'fell back to the password prompt',
         '$s2',
       );
       if (s2 is PairingNeedsPassword) {
-        _check(
+        check(
           s2.reason == PasswordPrompt.tokenSpentOrExpired,
           'and says why: ${s2.reason.name}',
         );
       }
-      _check(c2.current != null, 'the PC is still pinned even so');
+      check(c2.current != null, 'the PC is still pinned even so');
       overrides = o2;
       controller = c2;
     }
@@ -198,54 +181,54 @@ Future<void> main(List<String> argv) async {
   }
   await sessions.clear();
   final beforeLogin = controller.state;
-  _check(
+  check(
     beforeLogin is PairingNeedsPassword,
     'sitting at the password prompt',
     '${beforeLogin.runtimeType}',
   );
   await controller.submitPassword(password);
   final s3 = controller.state;
-  _check(s3 is PairingConnected, 'connected', '$s3');
+  check(s3 is PairingConnected, 'connected', '$s3');
   if (s3 is PairingConnected) {
-    _check(s3.session.authenticated, '/session reports authenticated');
+    check(s3.session.authenticated, '/session reports authenticated');
   }
-  _check(await sessions.load() != null, 'the cookie was persisted');
+  check(await sessions.load() != null, 'the cookie was persisted');
 
   // --------------------------------------- 4. survives a process restart
   stdout.writeln('\n4. The session survives a restart, with no password');
   final restarted = PinnedHttpOverrides();
   HttpOverrides.global = restarted;
-  _check(restarted.pin == null, 'the fresh process starts with no pin');
+  check(restarted.pin == null, 'the fresh process starts with no pin');
   final c4 = controllerOn(restarted);
   await c4.restore();
   final s4 = c4.state;
-  _check(
+  check(
     s4 is PairingConnected,
     'restored straight to a signed-in session',
     s4 is PairingNeedsPassword ? 'asked for a password: ${s4.message}' : '$s4',
   );
-  _check(restarted.pin == pin, 'and re-applied the pin before any request');
+  check(restarted.pin == pin, 'and re-applied the pin before any request');
 
   // ------------------------------- 5. sign out vs unpair are different
   stdout.writeln('\n5. Signing out is not un-pairing');
   await c4.signOut();
-  _check(
+  check(
     c4.state is PairingNeedsPassword,
     'sign out asks for the password again',
   );
-  _check(await identities.load() != null, 'the pinned PC is still on record');
-  _check(await sessions.load() == null, 'but the session is gone');
-  _check(restarted.pin == pin, 'and the pin is still applied');
+  check(await identities.load() != null, 'the pinned PC is still on record');
+  check(await sessions.load() == null, 'but the session is gone');
+  check(restarted.pin == pin, 'and the pin is still applied');
 
   // ------------------------------------- 6. the cookie is never printed
   stdout.writeln('\n6. The session token never leaks into a string');
   const secret = 'super-secret-session-value';
   const cookie = SessionCookie(secret);
-  _check(
+  check(
     !cookie.toString().contains(secret),
     'SessionCookie.toString() redacts it',
   );
-  _check(
+  check(
     !NestwatchClient(
       authority,
       cookie: cookie,
@@ -261,36 +244,27 @@ Future<void> main(List<String> argv) async {
   final pinBefore = restarted.pin;
   await c4.submitPassword('definitely-not-the-password');
   final s7 = c4.state;
-  _check(s7 is PairingNeedsPassword, 'stayed on the password prompt');
+  check(s7 is PairingNeedsPassword, 'stayed on the password prompt');
   if (s7 is PairingNeedsPassword) {
-    _check(
+    check(
       s7.reason == PasswordPrompt.wrongPassword,
       'reported as a wrong password, not a network error',
       s7.reason.name,
     );
   }
-  _check(
+  check(
     restarted.pin == pinBefore && restarted.pin != null,
     'the certificate pin is untouched by a failed sign-in',
   );
 
   // Unpair last of all, so the checks above ran against a real pairing.
   await c4.unpair();
-  _check(c4.state is PairingIdle, 'unpair returns to the start');
-  _check(await identities.load() == null, 'the pinned PC is forgotten');
-  _check(restarted.pin == null, 'and the pin is dropped');
+  check(c4.state is PairingIdle, 'unpair returns to the start');
+  check(await identities.load() == null, 'the pinned PC is forgotten');
+  check(restarted.pin == null, 'and the pin is dropped');
 
-  stdout.writeln('\n${'-' * 70}');
-  if (_skipped > 0) {
-    stdout.writeln(
-      '$_skipped check(s) SKIPPED — see above; coverage is incomplete.',
-    );
-  }
-  stdout.writeln(
-    _failures == 0
-        ? 'All run checks passed. A spent token degrades to the password prompt, and '
-              'the session survives a restart without one.'
-        : '$_failures check(s) FAILED.',
+  finish(
+    'All run checks passed. A spent token degrades to the password prompt, and '
+              'the session survives a restart without one.',
   );
-  exit(_failures == 0 ? 0 : 1);
 }

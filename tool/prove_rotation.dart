@@ -32,29 +32,18 @@ import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pin_mismatch_message.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
-int _failures = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  stdout.writeln(
-    '  [${ok ? 'PASS' : 'FAIL'}] $label'
-    '${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
+  final args = parseArgs(argv, known: {'lan-gate', 'new-pin', 'old-pin', 'real'});
   final port = int.parse(args['real'] ?? '8445');
   final gatePort = int.parse(args['lan-gate'] ?? '9444');
-  final oldPin = Fingerprint.parse(args['old-pin']!);
-  final newPin = Fingerprint.parse(args['new-pin']!);
+  final oldPin = Fingerprint.parse(requireArg(args, 'old-pin'));
+  final newPin = Fingerprint.parse(requireArg(args, 'new-pin'));
   final authority = '127.0.0.1:$port';
 
-  _check(
+  check(
     oldPin != newPin,
     'the harness was given two different fingerprints',
     'if these match, `install` reused the certificate — pass --new-cert',
@@ -78,19 +67,19 @@ Future<void> main(List<String> argv) async {
     PairInvite.parse('https://$authority/p/AAAAAAAAAAAAAAAA#fp=$oldPin'),
   );
   final s1 = stale.state;
-  _check(s1 is PairingRefused, 'refused', '${s1.runtimeType}');
-  _check(
+  check(s1 is PairingRefused, 'refused', '${s1.runtimeType}');
+  check(
     s1 is! PairingConnected && s1 is! PairingNeedsPassword,
     'and NOT silently trusted — nothing proceeded to a session',
   );
 
   if (s1 is PairingRefused) {
-    _check(
+    check(
       s1.rejection.observed == newPin,
       'the refusal recorded the certificate actually presented',
       '${s1.rejection.observed}',
     );
-    _check(
+    check(
       s1.rejection.expected == oldPin,
       'and the one it expected, so a parent can compare both',
     );
@@ -98,20 +87,20 @@ Future<void> main(List<String> argv) async {
     // ------------------ 2. and the explanation names the reinstall first
     stdout.writeln('\n2. The explanation offers the reinstall story first');
     final story = classifyMismatch(s1.rejection);
-    _check(
+    check(
       story == MismatchStory.consistentWithReinstall,
       'a freshly minted certificate reads as consistent with a reinstall',
       'certAge=${s1.rejection.certAge.inMinutes} min, story=${story.name}',
     );
-    _check(
+    check(
       s1.explanation.contains('nestwatch install'),
       'the copy names the command the parent just ran',
     );
-    _check(
+    check(
       s1.explanation.contains('re-scan') || s1.explanation.contains('Re-scan'),
       'and tells them what to do about it',
     );
-    _check(
+    check(
       s1.explanation.contains('nestwatch fingerprint'),
       'while still sending them to the PC to check, rather than assuming',
     );
@@ -130,14 +119,14 @@ Future<void> main(List<String> argv) async {
     PairInvite.parse('https://$authority/p/AAAAAAAAAAAAAAAA#fp=$newPin'),
   );
   final s3 = repaired.state;
-  _check(
+  check(
     s3 is PairingNeedsPassword || s3 is PairingConnected,
     'pinned to the new certificate',
     '${s3.runtimeType}',
   );
-  _check(overrides.pin == newPin, 'the live pin is the new fingerprint');
+  check(overrides.pin == newPin, 'the live pin is the new fingerprint');
   final stored = await identities.load();
-  _check(
+  check(
     stored?.fingerprint == newPin,
     'and the stored identity was replaced, leaving no stale pin behind',
   );
@@ -152,36 +141,32 @@ Future<void> main(List<String> argv) async {
   final gate = NestwatchClient('127.0.0.1:$gatePort');
   try {
     await gate.session();
-    _check(false, 'the gate refused');
+    check(false, 'the gate refused');
   } on NestwatchException catch (e) {
-    _check(
+    check(
       e.failure == NestwatchFailure.notOnLan,
       'a 403 reads as notOnLan',
       e.failure.name,
     );
-    _check(
+    check(
       e.failure != NestwatchFailure.unreachable,
       'and specifically NOT as unreachable — the distinction §6 asks for',
     );
     final lower = e.message.toLowerCase();
-    _check(lower.contains('vpn'), 'the message names the likely cause');
-    _check(
+    check(lower.contains('vpn'), 'the message names the likely cause');
+    check(
       lower.contains('home network') || lower.contains('same network'),
       'and explains what nestwatch expects',
     );
-    _check(
+    check(
       !lower.contains('unreachable') && !lower.contains('could not reach'),
       'without saying "unreachable", which would send the parent to the wrong fix',
     );
     stdout.writeln('         ---\n         ${e.message}');
   }
 
-  stdout.writeln('\n${'-' * 70}');
-  stdout.writeln(
-    _failures == 0
-        ? "All checks passed. A rotated certificate is refused and explained; an "
-              "off-LAN 403 is named rather than mistaken for a dead server."
-        : '$_failures check(s) FAILED.',
+  finish(
+    "All checks passed. A rotated certificate is refused and explained; an "
+              "off-LAN 403 is named rather than mistaken for a dead server.",
   );
-  exit(_failures == 0 ? 0 : 1);
 }

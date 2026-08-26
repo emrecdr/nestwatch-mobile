@@ -28,25 +28,14 @@ import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
-int _failures = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  stdout.writeln(
-    '  [${ok ? 'PASS' : 'FAIL'}] $label'
-    '${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
+  final args = parseArgs(argv, known: {'impostor', 'pin', 'real'});
   final realPort = int.parse(args['real'] ?? '8443');
   final impostorPort = int.parse(args['impostor'] ?? '8444');
-  final realPin = Fingerprint.parse(args['pin']!);
+  final realPin = Fingerprint.parse(requireArg(args, 'pin'));
 
   final overrides = PinnedHttpOverrides();
   HttpOverrides.global = overrides;
@@ -61,9 +50,9 @@ Future<void> main(List<String> argv) async {
   stdout.writeln("1. Today's pairing QR (no #fp= — Phase 1 has not landed)");
   final todayPayload = 'https://127.0.0.1:$realPort/p/EG629F4DQDDHS44V';
   final today = PairInvite.parse(todayPayload);
-  _check(today.fingerprint == null, 'parses with no fingerprint');
-  _check(!today.isVerifiable, 'reports itself as not verifiable');
-  _check(
+  check(today.fingerprint == null, 'parses with no fingerprint');
+  check(!today.isVerifiable, 'reports itself as not verifiable');
+  check(
     today.token == 'EG629F4DQDDHS44V' && today.port == realPort,
     'token and port recovered',
     '${today.token} @ ${today.authority}',
@@ -75,18 +64,18 @@ Future<void> main(List<String> argv) async {
   final c2 = fresh();
   await c2.begin(today);
   final st = c2.state;
-  _check(
+  check(
     st is PairingNeedsFingerprintCheck,
     'stopped to ask, rather than connecting',
     st.runtimeType.toString(),
   );
   if (st is PairingNeedsFingerprintCheck) {
-    _check(
+    check(
       st.observed == realPin,
       'what it observed equals `nestwatch fingerprint`',
       '${st.observed}',
     );
-    _check(
+    check(
       overrides.pin == null,
       'and nothing is pinned yet — the observation trusted nothing',
     );
@@ -98,17 +87,17 @@ Future<void> main(List<String> argv) async {
   final st3 = c2.state;
   // The token here is invented, so it cannot redeem — which lands on the password
   // prompt. That is the point: pinning succeeds independently of signing in.
-  _check(
+  check(
     st3 is PairingNeedsPassword,
     'pinned, and asking for the password',
     st3 is PairingFailed ? st3.message : st3.runtimeType.toString(),
   );
-  _check(overrides.pin == realPin, 'the pin is now the observed certificate');
-  _check(
+  check(overrides.pin == realPin, 'the pin is now the observed certificate');
+  check(
     c2.current?.provenance == PinProvenance.trustedOnFirstUse,
     'provenance recorded as trust-on-first-use',
   );
-  _check(
+  check(
     c2.current?.provenance.isVerified == false,
     'and it does NOT claim to be verified',
   );
@@ -117,20 +106,20 @@ Future<void> main(List<String> argv) async {
   stdout.writeln('\n4. A Phase-1 QR (#fp= present) pins before connecting');
   overrides.distrust();
   final phase1 = PairInvite.parse('$todayPayload#fp=$realPin');
-  _check(phase1.isVerifiable, 'parses as verifiable');
+  check(phase1.isVerifiable, 'parses as verifiable');
   final c4 = fresh();
   await c4.begin(phase1);
   final st4 = c4.state;
-  _check(
+  check(
     st4 is! PairingNeedsFingerprintCheck,
     'pinned with no fingerprint prompt',
     st4.runtimeType.toString(),
   );
-  _check(
+  check(
     overrides.pin == realPin,
     'the pin came from the QR, before connecting',
   );
-  _check(
+  check(
     c4.current?.provenance == PinProvenance.verifiedFromQrCode,
     'provenance recorded as verified from the QR code',
   );
@@ -146,18 +135,18 @@ Future<void> main(List<String> argv) async {
   final c5 = fresh();
   await c5.begin(wrong);
   final st5 = c5.state;
-  _check(st5 is PairingRefused, 'refused', st5.runtimeType.toString());
-  _check(
+  check(st5 is PairingRefused, 'refused', st5.runtimeType.toString());
+  check(
     st5 is! PairingNeedsFingerprintCheck,
     'and NOT downgraded to a trust-on-first-use prompt',
   );
   if (st5 is PairingRefused) {
-    _check(
+    check(
       st5.rejection.observed != realPin,
       'the refusal recorded the certificate actually presented',
       '${st5.rejection.observed}',
     );
-    _check(
+    check(
       st5.explanation.contains('nestwatch fingerprint'),
       'the explanation points the parent at the PC itself',
     );
@@ -181,18 +170,14 @@ Future<void> main(List<String> argv) async {
       ),
     );
     final back = await store.load();
-    _check(
+    check(
       back?.provenance == p && back?.fingerprint == realPin,
       'round-trips ${p.name}',
     );
   }
 
-  stdout.writeln('\n${'-' * 70}');
-  stdout.writeln(
-    _failures == 0
-        ? 'All checks passed. Both pairing routes end pinned to the right certificate, '
-              'and the wrong one is refused rather than downgraded.'
-        : '$_failures check(s) FAILED.',
+  finish(
+    'All checks passed. Both pairing routes end pinned to the right certificate, '
+              'and the wrong one is refused rather than downgraded.',
   );
-  exit(_failures == 0 ? 0 : 1);
 }

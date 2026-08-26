@@ -21,25 +21,14 @@ import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
-int _failures = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  stdout.writeln(
-    '  [${ok ? 'PASS' : 'FAIL'}] $label'
-    '${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
-  final qr = args['qr']!;
-  final expected = Fingerprint.parse(args['fingerprint']!);
-  final password = args['password']!;
+  final args = parseArgs(argv, known: {'fingerprint', 'password', 'qr'});
+  final qr = requireArg(args, 'qr');
+  final expected = Fingerprint.parse(requireArg(args, 'fingerprint'));
+  final password = requireArg(args, 'password');
 
   // ------------------------------------------- 1. the real payload parses
   stdout.writeln("1. nestwatch's own QR payload");
@@ -52,18 +41,18 @@ Future<void> main(List<String> argv) async {
     );
     exit(1);
   }
-  _check(invite.isVerifiable, 'carries a fingerprint, so it is verifiable');
-  _check(
+  check(invite.isVerifiable, 'carries a fingerprint, so it is verifiable');
+  check(
     invite.fingerprint == expected,
     'and it is the one `nestwatch fingerprint` prints',
     '${invite.fingerprint}',
   );
-  _check(
+  check(
     invite.token != null && invite.token!.length == 16,
     'the token survived the fragment',
     invite.token ?? 'none',
   );
-  _check(
+  check(
     invite.redeemUrl.toString() ==
         'https://${invite.authority}/p/${invite.token}',
     'and the redeem URL carries no fragment — the server never sees #fp=',
@@ -82,30 +71,30 @@ Future<void> main(List<String> argv) async {
     identities: identities,
     sessions: InMemorySessionStore(),
   );
-  _check(overrides.pin == null, 'nothing is pinned before pairing starts');
+  check(overrides.pin == null, 'nothing is pinned before pairing starts');
 
   await controller.begin(invite);
   final state = controller.state;
 
-  _check(
+  check(
     state is! PairingNeedsFingerprintCheck,
     'no trust-on-first-use prompt — this is the difference Phase 1 makes',
     state.runtimeType.toString(),
   );
-  _check(
+  check(
     state is PairingConnected || state is PairingNeedsPassword,
     'pinned and past the certificate question',
     state is PairingFailed ? state.message : '',
   );
-  _check(overrides.pin == expected, 'the live pin came from the QR');
+  check(overrides.pin == expected, 'the live pin came from the QR');
 
   final stored = await identities.load();
-  _check(
+  check(
     stored?.provenance == PinProvenance.verifiedFromQrCode,
     'recorded as VERIFIED, not trusted-on-first-use',
     stored?.provenance.name ?? 'nothing stored',
   );
-  _check(
+  check(
     stored?.provenance.isVerified == true,
     'and it may say so, which it could not before Phase 1',
   );
@@ -116,21 +105,17 @@ Future<void> main(List<String> argv) async {
     await controller.submitPassword(password);
   }
   final after = controller.state;
-  _check(after is PairingConnected, 'signed in', after.runtimeType.toString());
+  check(after is PairingConnected, 'signed in', after.runtimeType.toString());
   if (after is PairingConnected) {
-    _check(after.session.authenticated, '/session reports authenticated');
-    _check(
+    check(after.session.authenticated, '/session reports authenticated');
+    check(
       after.identity.provenance.isVerified,
       'and the connection is still recorded as verified afterwards',
     );
   }
 
-  stdout.writeln('\n${'-' * 70}');
-  stdout.writeln(
-    _failures == 0
-        ? 'All checks passed. Against a Phase 1 nestwatch this app performs verified '
-              'first use, with no fingerprint comparison asked of the parent.'
-        : '$_failures check(s) FAILED.',
+  finish(
+    'All checks passed. Against a Phase 1 nestwatch this app performs verified '
+              'first use, with no fingerprint comparison asked of the parent.',
   );
-  exit(_failures == 0 ? 0 : 1);
 }

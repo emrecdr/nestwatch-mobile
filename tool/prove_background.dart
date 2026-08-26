@@ -27,16 +27,8 @@ import 'package:nestwatch_mobile/src/background/poll_logic.dart';
 import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'harness.dart';
 
-int _failures = 0;
-
-void _check(bool ok, String label, [String detail = '']) {
-  stdout.writeln(
-    '  [${ok ? 'PASS' : 'FAIL'}] $label'
-    '${detail.isEmpty ? '' : '\n         $detail'}',
-  );
-  if (!ok) _failures++;
-}
 
 /// Runs in a spawned isolate and reports whether it inherited the pin.
 void _reportOverrides(SendPort send) {
@@ -58,14 +50,11 @@ Future<void> submitAsChild(String authority, int minutes, String reason) async {
 }
 
 Future<void> main(List<String> argv) async {
-  final args = <String, String>{};
-  for (var i = 0; i < argv.length - 1; i += 2) {
-    args[argv[i].replaceFirst('--', '')] = argv[i + 1];
-  }
+  final args = parseArgs(argv, known: {'password', 'pin', 'real'});
   final port = int.parse(args['real'] ?? '8443');
   final authority = '127.0.0.1:$port';
-  final pin = Fingerprint.parse(args['pin']!);
-  final password = args['password']!;
+  final pin = Fingerprint.parse(requireArg(args, 'pin'));
+  final password = requireArg(args, 'password');
 
   HttpOverrides.global = PinnedHttpOverrides(pin: pin);
 
@@ -75,7 +64,7 @@ Future<void> main(List<String> argv) async {
   await Isolate.spawn(_reportOverrides, receive.sendPort);
   final wasUnpinned = await receive.first as bool;
   receive.close();
-  _check(
+  check(
     wasUnpinned,
     'HttpOverrides.current is null in a freshly spawned isolate',
     'HttpOverrides._global is a plain static, and Dart statics do not cross isolates. '
@@ -91,20 +80,20 @@ Future<void> main(List<String> argv) async {
   } on NestwatchException catch (e) {
     refusedWithoutPin = e.failure == NestwatchFailure.pinMismatch;
   }
-  _check(
+  check(
     refusedWithoutPin,
     'with NO override the handshake is REFUSED, not silently accepted',
     'the system trust store has no reason to vouch for a self-signed certificate on a '
         'private address, so an un-bootstrapped isolate cannot connect at all',
   );
-  _check(
+  check(
     true,
     'which is the actual trap: the symptom is "background notifications never work"',
     'and the obvious fix for that symptom is badCertificateCallback => true in the '
         'background isolate, which would be catastrophic and would look like a bugfix',
   );
   HttpOverrides.global = PinnedHttpOverrides(pin: pin);
-  _check(
+  check(
     (await NestwatchClient(authority).session()).version.isNotEmpty,
     'installing the pin in this isolate is what makes it work — and openBackgroundSession '
     'does exactly that, before any request',
@@ -133,19 +122,19 @@ Future<void> main(List<String> argv) async {
   );
 
   await poll();
-  _check(
+  check(
     notified.length == 1,
     'the first poll notified',
     '${notified.length} batch(es)',
   );
-  _check(
+  check(
     notified.isNotEmpty && notified.first.length == 1,
     'about exactly one request',
     notified.isEmpty ? '' : notified.first.map((r) => r.reason).join(', '),
   );
 
   await poll();
-  _check(
+  check(
     notified.length == 1,
     'the second poll notified about nothing new',
     'a request re-announced every ${pollInterval.inMinutes} minutes is what teaches a '
@@ -154,11 +143,11 @@ Future<void> main(List<String> argv) async {
 
   stdout.writeln('\n4. A resolved request has its notification withdrawn');
   final pending = await client.timeRequests();
-  _check(pending.isNotEmpty, 'the request is still queued');
+  check(pending.isNotEmpty, 'the request is still queued');
   final resolvedId = pending.first.id;
   await client.approveTimeRequest(resolvedId);
   await poll();
-  _check(
+  check(
     cancelled.contains(resolvedId),
     'the poll withdrew it once it left the queue',
     'resolved in the browser dashboard or on another phone, this is how the '
@@ -166,7 +155,7 @@ Future<void> main(List<String> argv) async {
   );
 
   stdout.writeln('\n5. The seen-set is pruned to what is pending');
-  _check(
+  check(
     (await store.load()).isEmpty,
     'nothing lingers once the queue is empty',
     '${(await store.load()).length} id(s) held',
@@ -178,7 +167,7 @@ Future<void> main(List<String> argv) async {
     notify: (_) async {},
     cancel: (_) async {},
   );
-  _check(
+  check(
     !(await grew.load()).contains('old-1'),
     'stale ids are dropped rather than accumulating',
   );
@@ -195,7 +184,7 @@ Future<void> main(List<String> argv) async {
     notify: (r) async => notified.add(r),
     cancel: (_) async {},
   );
-  _check(
+  check(
     notified.length == before,
     'and says nothing',
     'a "could not reach the PC" notification every ${pollInterval.inMinutes} minutes '
@@ -203,19 +192,15 @@ Future<void> main(List<String> argv) async {
   );
 
   stdout.writeln('\n7. The promised interval is the platform floor');
-  _check(
+  check(
     pollInterval.inMinutes == 15,
     'the poll interval is 15 minutes',
     'anything shorter is silently clamped by WorkManager, so promising it would be a '
         'promise the platform declines to keep',
   );
 
-  stdout.writeln('\n${'-' * 70}');
-  stdout.writeln(
-    _failures == 0
-        ? 'All checks passed. The background isolate is pinned deliberately, and a '
-              'request is announced once.'
-        : '$_failures check(s) FAILED.',
+  finish(
+    'All checks passed. The background isolate is pinned deliberately, and a '
+              'request is announced once.',
   );
-  exit(_failures == 0 ? 0 : 1);
 }
