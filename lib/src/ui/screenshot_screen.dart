@@ -19,6 +19,7 @@
 /// Fetching through the client and rendering with `Image.memory` sidesteps both.
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -114,6 +115,18 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
     if (!mounted) return;
     switch (outcome) {
       case Loaded(data: final frame):
+        // Drop the decoded copy of the frame this one replaces.
+        //
+        // Flutter's image cache will not work that out by itself: `MemoryImage` is keyed
+        // by the byte buffer, and every frame arrives in a fresh `Uint8List`, so each one
+        // is a new entry rather than a replacement of the last. The cache is bounded, but
+        // its budget is 100 MiB — half an hour of live view at five seconds fills that
+        // with decoded pictures of a child's desktop and goes on holding them after the
+        // parent has stopped looking. The bytes displayed right now are kept alive by the
+        // live `Image` widget, not by this entry, so evicting is safe.
+        final superseded = _frame;
+        if (superseded != null) unawaited(MemoryImage(superseded).evict());
+
         setState(() {
           _frame = frame.bytes;
           _frameAt = DateTime.now();
