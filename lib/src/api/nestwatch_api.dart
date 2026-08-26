@@ -361,45 +361,40 @@ class NestwatchClient {
   /// answering.
   Future<Frame> screenshotPreview({required bool onTimer}) async {
     final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';
-    try {
-      return await _mappingTransportFailures(() async {
-        final response = await _open('GET', '/api/screenshot$query');
-        _requireOk(response);
-
-        // The server names the tier it actually served, so a client can record what it
-        // *got* rather than what it asked for. Reported rather than refused: a frame at
-        // the wrong tier is still a real, current picture, and the cost worth guarding
-        // against is the stream — which the caller stops — not the single frame. Absent
-        // on a server predating the header, which reads as "no disagreement to report".
-        final served = response.headers.value('x-shot-tier');
-        final chunks = await response.toList();
-        return Frame(
-          bytes: Uint8List.fromList(chunks.expand((c) => c).toList()),
-          servedTier: served,
-        );
-      });
-    } on NestwatchException catch (e) {
-      // A 500 from anywhere means `AppError::Control` or `AppError::Internal`, and the
-      // body is deliberately uninformative. This is the one call site that knows the
-      // operation was a screen capture, so it is the only place the message can be
-      // specific — and on the screenshot screen "HTTP 500" is close to useless, while
-      // the real cause is both common and fixable.
-      if (e.failure != NestwatchFailure.operationFailed) rethrow;
-      throw const NestwatchException(
-        NestwatchFailure.operationFailed,
-        'That PC could not take a picture of its screen.\n\n'
-        'The usual cause is Windows being older than version 1903: below that build '
-        'the screen-capture API is simply absent, and every screenshot fails while '
-        'everything else on this app keeps working. Updating Windows on that PC fixes '
-        'it.',
+    return _mappingTransportFailures(() async {
+      final response = await _open('GET', '/api/screenshot$query');
+      // This is the one call site that knows the operation was a screen capture, so it
+      // is the only place the 500 can be specific. Handed down rather than caught and
+      // rewritten: the generic sentence was being produced and then thrown away, and
+      // eighteen lines of this method were that round trip.
+      _requireOk(
+        response,
+        whenOperationFails:
+            'That PC could not take a picture of its screen.\n\n'
+            'The usual cause is Windows being older than version 1903: below that build '
+            'the screen-capture API is simply absent, and every screenshot fails while '
+            'everything else on this app keeps working. Updating Windows on that PC '
+            'fixes it.',
       );
-    }
+
+      // The server names the tier it actually served, so a client can record what it
+      // *got* rather than what it asked for. Reported rather than refused: a frame at the
+      // wrong tier is still a real, current picture, and the cost worth guarding against
+      // is the stream — which the caller stops — not the single frame. Absent on a server
+      // predating the header, which reads as "no disagreement to report".
+      final served = response.headers.value('x-shot-tier');
+      final chunks = await response.toList();
+      return Frame(
+        bytes: Uint8List.fromList(chunks.expand((c) => c).toList()),
+        servedTier: served,
+      );
+    });
   }
 
   /// Every `/api/*` path is behind `require_auth`, which answers 401 once the session
   /// lapses. §5 is explicit about what that means: re-prompt for the password, do NOT
   /// re-pair — the certificate is still trusted, only the session went.
-  void _requireOk(HttpClientResponse response) {
+  void _requireOk(HttpClientResponse response, {String? whenOperationFails}) {
     if (response.statusCode == HttpStatus.ok) return;
     if (response.statusCode == HttpStatus.unauthorized) {
       throw const NestwatchException(
@@ -410,11 +405,11 @@ class NestwatchClient {
     if (response.statusCode == HttpStatus.internalServerError) {
       // AppError::Control and AppError::Internal both land here, with the OS detail
       // logged on the server and deliberately not in the body — so this says which
-      // layer gave up and never why. Callers that know what they asked for can say
-      // more; see screenshotPreview.
-      throw const NestwatchException(
+      // layer gave up and never why. A caller that knows what it asked for can say more,
+      // and passes that sentence in rather than catching this one to overwrite it.
+      throw NestwatchException(
         NestwatchFailure.operationFailed,
-        'That PC could not carry out the request.',
+        whenOperationFails ?? 'That PC could not carry out the request.',
       );
     }
     throw NestwatchException(
