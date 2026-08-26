@@ -20,11 +20,13 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
-import 'poller.dart';
+import 'polled_screen.dart';
 
-class UsageScreen extends StatefulWidget {
+class UsageScreen extends PolledScreen {
   final NestwatchClient client;
+  @override
   final bool visible;
+  @override
   final void Function(NestwatchException) onFailure;
 
   const UsageScreen({
@@ -38,75 +40,18 @@ class UsageScreen extends StatefulWidget {
   State<UsageScreen> createState() => _UsageScreenState();
 }
 
-class _UsageScreenState extends State<UsageScreen> {
-  late final Poller _poller = Poller(interval: dataCadence, tick: _load);
-
-  UsageToday? _usage;
-  String? _error;
-
+class _UsageScreenState extends State<UsageScreen>
+    with PolledScreenState<UsageScreen, UsageToday> {
   @override
-  void initState() {
-    super.initState();
-    if (widget.visible) _poller.start();
-  }
-
-  @override
-  void didUpdateWidget(UsageScreen old) {
-    super.didUpdateWidget(old);
-    if (widget.visible == old.visible) return;
-    widget.visible ? _poller.start() : _poller.stop();
-  }
-
-  @override
-  void dispose() {
-    _poller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    try {
-      final usage = await widget.client.usageToday();
-      if (!mounted) return;
-      setState(() {
-        _usage = usage;
-        _error = null;
-      });
-    } on NestwatchException catch (e) {
-      if (!mounted) return;
-      if (e.failure == NestwatchFailure.sessionExpired) {
-        widget.onFailure(e);
-        return;
-      }
-      setState(() => _error = e.message);
-    }
-  }
+  Future<UsageToday> fetch() => widget.client.usageToday();
 
   @override
   Widget build(BuildContext context) {
-    final usage = _usage;
-    if (usage == null) {
-      return _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: _load,
-                      child: const Text('Try again'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : const Center(child: CircularProgressIndicator());
-    }
+    final usage = data;
+    if (usage == null) return waitingPane();
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),

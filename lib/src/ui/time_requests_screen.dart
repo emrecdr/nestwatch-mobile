@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
-import 'poller.dart';
+import 'polled_screen.dart';
 
-class TimeRequestsScreen extends StatefulWidget {
+class TimeRequestsScreen extends PolledScreen {
   final NestwatchClient client;
+  @override
   final bool visible;
+  @override
   final void Function(NestwatchException) onFailure;
 
   const TimeRequestsScreen({
@@ -23,11 +25,10 @@ class TimeRequestsScreen extends StatefulWidget {
   State<TimeRequestsScreen> createState() => _TimeRequestsScreenState();
 }
 
-class _TimeRequestsScreenState extends State<TimeRequestsScreen> {
-  late final Poller _poller = Poller(interval: dataCadence, tick: _load);
-
-  List<TimeRequest>? _requests;
-  String? _error;
+class _TimeRequestsScreenState extends State<TimeRequestsScreen>
+    with PolledScreenState<TimeRequestsScreen, List<TimeRequest>> {
+  @override
+  Future<List<TimeRequest>> fetch() => widget.client.timeRequests();
 
   /// Ids with a decision in flight.
   ///
@@ -37,43 +38,6 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen> {
   /// the minutes twice". The gate fixed the grant; this stops the second tap ever being
   /// sent, which also stops the 400 it would come back with.
   final _deciding = <String>{};
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.visible) _poller.start();
-  }
-
-  @override
-  void didUpdateWidget(TimeRequestsScreen old) {
-    super.didUpdateWidget(old);
-    if (widget.visible == old.visible) return;
-    widget.visible ? _poller.start() : _poller.stop();
-  }
-
-  @override
-  void dispose() {
-    _poller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    try {
-      final requests = await widget.client.timeRequests();
-      if (!mounted) return;
-      setState(() {
-        _requests = requests;
-        _error = null;
-      });
-    } on NestwatchException catch (e) {
-      if (!mounted) return;
-      if (e.failure == NestwatchFailure.sessionExpired) {
-        widget.onFailure(e);
-        return;
-      }
-      setState(() => _error = e.message);
-    }
-  }
 
   Future<void> _decide(TimeRequest request, {required bool approve}) async {
     if (!_deciding.add(request.id)) return;
@@ -103,7 +67,7 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen> {
       _snack(e.message);
     } finally {
       _deciding.remove(request.id);
-      if (mounted) await _load();
+      if (mounted) await load();
     }
   }
 
@@ -112,15 +76,11 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final requests = _requests;
-    if (requests == null) {
-      return _error != null
-          ? _errorPane(_error!)
-          : const Center(child: CircularProgressIndicator());
-    }
+    final requests = data;
+    if (requests == null) return waitingPane();
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: load,
       child: requests.isEmpty
           ? ListView(
               // Must scroll even when empty, or pull-to-refresh has nothing to grab.
@@ -198,20 +158,6 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen> {
       ),
     );
   }
-
-  Widget _errorPane(String message) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, textAlign: TextAlign.center),
-          const SizedBox(height: 16),
-          OutlinedButton(onPressed: _load, child: const Text('Try again')),
-        ],
-      ),
-    ),
-  );
 
   static String _ago(DateTime at) {
     final d = DateTime.now().difference(at);

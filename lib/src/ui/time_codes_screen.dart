@@ -30,11 +30,13 @@ import 'package:flutter/services.dart';
 
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
-import 'poller.dart';
+import 'polled_screen.dart';
 
-class TimeCodesScreen extends StatefulWidget {
+class TimeCodesScreen extends PolledScreen {
   final NestwatchClient client;
+  @override
   final bool visible;
+  @override
   final void Function(NestwatchException) onFailure;
 
   const TimeCodesScreen({
@@ -48,11 +50,11 @@ class TimeCodesScreen extends StatefulWidget {
   State<TimeCodesScreen> createState() => _TimeCodesScreenState();
 }
 
-class _TimeCodesScreenState extends State<TimeCodesScreen> {
-  late final Poller _poller = Poller(interval: dataCadence, tick: _load);
+class _TimeCodesScreenState extends State<TimeCodesScreen>
+    with PolledScreenState<TimeCodesScreen, List<TimeCode>> {
+  @override
+  Future<List<TimeCode>> fetch() => widget.client.timeCodes();
 
-  List<TimeCode>? _codes;
-  String? _error;
   bool _minting = false;
 
   /// Codes the parent has chosen to reveal, by code value.
@@ -62,43 +64,9 @@ class _TimeCodesScreenState extends State<TimeCodesScreen> {
   final _revealed = <String>{};
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.visible) _poller.start();
-  }
-
-  @override
-  void didUpdateWidget(TimeCodesScreen old) {
-    super.didUpdateWidget(old);
-    if (widget.visible == old.visible) return;
-    widget.visible ? _poller.start() : _poller.stop();
-  }
-
-  @override
-  void dispose() {
-    _poller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load() async {
-    try {
-      final codes = await widget.client.timeCodes();
-      if (!mounted) return;
-      setState(() {
-        _codes = codes;
-        _error = null;
-        // Forget reveals for codes that have since been redeemed.
-        _revealed.retainWhere((c) => codes.any((k) => k.code == c));
-      });
-    } on NestwatchException catch (e) {
-      if (!mounted) return;
-      if (e.failure == NestwatchFailure.sessionExpired) {
-        widget.onFailure(e);
-        return;
-      }
-      setState(() => _error = e.message);
-    }
-  }
+  void onLoaded(List<TimeCode> codes) =>
+      // Forget reveals for codes that have since been redeemed.
+      _revealed.retainWhere((c) => codes.any((k) => k.code == c));
 
   Future<void> _mint(int minutes) async {
     if (_minting) return;
@@ -108,7 +76,7 @@ class _TimeCodesScreenState extends State<TimeCodesScreen> {
       if (!mounted) return;
       // Reveal the one just made: the parent asked for it and has to write it down.
       _revealed.add(code.code);
-      await _load();
+      await load();
       if (mounted) _showCode(code);
     } on NestwatchException catch (e) {
       if (!mounted) return;
@@ -167,30 +135,11 @@ class _TimeCodesScreenState extends State<TimeCodesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final codes = _codes;
-    if (codes == null) {
-      return _error != null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 16),
-                    OutlinedButton(
-                      onPressed: _load,
-                      child: const Text('Try again'),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : const Center(child: CircularProgressIndicator());
-    }
+    final codes = data;
+    if (codes == null) return waitingPane();
 
     return RefreshIndicator(
-      onRefresh: _load,
+      onRefresh: load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),

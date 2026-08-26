@@ -25,6 +25,7 @@ import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
 import 'poller.dart';
+import 'screen_load.dart';
 
 class ScreenshotScreen extends StatefulWidget {
   final NestwatchClient client;
@@ -84,6 +85,19 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
     _live ? _poller.start() : _poller.stop();
   }
 
+  /// Stop the stream without the parent having asked to.
+  ///
+  /// Both callers are failures of a kind — a frame at the wrong size, or no frame at
+  /// all — and both want the same thing: keep whatever is already on screen, stop
+  /// asking for more. Clearing `_live` rather than only cancelling the timer is what
+  /// puts the button back to "Start", so the next attempt is a decision somebody made
+  /// instead of the app quietly resuming.
+  void _stopLive() {
+    if (!_live) return;
+    setState(() => _live = false);
+    _poller.stop();
+  }
+
   /// [onTimer] distinguishes the two callers, and the distinction is auditable.
   ///
   /// nestwatch records a person-requested frame as one `screenshot_taken` row and
@@ -93,41 +107,35 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
   /// claims to be a timer is the milder error — their deliberate look at a child's screen
   /// goes unrecorded, which is the accountability the audit log exists for.
   Future<void> _load({required bool onTimer}) async {
-    try {
-      // ?tier=preview is inside the client, with no way to ask for anything else.
-      final frame = await widget.client.screenshotPreview(onTimer: onTimer);
-      if (!mounted) return;
-      setState(() {
-        _frame = frame.bytes;
-        _frameAt = DateTime.now();
-        _error = frame.isPreview
-            ? null
-            // Show the picture anyway — it is real and current, and refusing it serves
-            // nobody. What is worth stopping is the *stream*: full frames every five
-            // seconds is the cost this screen exists to avoid, and one frame is not.
-            : 'That PC sent a full-size frame when this app asked for a preview. '
-                  'Showing it, but live view has stopped so it does not keep '
-                  'arriving at that size.';
-      });
-      if (!frame.isPreview && _live) {
-        setState(() => _live = false);
-        _poller.stop();
-      }
-    } on NestwatchException catch (e) {
-      if (!mounted) return;
-      if (e.failure == NestwatchFailure.sessionExpired) {
-        widget.onFailure(e);
-        return;
-      }
-      setState(() => _error = e.message);
-      // A failing frame every 5 seconds is noise; let the parent retry deliberately.
-      // This matters most for `operationFailed`: on a Windows below the capture floor
-      // every frame fails structurally, so retrying is not a transient-error recovery,
-      // it is a loop that never terminates and costs the PC work each time.
-      if (_live) {
-        setState(() => _live = false);
-        _poller.stop();
-      }
+    // ?tier=preview is inside the client, with no way to ask for anything else.
+    final outcome = await loadOnce(
+      () => widget.client.screenshotPreview(onTimer: onTimer),
+    );
+    if (!mounted) return;
+    switch (outcome) {
+      case Loaded(data: final frame):
+        setState(() {
+          _frame = frame.bytes;
+          _frameAt = DateTime.now();
+          _error = frame.isPreview
+              ? null
+              // Show the picture anyway — it is real and current, and refusing it serves
+              // nobody. What is worth stopping is the *stream*: full frames every five
+              // seconds is the cost this screen exists to avoid, and one frame is not.
+              : 'That PC sent a full-size frame when this app asked for a preview. '
+                    'Showing it, but live view has stopped so it does not keep '
+                    'arriving at that size.';
+        });
+        if (!frame.isPreview) _stopLive();
+      case Failed(:final message):
+        setState(() => _error = message);
+        // A failing frame every 5 seconds is noise; let the parent retry deliberately.
+        // This matters most for `operationFailed`: on a Windows below the capture floor
+        // every frame fails structurally, so retrying is not a transient-error recovery,
+        // it is a loop that never terminates and costs the PC work each time.
+        _stopLive();
+      case HandedBack(:final failure):
+        widget.onFailure(failure);
     }
   }
 
