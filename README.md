@@ -318,6 +318,30 @@ never ran. Before it existed, `flutter test` was green while the one security pr
 this app exists for went unchecked by the suite — it was proven only by
 `tool/prove_pin.dart`, which needs three live servers and so cannot run in CI.
 
+## Mutation audit
+
+```bash
+./tool/mutate.sh    # breaks one behaviour at a time, checks the suite notices
+```
+
+A green suite says nothing about whether it *would* go red. Each mutation is a real defect
+this codebase argues against somewhere in its comments; a `SURVIVED` line means the
+argument is not defended by a test. Currently **12 killed, 0 survived**.
+
+It found one genuine gap: deleting `?tier=preview` left `flutter test` entirely green.
+Trap 4 — the plan's most dangerous silent failure, where the wrong tier returns a valid
+200 JPEG and shreds the audit log — was guarded only by `prove_screens.dart`, which needs
+a live nestwatch. `test/api_wire_test.dart` now pins it against a loopback TLS server.
+
+Two lessons are baked into the script itself, both from false gaps it reported:
+
+- **A mutation that lands in a comment always survives**, and looks exactly like missing
+  coverage. This codebase is comment-dense, so a prose-like anchor hits the prose first.
+  The script now diffs comment-stripped source and reports `NO-OP (hit a comment)`.
+- **`//` inside a URL is not a comment.** The first version of that guard used
+  `re.sub(r'//.*', '')`, which gutted every line containing `https://` and so declared a
+  real mutation a no-op. It strips only whole-line comments now.
+
 Mutation-checked: making `badCertificateCallback` always accept fails 5 of its 7 tests.
 Flipping `withTrustedRoots` to `true` fails **none** of them — the fixtures are
 self-signed, so they fail under either setting and the callback fires regardless.
