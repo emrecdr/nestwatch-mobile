@@ -41,7 +41,7 @@ cp -R lib "$BACKUP/lib"
 restore() { rm -rf lib; cp -R "$BACKUP/lib" lib; }
 trap 'restore; rm -rf "$BACKUP"' EXIT
 
-killed=0; survived=0
+killed=0; survived=0; broken=0
 
 mutate() {
   local name="$1" file="$2" from="$3" to="$4"
@@ -54,7 +54,18 @@ if frm not in s:
     print("ANCHOR-MISSING", file=sys.stderr); sys.exit(2)
 open(path, 'w').write(s.replace(frm, to, 1))
 PY
-  if [ $? -ne 0 ]; then printf '  %-52s ANCHOR MISSING\n' "$name"; return; fi
+  # Counted, not just printed. The header above tells the story of an anchor that
+  # stopped matching after a refactor moved a line: the total went 24 to 23 and the run
+  # still said survived=0. That lesson was written into this comment and not into the
+  # arithmetic, so the same run would still have exited 0 and passed a gate.
+  #
+  # `check_golden.sh` states the rule this file needed: a thing that cannot be found must
+  # read as an error, never as agreement.
+  if [ $? -ne 0 ]; then
+    printf '  %-52s ANCHOR MISSING\n' "$name"
+    broken=$((broken + 1))
+    return
+  fi
 
   # A mutation that lands in a comment always survives and looks exactly like a coverage
   # gap. This file is comment-dense, so any anchor resembling prose will hit the prose
@@ -237,4 +248,14 @@ mutate "reuse: close() leaves the pool alive across a pin change" \
   "  void close() {}"
 
 echo
-echo "killed=$killed survived=$survived"
+echo "killed=$killed survived=$survived anchors-missing=$broken"
+
+# The exit status has to mean something, and it did not: this script reported survivors
+# and exited 0, so nothing could gate on it. A surviving mutant is an undefended claim; a
+# missing anchor is a claim nobody even attempted. Both are failures of the audit.
+if [ "$survived" -ne 0 ] || [ "$broken" -ne 0 ]; then
+  echo
+  [ "$survived" -ne 0 ] && echo "$survived mutation(s) SURVIVED — a comment argues for something no test defends."
+  [ "$broken" -ne 0 ] && echo "$broken anchor(s) MISSING — those mutations did not run. Not the same as passing."
+  exit 1
+fi
