@@ -61,6 +61,16 @@ Never finish(String whenAllPassed) {
   exit(_failures == 0 ? 0 : 1);
 }
 
+/// Stop before running the checks, because something upstream makes them meaningless.
+///
+/// Exits **2**, the same code as a bad invocation and deliberately not 1: "this run could
+/// not happen" is a different fact from "the thing under test failed", and a shell that
+/// cannot tell them apart will eventually treat one as the other.
+Never stop(String message) {
+  stdout.writeln('  [STOP] $message');
+  exit(2);
+}
+
 /// `--flag value` pairs, refusing what the hand-rolled copies took in silence.
 ///
 /// The copied parser was `for (i = 0; i < argv.length - 1; i += 2)`, which drops a

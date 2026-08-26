@@ -20,13 +20,13 @@
 /// while doing it. Only the dimensions tell you which tier you got.
 library;
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 
 /// Width and height out of a JPEG's SOF marker.
@@ -60,20 +60,6 @@ import 'harness.dart';
 }
 
 /// Submit a request the way the child's page does — unauthenticated, LAN-gated.
-Future<void> submitAsChild(String authority, int minutes, String reason) async {
-  final client = HttpClient();
-  try {
-    final req = await client.postUrl(
-      Uri.parse('https://$authority/time-request'),
-    );
-    req.headers.contentType = ContentType.json;
-    req.write(jsonEncode({'minutes': minutes, 'reason': reason}));
-    await (await req.close()).drain<void>();
-  } finally {
-    client.close(force: true);
-  }
-}
-
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'audit', 'password', 'pin', 'real'});
   final port = int.parse(args['real'] ?? '8443');
@@ -83,15 +69,9 @@ Future<void> main(List<String> argv) async {
   HttpOverrides.global = PinnedHttpOverrides()
     ..trust(Fingerprint.parse(requireArg(args, 'pin')));
 
-  final client = NestwatchClient(authority);
   stdout.writeln('0. Sign in');
-  try {
-    await client.login(password);
-    check(client.hasSession, 'signed in, cookie held');
-  } on NestwatchException catch (e) {
-    stdout.writeln('  [STOP] ${e.message}');
-    exit(2);
-  }
+  final client = await signInOrStop(authority, password);
+  check(client.hasSession, 'signed in, cookie held');
 
   // ------------------------------------------------------ 1. time requests
   stdout.writeln('\n1. Time requests');

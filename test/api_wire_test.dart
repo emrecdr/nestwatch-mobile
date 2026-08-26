@@ -23,10 +23,10 @@ import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/api/session_cookie.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 
-import 'pinning_socket_test.dart' show fingerprintOf;
+import 'support/certs.dart';
 
 void main() {
-  const dir = 'test/fixtures';
+  const dir = fixtureDir;
   late HttpServer server;
   late NestwatchClient client;
 

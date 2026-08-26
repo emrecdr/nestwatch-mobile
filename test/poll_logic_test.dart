@@ -14,7 +14,7 @@ import 'package:nestwatch_mobile/src/background/poll_logic.dart';
 import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 
-import 'pinning_socket_test.dart' show fingerprintOf;
+import 'support/certs.dart';
 
 /// Records the order of calls, so "saved before notifying" is checkable.
 class _RecordingStore implements SeenRequestStore {
@@ -37,7 +37,7 @@ class _RecordingStore implements SeenRequestStore {
 }
 
 void main() {
-  const dir = 'test/fixtures';
+  const dir = fixtureDir;
   late HttpServer server;
   late NestwatchClient client;
   var body = '[]';

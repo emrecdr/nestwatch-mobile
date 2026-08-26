@@ -17,25 +17,14 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'support/certs.dart';
 
-/// Fingerprint of a PEM certificate, computed the way nestwatch does: SHA-256 over the
-/// DER bytes. Read at runtime so regenerating the fixtures needs no edit here.
-Fingerprint fingerprintOf(String pemPath) {
-  final pem = File(pemPath).readAsStringSync();
-  final b64 = pem
-      .split('\n')
-      .where((l) => !l.startsWith('-----'))
-      .join()
-      .replaceAll(RegExp(r'\s'), '');
-  return Fingerprint.fromBytes(sha256.convert(base64.decode(b64)).bytes);
-}
 
 void main() {
-  const dir = 'test/fixtures';
+  const dir = fixtureDir;
   late HttpServer server;
   late Fingerprint servedPin;
   late Fingerprint otherPin;

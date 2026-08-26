@@ -8,6 +8,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 /// A parsed certificate fingerprint: the 32 raw bytes, plus the display form.
 class Fingerprint {
   /// SHA-256 is 32 bytes. A fingerprint of any other length is not one.
@@ -16,6 +18,20 @@ class Fingerprint {
   final Uint8List bytes;
 
   const Fingerprint._(this.bytes);
+
+  /// The fingerprint of a certificate's DER bytes.
+  ///
+  /// SHA-256 over the DER, which is what nestwatch's `cert::fingerprint` hashes and
+  /// therefore what `nestwatch fingerprint` prints and what a QR carries. Written out at
+  /// three call sites before this existed — the pin check in `_verify`, and once each in
+  /// `test/` and `tool/` — and the hash choice is the part that has to agree with that PC,
+  /// so it is worth having one place to be wrong.
+  ///
+  /// Takes DER rather than PEM on purpose. The app never sees PEM: `X509Certificate`
+  /// hands it `der` directly, and a PEM decoder here would be code that ships and is only
+  /// ever called by tests.
+  factory Fingerprint.ofDer(List<int> der) =>
+      Fingerprint.fromBytes(sha256.convert(der).bytes);
 
   /// Parse nestwatch's `AB:CD:…` form.
   ///

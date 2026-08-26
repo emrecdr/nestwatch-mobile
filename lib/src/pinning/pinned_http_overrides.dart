@@ -26,8 +26,6 @@ library;
 
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
-
 import 'fingerprint.dart';
 
 /// What was seen on the wire when a handshake was refused.
@@ -164,7 +162,7 @@ class PinnedHttpOverrides extends HttpOverrides {
   /// the pin to be proven by refusal *before any body is sent*, not by "wrong cert ⇒
   /// error" — a late check produces that error too, having already leaked the secret.
   bool _verify(X509Certificate cert, String host, int port) {
-    final observed = Fingerprint.fromBytes(sha256.convert(cert.der).bytes);
+    final observed = Fingerprint.ofDer(cert.der);
     final expected = _pin;
 
     if (expected != null && expected.matches(observed.bytes)) {

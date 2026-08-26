@@ -28,25 +28,12 @@ import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 
 /// Runs in a spawned isolate and reports whether it inherited the pin.
 void _reportOverrides(SendPort send) {
   send.send(HttpOverrides.current == null);
-}
-
-Future<void> submitAsChild(String authority, int minutes, String reason) async {
-  final client = HttpClient();
-  try {
-    final req = await client.postUrl(
-      Uri.parse('https://$authority/time-request'),
-    );
-    req.headers.contentType = ContentType.json;
-    req.write('{"minutes":$minutes,"reason":"$reason"}');
-    await (await req.close()).drain<void>();
-  } finally {
-    client.close(force: true);
-  }
 }
 
 Future<void> main(List<String> argv) async {
@@ -100,8 +87,7 @@ Future<void> main(List<String> argv) async {
   );
 
   // ------------------------------------------------- 3-5. the poll logic
-  final client = NestwatchClient(authority);
-  await client.login(password);
+  final client = await signInOrStop(authority, password);
 
   // Clear the queue so the run starts from a known state.
   for (final r in await client.timeRequests()) {
