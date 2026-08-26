@@ -9,8 +9,25 @@ source of truth for the server contract — read it before changing anything her
 
 ## Status
 
-Walking skeleton (PLAN §9), **step 2 of 5**: the pinned `HttpClient`, proven by failure.
-Steps 3–5 (QR pairing, password login, the three screens) are not built.
+Walking skeleton (PLAN §9), **steps 2–3 of 5**:
+
+- **step 2** — the pinned `HttpClient`, proven by failure.
+- **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback.
+
+Steps 4–5 (password login, the three screens) are not built. The pairing token is parsed
+and carried, but not yet redeemed.
+
+### Two ways to end up pinned
+
+| | how the fingerprint is learned | worth |
+|---|---|---|
+| **Verified** | the QR carried `#fp=` (PLAN Phase 1) | checked against a value that never crossed the network |
+| **Trust on first use** | read off the server, confirmed by the parent against `nestwatch fingerprint` | only as good as that comparison |
+
+No nestwatch has shipped `#fp=` yet, so every pairing today takes the second route. The
+app records which one happened (`PinProvenance`) and keeps saying so — a warning shown
+once at pairing and then forgotten would make the weaker trust indistinguishable from the
+stronger one forever after.
 
 ## The one dependency rule
 
@@ -62,11 +79,36 @@ Four checks, and check 4 is the one that keeps it honest: it re-runs the same ri
 sink's own certificate pinned and requires the body to arrive. Without it, a broken rig that
 reports "no bytes" for any reason would pass check 3 against any implementation.
 
+Step 3 has its own live proof, covering both routes and — the check that matters — that a
+QR naming the *wrong* certificate is refused rather than quietly downgraded to a
+trust-on-first-use prompt, which would make Phase 1's fingerprint decorative:
+
+```bash
+dart run tool/prove_tofu.dart --real 8443 --impostor 8444 --pin "$FINGERPRINT"
+```
+
+Both harnesses run under plain `dart run`, with no emulator. That is deliberate: the
+pairing state machine deposits no Flutter imports, so the part of this app that decides
+what to trust stays testable against a live server on every change. `ServerIdentityStore`
+is abstract for the same reason — the Keystore-backed implementation lives apart, in
+`secure_identity_store.dart`.
+
 ## Unit tests
 
 ```bash
-flutter test        # fingerprint parsing and comparison — no server needed
+flutter test        # fingerprint, QR parsing, mismatch classification — no server needed
 ```
+
+## Android notes
+
+- `compileSdk = 37`, above Flutter's default of 36, because `flutter_secure_storage` 11
+  requires it. `minSdk` stays at Flutter's 24, which clears both plugin floors.
+- `INTERNET` is declared in the **main** manifest. Flutter's template puts it only in
+  `debug`/`profile`, so a release build would ship with no network access.
+- The MLKit barcode model is **bundled**, not downloaded — see `android/gradle.properties`
+  for why the usual size-saving advice is wrong here.
+- `mobile_scanner` still applies the Kotlin Gradle Plugin directly, which Flutter warns
+  will stop working in a future release. Not breaking today; worth watching on upgrade.
 
 ## Layout
 

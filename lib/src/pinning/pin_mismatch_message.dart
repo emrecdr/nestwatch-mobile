@@ -1,51 +1,120 @@
 /// Turning a refused handshake into something a parent can act on.
 ///
-/// PLAN.md §5 is specific about this, and it is the one place where the pin becomes a
-/// user-experience problem rather than a cryptographic one:
+/// PLAN.md §5 is specific about this, and it is the one place where the pin stops being
+/// a cryptographic problem and becomes a human one:
 ///
 /// > On **pin mismatch**, say which of the two things happened: *"This PC's certificate
 /// > changed. If you just re-ran `nestwatch install`, re-scan the QR. If you didn't,
 /// > something on your network may be impersonating it."* Both are real, and only the
 /// > parent can tell them apart.
 ///
-/// The evidence available is in [PinRejection]: the fingerprint presented, the pin we
-/// held, and `notBefore` -- when the presented certificate became valid. That last one
-/// carries real signal, because `cert::generate` mints a brand-new key and certificate
-/// on every `nestwatch install` (nestwatch `src/cert.rs`), so `notBefore` is
-/// effectively "when install was last run on whatever answered this socket".
+/// ## What the evidence can and cannot settle
+///
+/// The tempting signal is [PinRejection.certAge] -- how old the presented certificate
+/// was when it was refused. `cert::generate` mints a fresh key and certificate on every
+/// `nestwatch install`, so a legitimate reinstall presents a young certificate.
+///
+/// **That does not work in the direction it first appears to.** An impostor also mints
+/// its own certificate, so its certificate is young too -- and nestwatch backdates
+/// `not_before` by exactly one hour (`src/cert.rs`, for clock skew), which an attacker
+/// can copy trivially. Youth is therefore consistent with *both* stories and settles
+/// neither.
+///
+/// The inference that does hold runs the other way. A certificate far older than a
+/// recent `install` could have produced is *inconsistent* with the reinstall story,
+/// whoever is presenting it. That rules a story out rather than ruling one in, which is
+/// the only honest direction available here.
+///
+/// So this is a filter for **accidents** -- the wrong PC on the LAN, an old machine
+/// still running a stale install -- not a defence against a competent attacker. The
+/// defence against an attacker is the parent comparing the fingerprint against
+/// `nestwatch fingerprint` on the PC itself. Nothing here replaces that, and the copy
+/// must not imply otherwise.
 library;
 
 import 'pinned_http_overrides.dart';
 
-/// How the app explains a refusal.
+/// How long after its `not_before` a certificate can still be explained by "I just
+/// re-ran install".
+///
+/// Generous on purpose. nestwatch backdates `not_before` an hour, and a parent may
+/// reinstall in the morning and open the app that evening. Being wrong in the tight
+/// direction produces a false alarm on a legitimate reinstall, which is the cheaper of
+/// the two errors but still erodes a warning that needs to be believed when it fires.
+const Duration reinstallPlausibleWindow = Duration(hours: 24);
+
+/// What the evidence supports. The names carry the epistemics deliberately:
+/// "consistent with" is not "probably", and nothing here says "verified".
 enum MismatchStory {
-  /// Consistent with the parent having just re-run `nestwatch install`.
-  probablyReinstalled,
+  /// The certificate is young enough that a recent `nestwatch install` explains it.
+  /// An impostor's freshly minted certificate looks identical, so this narrows nothing
+  /// on its own -- it only means the reinstall story has not been excluded.
+  consistentWithReinstall,
 
-  /// Consistent with something else on the network answering for the PC.
-  possiblyImpostor,
+  /// The certificate is too old for a recent `install` to have produced it. Something
+  /// other than a reinstall is going on: a different machine, or an old one.
+  inconsistentWithReinstall,
 
-  /// The evidence does not favour either. Say so, and offer both.
-  ambiguous,
+  /// No usable timing information.
+  unknown,
 }
 
-/// Decide which story the evidence supports.
-///
-/// TODO(you): implement this -- see the request in the session notes.
-///
-/// The interesting input is [PinRejection.certAge]: how old the presented certificate
-/// was at the moment it was refused. A certificate minted seconds ago is hard to square
-/// with an impostor that has been sitting on the LAN; one minted last month is hard to
-/// square with "you just re-ran install". Where you put the boundary -- and whether you
-/// are willing to call it at all rather than returning [MismatchStory.ambiguous] -- is a
-/// judgement about which way this should fail, and it is yours to make.
-///
-/// Worth weighing: guessing [MismatchStory.probablyReinstalled] when it was actually an
-/// attacker teaches the parent to re-scan past a real warning, which is the expensive
-/// mistake. Guessing [MismatchStory.possiblyImpostor] after a legitimate reinstall
-/// alarms them for nothing, which is cheap but erodes the warning if it happens often.
+/// Classify a refusal against the only evidence available at the handshake.
 MismatchStory classifyMismatch(PinRejection rejection) {
-  // Deliberately non-committal until the call above is made: both possibilities get
-  // shown, which is correct but wordier than it needs to be.
-  return MismatchStory.ambiguous;
+  final age = rejection.certAge;
+
+  // A negative age means the certificate claims to start in the future -- clock skew in
+  // one direction or the other, and not something to reason about.
+  if (age.isNegative) return MismatchStory.unknown;
+
+  return age <= reinstallPlausibleWindow
+      ? MismatchStory.consistentWithReinstall
+      : MismatchStory.inconsistentWithReinstall;
+}
+
+/// The parent-facing explanation.
+///
+/// Leads with the action in both cases, and never claims to know which story is true.
+String explainMismatch(PinRejection rejection) {
+  final story = classifyMismatch(rejection);
+  final buffer = StringBuffer()
+    ..writeln(
+      '${rejection.host} presented a different certificate than the one '
+      'this app trusts, so the connection was refused before anything was sent.',
+    )
+    ..writeln();
+
+  switch (story) {
+    case MismatchStory.consistentWithReinstall:
+      buffer
+        ..writeln(
+          'If you just re-ran `nestwatch install` on that PC, this is expected '
+          '— it makes a new certificate every time. Re-scan the pairing QR.',
+        )
+        ..writeln()
+        ..writeln(
+          'If you did not, something on your network may be impersonating it. '
+          'Check the fingerprint below against `nestwatch fingerprint` run on the PC '
+          'itself before you trust it.',
+        );
+    case MismatchStory.inconsistentWithReinstall:
+      buffer
+        ..writeln(
+          'This certificate is too old to have come from a recent '
+          '`nestwatch install`, so a reinstall does not explain it.',
+        )
+        ..writeln()
+        ..writeln(
+          'You may be pointed at a different PC than the one you paired with. '
+          'Check the fingerprint below against `nestwatch fingerprint` run on the PC '
+          'you mean to reach.',
+        );
+    case MismatchStory.unknown:
+      buffer.writeln(
+        'Check the fingerprint below against `nestwatch fingerprint` run '
+        'on the PC itself before you trust it.',
+      );
+  }
+
+  return buffer.toString().trimRight();
 }

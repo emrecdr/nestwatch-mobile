@@ -89,6 +89,18 @@ class PinnedHttpOverrides extends HttpOverrides {
     lastRejection = null;
   }
 
+  /// Drop the pin, so the next handshake is refused and the certificate it presented is
+  /// recorded in [lastRejection].
+  ///
+  /// This is how trust-on-first-use *observes* a server without trusting it: with no pin
+  /// set, `_verify` refuses everything, and refusing is what captures the fingerprint.
+  /// Nothing is sent during a refused handshake, so the observation costs no exposure —
+  /// which is precisely the property step 2 proved on the wire.
+  void distrust() {
+    _pin = null;
+    lastRejection = null;
+  }
+
   @override
   HttpClient createHttpClient(SecurityContext? context) {
     // `withTrustedRoots: false` is load-bearing, not tidiness.
