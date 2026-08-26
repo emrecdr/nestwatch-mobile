@@ -8,6 +8,7 @@
 /// Rules, routines, curfew and the audit log stay in the browser, deliberately (§5).
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -47,11 +48,17 @@ Future<void> main() async {
     identities: const SecureServerIdentityStore(),
     sessions: const SecureSessionStore(),
   );
-  // Re-apply a stored pin and session before the first frame, so the process is never
-  // briefly unpinned while a previously-paired server is reachable.
-  await controller.restore();
+  // Re-apply the stored pin before the first frame, so the process is never briefly
+  // unpinned while a previously-paired server is reachable. Keystore reads only.
+  await controller.restorePin();
 
   runApp(NestwatchApp(controller: controller));
+
+  // Whether that stored session is still good is a question for the PC, and asking it
+  // takes a handshake and a GET. Off the home network that runs to the timeout, so it
+  // happens behind a frame the parent can already see rather than in front of a blank
+  // one. `_Root` listens to the controller and rebuilds when the answer arrives.
+  unawaited(controller.restoreSession());
 }
 
 class NestwatchApp extends StatelessWidget {

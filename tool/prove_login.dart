@@ -200,14 +200,28 @@ Future<void> main(List<String> argv) async {
   HttpOverrides.global = restarted;
   check(restarted.pin == null, 'the fresh process starts with no pin');
   final c4 = controllerOn(restarted);
-  await c4.restore();
+
+  // The two halves, in the order main() runs them. restorePin is what the app awaits
+  // before its first frame; restoreSession is what it starts behind that frame.
+  await c4.restorePin();
+  check(
+    restarted.pin == pin,
+    'the pin is back before the first frame, and before any request',
+    'this is the half that must stay awaited',
+  );
+  check(
+    c4.state is PairingBusy,
+    'and the parent is told a PC is being reached, not shown a blank screen',
+    '${c4.state}',
+  );
+
+  await c4.restoreSession();
   final s4 = c4.state;
   check(
     s4 is PairingConnected,
     'restored straight to a signed-in session',
     s4 is PairingNeedsPassword ? 'asked for a password: ${s4.message}' : '$s4',
   );
-  check(restarted.pin == pin, 'and re-applied the pin before any request');
 
   // ------------------------------- 5. sign out vs unpair are different
   stdout.writeln('\n5. Signing out is not un-pairing');

@@ -79,11 +79,22 @@ Future<BackgroundSession?> openBackgroundSession({
 Future<bool> pollPairedServer() async {
   final session = await openBackgroundSession();
   if (session == null) return false;
-  await pollOnce(
-    client: session.client,
-    store: const SecureSeenRequestStore(),
-    notify: notifyTimeRequests,
-    cancel: cancelForRequest,
-  );
-  return true;
+  try {
+    await pollOnce(
+      client: session.client,
+      store: const SecureSeenRequestStore(),
+      notify: notifyTimeRequests,
+      cancel: cancelForRequest,
+    );
+    return true;
+  } finally {
+    // This client is built fresh for one poll and nothing outlives it, so the pooled
+    // connection it leaves behind is held open for the full 30-second idleTimeout for
+    // nobody. Predates the extraction — background_poll did not close it either — but
+    // there is now one place to say so.
+    //
+    // In the foreground tier that is a socket on the phone and a TLS session on that PC
+    // every sixty seconds, kept alive after the only caller has gone.
+    session.client.close();
+  }
 }

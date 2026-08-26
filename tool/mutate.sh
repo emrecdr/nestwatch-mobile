@@ -189,6 +189,21 @@ mutate "session: a 401 from /api reads as an unexpected answer" \
 
 # The UI layer had no mutation at all until the screens were deduped — no widget tests
 # either, so the rule deciding whether a parent can get back in was defended by nothing.
+# The startup ordering: the pin is installed before the first frame, and the network
+# probe is not. Both halves were one awaited method until the second was measured
+# blocking the first frame for a handshake.
+mutate "startup: the pin is not applied before the first frame" \
+  lib/src/pairing/pairing_controller.dart \
+  "    _overrides.trust(stored.fingerprint);" \
+  "    if (stored.provenance == PinProvenance.trustedOnFirstUse) {
+      _overrides.trust(stored.fingerprint);
+    }"
+
+mutate "startup: restoreSession overwrites what the parent is looking at" \
+  lib/src/pairing/pairing_controller.dart \
+  "    if (_state is! PairingBusy) return;" \
+  "    if (_state is PairingBusy) {}"
+
 # PLAN §5's "stop both when not visible" — argued for at length in poller.dart and
 # defended by nothing until the gate moved out of a widget mixin and into Poller.
 mutate "poller: an off-screen tab keeps asking that PC" \

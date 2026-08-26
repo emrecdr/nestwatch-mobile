@@ -173,9 +173,20 @@ class PairingController {
 
   /// Re-apply a stored pin and session at app start.
   ///
-  /// Called before any request is made, so the process is never briefly unpinned while a
-  /// previously-paired server is reachable.
-  Future<void> restore() async {
+  /// Re-apply the stored pin, and nothing else.
+  ///
+  /// Must be awaited before the first request, so the process is never briefly unpinned
+  /// while a previously-paired server is reachable — [_overrides.trust] below is what
+  /// delivers that. Two Keystore reads, no network.
+  ///
+  /// The network half is [restoreSession], and the split is the point. Both used to be
+  /// one method awaited before `runApp`, so every launch held a blank screen for a TLS
+  /// handshake and a GET. On the home LAN that is tens of milliseconds. Off it — a parent
+  /// checking the app from work, which is a normal thing to do — the probe runs to the
+  /// 10-second timeout, and the timeout is applied to opening the request and to closing
+  /// it, so the blank screen can last twice that. None of it was buying the pin property:
+  /// the pin is installed three lines below, before any client exists.
+  Future<void> restorePin() async {
     final stored = await _identities.load();
     if (stored == null) return;
 
@@ -183,7 +194,7 @@ class PairingController {
     _overrides.trust(stored.fingerprint);
 
     final cookie = await _sessions.load();
-    final client = _clientFor(stored.authority, cookie: cookie);
+    _clientFor(stored.authority, cookie: cookie);
 
     if (cookie == null) {
       _emit(
@@ -195,6 +206,23 @@ class PairingController {
       );
       return;
     }
+
+    // There is a session to check, and checking it takes a network round trip. Say so on
+    // screen instead of behind one.
+    _emit(PairingBusy('Reaching ${stored.authority}…'));
+  }
+
+  /// Ask that PC whether the stored session is still good.
+  ///
+  /// Started after `runApp`, never awaited before it. Returns immediately unless
+  /// [restorePin] left something to verify — if the parent has already acted, or there
+  /// was no stored session, this must not reach back and overwrite what they are looking
+  /// at.
+  Future<void> restoreSession() async {
+    final stored = _current;
+    final client = _client;
+    if (stored == null || client == null) return;
+    if (_state is! PairingBusy) return;
 
     try {
       final session = await client.session();

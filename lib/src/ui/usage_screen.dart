@@ -144,11 +144,14 @@ class _UsageScreenState extends State<UsageScreen>
 
   Widget _section(BuildContext context, String title, List<UsageRow> rows) {
     if (rows.isEmpty) return const SizedBox.shrink();
+    // Looked up once for the whole section rather than once per row, which is what the
+    // rest of this file does.
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 24),
-        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        Text(title, style: theme.textTheme.titleSmall),
         const SizedBox(height: 8),
         for (final row in rows)
           Padding(
@@ -165,7 +168,7 @@ class _UsageScreenState extends State<UsageScreen>
                     color:
                         row.limitMinutes != null &&
                             row.minutes >= row.limitMinutes!
-                        ? Theme.of(context).colorScheme.error
+                        ? theme.colorScheme.error
                         : null,
                   ),
                 ),
