@@ -31,6 +31,7 @@ import 'package:flutter/services.dart';
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
 import 'polled_screen.dart';
+import 'relative_time.dart';
 
 class TimeCodesScreen extends PolledScreen {
   final NestwatchClient client;
@@ -217,7 +218,7 @@ class _TimeCodesScreenState extends State<TimeCodesScreen>
         subtitle: Text(
           at == null
               ? '${code.minutes} minutes'
-              : '${code.minutes} minutes · made ${_ago(at)}',
+              : '${code.minutes} minutes · made ${ago(at)}',
         ),
         trailing: IconButton(
           tooltip: shown ? 'Hide' : 'Show',
@@ -273,13 +274,5 @@ class _TimeCodesScreenState extends State<TimeCodesScreen>
       return;
     }
     await _mint(minutes);
-  }
-
-  static String _ago(DateTime at) {
-    final d = DateTime.now().difference(at);
-    if (d.inMinutes < 1) return 'just now';
-    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-    if (d.inHours < 24) return '${d.inHours} h ago';
-    return '${d.inDays} d ago';
   }
 }

@@ -82,7 +82,6 @@ class PairInvite {
   /// `null` when there is no token to spend, which sends §5 straight to password login.
   Uri? get redeemUrl =>
       token == null ? null : Uri.parse('https://$authority/p/$token');
-  Uri get sessionUrl => Uri.parse('https://$authority/session');
 
   /// Parse a scanned payload, or throw [PairInviteFormatException].
   static PairInvite parse(String raw) {

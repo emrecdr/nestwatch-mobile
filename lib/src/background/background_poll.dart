@@ -64,12 +64,20 @@ Future<bool> runBackgroundPoll() async {
     return true;
   }
 
-  return pollOnce(
+  await pollOnce(
     client: session.client,
     store: const SecureSeenRequestStore(),
     notify: notifyTimeRequests,
     cancel: cancelForRequest,
   );
+
+  // Always true, and stated here rather than inside `pollOnce` because this is the only
+  // frame that WorkManager is listening to. False asks for a retry with backoff, and
+  // there is nothing here worth retrying sooner than the next fifteen-minute round: an
+  // unreachable PC means the phone is out of the house, and a lapsed session is fixed by
+  // typing a password, which cannot happen in the background. Either way a retry storm
+  // is the only thing false would buy.
+  return true;
 }
 
 /// Register the periodic poll. Idempotent: the unique name replaces any existing

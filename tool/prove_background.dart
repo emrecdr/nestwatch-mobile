@@ -125,7 +125,7 @@ Future<void> main(List<String> argv) async {
   final notified = <List<TimeRequest>>[];
   final cancelled = <String>[];
 
-  Future<bool> poll() => pollOnce(
+  Future<void> poll() => pollOnce(
     client: client,
     store: store,
     notify: (r) async => notified.add(r),
@@ -189,13 +189,12 @@ Future<void> main(List<String> argv) async {
     '127.0.0.1:1',
     timeout: const Duration(seconds: 2),
   );
-  final ok = await pollOnce(
+  await pollOnce(
     client: unreachable,
     store: InMemorySeenRequestStore(),
     notify: (r) async => notified.add(r),
     cancel: (_) async {},
   );
-  _check(ok, 'the poll reports success rather than asking for a retry storm');
   _check(
     notified.length == before,
     'and says nothing',

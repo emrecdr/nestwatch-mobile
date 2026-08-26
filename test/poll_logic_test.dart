@@ -138,7 +138,7 @@ void main() {
     final log = <String>[];
     final store = _RecordingStore(log);
     final notified = <int>[];
-    Future<bool> poll() => pollOnce(
+    Future<void> poll() => pollOnce(
       client: client,
       store: store,
       notify: (r) async => notified.add(r.length),
@@ -157,7 +157,7 @@ void main() {
       final log = <String>[];
       final store = _RecordingStore(log);
       final cancelled = <String>[];
-      Future<bool> poll() => pollOnce(
+      Future<void> poll() => pollOnce(
         client: client,
         store: store,
         notify: (_) async {},
@@ -182,15 +182,15 @@ void main() {
       timeout: const Duration(seconds: 2),
     );
     final notified = <List<TimeRequest>>[];
-    final ok = await pollOnce(
+    await pollOnce(
       client: unreachable,
       store: InMemorySeenRequestStore(),
       notify: (r) async => notified.add(r),
       cancel: (_) async {},
     );
     // A "could not reach the PC" notification every 15 minutes while a parent is at
-    // work is worse than silence, and returning false would ask for a retry storm.
-    expect(ok, isTrue);
+    // work is worse than silence. Silence is the whole assertion: an unreachable PC
+    // must produce no notification and no throw.
     expect(notified, isEmpty);
   });
 }

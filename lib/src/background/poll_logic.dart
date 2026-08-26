@@ -21,7 +21,7 @@ const Duration pollInterval = Duration(minutes: 15);
 /// WorkManager and without a notification channel — [notify] and [cancel] are platform
 /// calls that need an Android binding, and everything interesting here is the logic
 /// around them.
-Future<bool> pollOnce({
+Future<void> pollOnce({
   required NestwatchClient client,
   required SeenRequestStore store,
   required Future<void> Function(List<TimeRequest>) notify,
@@ -36,7 +36,7 @@ Future<bool> pollOnce({
     // work. Nothing is shown for it — a notification saying "could not reach the PC"
     // every fifteen minutes while a parent is at work would be worse than silence, and
     // §5 is clear that a 401 means re-prompt for the password at next launch, not now.
-    return true;
+    return;
   }
 
   final seen = await store.load();
@@ -76,5 +76,4 @@ Future<bool> pollOnce({
   // Reached only once the announcement succeeded. A throw above leaves the store
   // untouched, which is what makes the next round a retry rather than a loss.
   await store.save(diff.next);
-  return true;
 }

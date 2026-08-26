@@ -105,7 +105,7 @@ class PinnedHttpOverrides extends HttpOverrides {
   }
 
   /// Drop the pin, so the next handshake is refused and the certificate it presented is
-  /// recorded in [lastRejection].
+  /// recorded against its authority, for [rejectionFor] to read back.
   ///
   /// This is how trust-on-first-use *observes* a server without trusting it: with no pin
   /// set, `_verify` refuses everything, and refusing is what captures the fingerprint.
@@ -118,10 +118,6 @@ class PinnedHttpOverrides extends HttpOverrides {
 
   /// What `authority` (`host:port`) presented when it was last refused, if it was.
   PinRejection? rejectionFor(String authority) => _rejections[authority];
-
-  /// Every refusal recorded since the last pin change. For diagnostics only — the UI
-  /// asks about one authority at a time.
-  Map<String, PinRejection> get rejections => Map.unmodifiable(_rejections);
 
   @override
   HttpClient createHttpClient(SecurityContext? context) {

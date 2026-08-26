@@ -50,14 +50,12 @@ class Poller {
     );
   }
 
-  bool get isRunning => _timer != null;
-
   /// Start polling, and fire once immediately — a screen that waits a full minute for
   /// its first paint looks broken.
-  void start({bool immediately = true}) {
+  void start() {
     _wanted = true;
     _sync();
-    if (immediately) unawaited(_fire());
+    unawaited(_fire());
   }
 
   void stop() {

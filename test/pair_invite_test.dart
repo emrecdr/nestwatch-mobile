@@ -138,7 +138,6 @@ void main() {
       expect(manual.token, isNull);
       expect(manual.redeemUrl, isNull);
       expect(manual.isVerifiable, isFalse);
-      expect(manual.sessionUrl.toString(), 'https://10.0.0.5:8443/session');
     });
   });
 }

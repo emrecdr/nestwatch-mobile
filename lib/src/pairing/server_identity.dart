@@ -40,18 +40,6 @@ class ServerIdentity {
 
   String get authority => '$host:$port';
 
-  ServerIdentity withFingerprint(
-    Fingerprint next, {
-    required PinProvenance provenance,
-    required DateTime at,
-  }) => ServerIdentity(
-    host: host,
-    port: port,
-    fingerprint: next,
-    provenance: provenance,
-    pairedAt: at,
-  );
-
   Map<String, dynamic> toJson() => {
     'host': host,
     'port': port,

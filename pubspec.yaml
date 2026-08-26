@@ -1,5 +1,5 @@
 name: nestwatch_mobile
-description: "A new Flutter project."
+description: "Watch one PC from one phone, over a pinned certificate."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -31,10 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
-  http: ^1.6.0
+  # Nothing here may bypass `dart:io`'s HttpClient — see the dependency rule in
+  # lib/src/pinning/pinned_http_overrides.dart. `http` and `cupertino_icons` came with
+  # `flutter create` and were never imported; an unused HTTP package is one more thing to
+  # re-audit on every `pub add` for no benefit, so it is gone rather than dormant.
   crypto: ^3.0.7
   mobile_scanner: ^7.4.0
   flutter_secure_storage: ^11.0.0

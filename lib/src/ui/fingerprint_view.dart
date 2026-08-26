@@ -36,16 +36,16 @@ class FingerprintView extends StatelessWidget {
 
   /// Byte-pairs per row. Eight gives four rows for SHA-256 and stays inside a phone's
   /// width at a readable size.
-  final int perRow;
+  static const int _perRow = 8;
 
-  const FingerprintView(this.fingerprint, {super.key, this.perRow = 8});
+  const FingerprintView(this.fingerprint, {super.key});
 
   @override
   Widget build(BuildContext context) {
     final groups = fingerprint.toString().split(':');
     final rows = <List<String>>[];
-    for (var i = 0; i < groups.length; i += perRow) {
-      rows.add(groups.sublist(i, (i + perRow).clamp(0, groups.length)));
+    for (var i = 0; i < groups.length; i += _perRow) {
+      rows.add(groups.sublist(i, (i + _perRow).clamp(0, groups.length)));
     }
 
     final scheme = Theme.of(context).colorScheme;

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
 import 'polled_screen.dart';
+import 'relative_time.dart';
 
 class TimeRequestsScreen extends PolledScreen {
   final NestwatchClient client;
@@ -124,7 +125,7 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
                 ),
                 const Spacer(),
                 if (at != null)
-                  Text(_ago(at), style: Theme.of(context).textTheme.bodySmall),
+                  Text(ago(at), style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
             if (request.reason.isNotEmpty) ...[
@@ -157,13 +158,5 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
         ),
       ),
     );
-  }
-
-  static String _ago(DateTime at) {
-    final d = DateTime.now().difference(at);
-    if (d.inMinutes < 1) return 'just now';
-    if (d.inMinutes < 60) return '${d.inMinutes} min ago';
-    if (d.inHours < 24) return '${d.inHours} h ago';
-    return '${d.inDays} d ago';
   }
 }
