@@ -176,11 +176,22 @@ mutate "session: a 401 from /api reads as an unexpected answer" \
   "        NestwatchFailure.unexpectedResponse,
         'That sign-in expired.',"
 
-mutate "cookie: a cleared session is not noticed" \
+# The UI layer had no mutation at all until the screens were deduped — no widget tests
+# either, so the rule deciding whether a parent can get back in was defended by nothing.
+mutate "screens: a lapsed session is drawn instead of handed up" \
+  lib/src/ui/screen_load.dart \
+  "    if (e.failure == NestwatchFailure.sessionExpired) return HandedBack(e);" \
+  "    if (e.failure != NestwatchFailure.sessionExpired) return HandedBack(e);"
+
+mutate "LAN: a 403 is not recognised as require_lan_peer" \
+  lib/src/api/nestwatch_api.dart \
+  "    if (response.statusCode == HttpStatus.forbidden) {" \
+  "    if (response.statusCode == HttpStatus.notFound) {"
+
+mutate "cookie: a cleared session reads as an ordinary one" \
   lib/src/api/session_cookie.dart \
-  "  static bool clearsSession(HttpClientResponse response) => response.cookies" \
-  "  static bool clearsSession(HttpClientResponse response) => false || response.cookies
-      .where((_) => false)"
+  "        return (cleared: true, issued: null);" \
+  "        return (cleared: false, issued: null);"
 
 mutate "cookie: any cookie name is taken as the session" \
   lib/src/api/session_cookie.dart \
@@ -209,8 +220,8 @@ mutate "poll: persist before announcing (loses a request if notify throws)" \
 
 mutate "login: posts a form instead of JSON" \
   lib/src/api/nestwatch_api.dart \
-  "        request.headers.contentType = ContentType.json;" \
-  "        request.headers.contentType = ContentType('application', 'x-www-form-urlencoded');"
+  "      request.headers.contentType = ContentType.json;" \
+  "      request.headers.contentType = ContentType('application', 'x-www-form-urlencoded');"
 
 mutate "redemption: follows the 302 into the dashboard" \
   lib/src/api/nestwatch_api.dart \

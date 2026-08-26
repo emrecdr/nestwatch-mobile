@@ -139,6 +139,8 @@ class _TimeCodesScreenState extends State<TimeCodesScreen>
     final codes = data;
     if (codes == null) return waitingPane();
 
+    final atCap = codes.length >= TimeCodeLimits.maxActive;
+
     return RefreshIndicator(
       onRefresh: load,
       child: ListView(
@@ -159,20 +161,20 @@ class _TimeCodesScreenState extends State<TimeCodesScreen>
               for (final minutes in const [15, 30, 60])
                 FilledButton.tonal(
                   onPressed:
-                      _minting || codes.length >= TimeCodeLimits.maxActive
+                      _minting || atCap
                       ? null
                       : () => _mint(minutes),
                   child: Text('$minutes min'),
                 ),
               OutlinedButton(
-                onPressed: _minting || codes.length >= TimeCodeLimits.maxActive
+                onPressed: _minting || atCap
                     ? null
                     : _askForMinutes,
                 child: const Text('Other…'),
               ),
             ],
           ),
-          if (codes.length >= TimeCodeLimits.maxActive) ...[
+          if (atCap) ...[
             const SizedBox(height: 10),
             Text(
               'That PC is holding the most codes it will (${TimeCodeLimits.maxActive}). '

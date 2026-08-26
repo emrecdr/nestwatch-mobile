@@ -42,6 +42,8 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
 
   Future<void> _decide(TimeRequest request, {required bool approve}) async {
     if (!_deciding.add(request.id)) return;
+    // The set was already mutated by the guard above; this is the rebuild that greys
+    // the buttons out. Saying so beats an empty setState that reads like a leftover.
     setState(() {});
     try {
       final acted = approve

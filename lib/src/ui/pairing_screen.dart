@@ -22,15 +22,13 @@ class PairingScreen extends StatefulWidget {
 class _PairingScreenState extends State<PairingScreen> {
   final _password = TextEditingController();
 
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_onChange);
-  }
+  // No listener on the controller. `_RootState` in main.dart already has one, and this
+  // screen is only ever built from inside that build method — so a notification rebuilds
+  // the root, which rebuilds this. A second subscription to the same notifier bought a
+  // second `setState` for the same frame and one more thing to remember to remove.
 
   @override
   void dispose() {
-    widget.controller.removeListener(_onChange);
     _password.dispose();
     super.dispose();
   }
@@ -44,8 +42,6 @@ class _PairingScreenState extends State<PairingScreen> {
     _password.clear();
     await widget.controller.submitPassword(entered);
   }
-
-  void _onChange() => setState(() {});
 
   Future<void> _scan() async {
     final payload = await Navigator.of(

@@ -36,22 +36,26 @@ class SessionCookie {
   /// cookie is issued at login and at pairing, and re-issued when the sliding expiry is
   /// refreshed (at most every 5 days — `SLIDING_REFRESH_SECS` in nestwatch `src/auth.rs`),
   /// but not on an ordinary request.
-  static SessionCookie? fromResponse(HttpClientResponse response) {
+  /// Three different answers, read in one pass.
+  ///
+  /// `cleared` is the server saying the session is over — a logout, or one it has
+  /// invalidated — and the stored copy has to go with it. That is distinct from having
+  /// set nothing at all, which is the ordinary case and must leave the stored cookie
+  /// alone. Asking those two questions separately meant walking `response.cookies`
+  /// twice and writing the deletion rule — an empty value, or `Max-Age: 0` — in two
+  /// places that had no way to disagree out loud.
+  static ({bool cleared, SessionCookie? issued}) readFrom(
+    HttpClientResponse response,
+  ) {
     for (final cookie in response.cookies) {
       if (cookie.name != name) continue;
-      // A deletion: the server clearing the session (logout, or an invalidated one).
-      if (cookie.value.isEmpty || cookie.maxAge == 0) return null;
-      return SessionCookie(cookie.value);
+      if (cookie.value.isEmpty || cookie.maxAge == 0) {
+        return (cleared: true, issued: null);
+      }
+      return (cleared: false, issued: SessionCookie(cookie.value));
     }
-    return null;
+    return (cleared: false, issued: null);
   }
-
-  /// Did this response explicitly clear the session?
-  ///
-  /// Distinct from "did not set one" — this is the server saying the session is over,
-  /// and the stored copy has to go with it.
-  static bool clearsSession(HttpClientResponse response) => response.cookies
-      .any((c) => c.name == name && (c.value.isEmpty || c.maxAge == 0));
 
   Cookie toCookie() => Cookie(name, value);
 

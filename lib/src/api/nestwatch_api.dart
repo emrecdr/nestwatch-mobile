@@ -159,11 +159,9 @@ class NestwatchClient {
 
   /// Take whatever the response says about the session.
   void _adoptFrom(HttpClientResponse response) {
-    if (SessionCookie.clearsSession(response)) {
-      _adopt(null);
-      return;
-    }
-    final issued = SessionCookie.fromResponse(response);
+    final said = SessionCookie.readFrom(response);
+    if (said.cleared) return _adopt(null);
+    final issued = said.issued;
     if (issued != null) _adopt(issued);
   }
 
