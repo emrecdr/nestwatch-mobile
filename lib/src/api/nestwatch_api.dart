@@ -224,10 +224,10 @@ class NestwatchClient {
           'That password was not accepted.',
         );
       case HttpStatus.tooManyRequests:
-        throw const NestwatchException(
+        throw NestwatchException(
           NestwatchFailure.rateLimited,
-          'Too many wrong attempts. That PC has stopped accepting tries for a minute — '
-          'wait, then try again.',
+          'Too many wrong attempts. That PC has stopped accepting tries for '
+          '${LoginLimits.lockoutInWords()} — wait, then try again.',
         );
       default:
         throw NestwatchException(

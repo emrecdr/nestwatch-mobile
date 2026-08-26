@@ -102,6 +102,41 @@ compare_const() {
 compare_const "$SRC/src/timecode.rs" MAX_CODE_MINUTES lib/src/api/models.dart maxMinutes
 compare_const "$SRC/src/timecode.rs" MAX_ACTIVE_CODES lib/src/api/models.dart maxActive
 
+# The login limiter has no named constant over there — it is built inline in
+# `impl Default for LoginLimiter`. So this reads the call arguments, which is more
+# fragile than a constant name and deliberately so: any refactor of that line reports
+# UNREADABLE rather than agreeing about something it stopped being able to see.
+echo
+echo "Login limiter, from $SRC/src/auth.rs"
+echo
+
+limiter=$(grep -hoE 'Self::new\([0-9]+, *Duration::from_secs\([0-9]+\)\)' "$SRC/src/auth.rs" 2>/dev/null | head -1)
+if [ -z "$limiter" ]; then
+  echo "  UNREADABLE    LoginLimiter::default not in the shape this expects."
+  echo "                Nothing was compared. This is not agreement."
+  drift=$((drift + 1))
+  checked=$((checked + 1))
+else
+  their_attempts=$(echo "$limiter" | grep -oE '\([0-9]+,' | grep -oE '[0-9]+')
+  their_lockout=$(echo "$limiter" | grep -oE 'from_secs\([0-9]+\)' | grep -oE '[0-9]+')
+  my_attempts=$(dart_const lib/src/api/models.dart maxAttempts)
+  my_lockout=$(grep -hoE 'lockout = Duration\(seconds: [0-9]+\)' lib/src/api/models.dart | grep -oE '[0-9]+')
+
+  for pair in "maxAttempts:$my_attempts:$their_attempts" "lockout secs:$my_lockout:$their_lockout"; do
+    label=${pair%%:*}; rest=${pair#*:}; mine=${rest%%:*}; theirs=${rest#*:}
+    checked=$((checked + 1))
+    if [ -z "$mine" ] || [ -z "$theirs" ]; then
+      echo "  UNREADABLE    $label could not be read on one side. Not agreement."
+      drift=$((drift + 1))
+    elif [ "$mine" != "$theirs" ]; then
+      echo "  DISAGREES     $label is $mine here, $theirs there"
+      drift=$((drift + 1))
+    else
+      echo "  same          $label = $mine"
+    fi
+  done
+fi
+
 echo
 if [ "$drift" -eq 0 ]; then
   echo "$checked checks, nothing drifted."

@@ -190,6 +190,33 @@ class TimeCode {
 
 /// Limits from nestwatch `src/timecode.rs`, mirrored so the UI can refuse locally
 /// instead of round-tripping to a 400.
+/// What that PC does to a phone guessing the control password.
+///
+/// Mirrors `LoginLimiter::default` in nestwatch `src/auth.rs` — five wrong tries, then
+/// that IP is refused for the lockout. A correct password clears the state immediately,
+/// which is why `tool/prove_login.dart` logs in properly before it tries a wrong one.
+///
+/// These exist as constants because the number used to live only inside an English
+/// sentence — "stopped accepting tries for a minute" — which is a copy of a server rule
+/// with nothing to grep and nothing to pin. `tool/check_golden.sh` now compares them
+/// against that PC's source, which it cannot do to prose.
+class LoginLimits {
+  static const int maxAttempts = 5;
+  static const Duration lockout = Duration(seconds: 60);
+
+  /// The lockout as a parent would say it, for a message they read while locked out.
+  ///
+  /// [of] is injectable so the branches can be tested — the same reason `ago` takes a
+  /// clock. Without it the only reachable case is whatever [lockout] happens to be, and
+  /// the other two would be written but never run.
+  static String lockoutInWords([Duration? of]) {
+    final seconds = (of ?? lockout).inSeconds;
+    if (seconds == 60) return 'a minute';
+    if (seconds % 60 == 0) return '${(of ?? lockout).inMinutes} minutes';
+    return '$seconds seconds';
+  }
+}
+
 class TimeCodeLimits {
   /// `MAX_CODE_MINUTES`.
   static const int maxMinutes = 240;

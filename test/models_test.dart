@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/models.dart';
 
 void main() {
+  _loginLimits();
   group('UsageToday', () {
     // Captured off the wire from nestwatch 0.3.0, not hand-written from the Rust types.
     const wire = '''
@@ -131,6 +132,40 @@ void main() {
       final r = TimeRequest.fromJson({'id': 'x', 'ts': '', 'minutes': 5});
       expect(r.reason, isEmpty);
       expect(r.submittedAt, isNull);
+    });
+  });
+}
+
+/// The limiter a phone runs into after five wrong passwords.
+///
+/// These numbers used to exist here only as the word "minute" inside a sentence, which
+/// is a copy of a rule that PC enforces with nothing to grep and nothing to pin.
+/// `tool/check_golden.sh` compares the constants against `LoginLimiter::default`; these
+/// pin the sentence to the constants, so the two cannot drift apart on this side either.
+void _loginLimits() {
+  group('LoginLimits', () {
+    test('matches what nestwatch enforces today', () {
+      // Literals on purpose. Asserting a constant against itself pins nothing — the job
+      // here is to make a change to either number deliberate, and to fail next to a
+      // comment saying where the other copy lives.
+      expect(LoginLimits.maxAttempts, 5);
+      expect(LoginLimits.lockout, const Duration(seconds: 60));
+    });
+
+    test('a parent is told the real wait, in words they would use', () {
+      expect(LoginLimits.lockoutInWords(), 'a minute');
+      expect(
+        LoginLimits.lockoutInWords(const Duration(seconds: 60)),
+        'a minute',
+      );
+      expect(
+        LoginLimits.lockoutInWords(const Duration(minutes: 5)),
+        '5 minutes',
+      );
+      expect(
+        LoginLimits.lockoutInWords(const Duration(seconds: 90)),
+        '90 seconds',
+      );
     });
   });
 }

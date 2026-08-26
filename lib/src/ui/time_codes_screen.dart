@@ -158,7 +158,14 @@ class _TimeCodesScreenState extends State<TimeCodesScreen>
           Wrap(
             spacing: 8,
             children: [
-              for (final minutes in const [15, 30, 60])
+              // Filtered rather than assumed. These are product choices, not a mirror
+              // of the cap — but a cap that dropped below one of them would put a
+              // button on screen that only ever earns a 400.
+              for (final minutes in const [
+                15,
+                30,
+                60,
+              ].where(TimeCodeLimits.isValidMinutes))
                 FilledButton.tonal(
                   onPressed:
                       _minting || atCap
