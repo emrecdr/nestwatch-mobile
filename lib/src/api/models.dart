@@ -153,7 +153,16 @@ class UsageToday {
 /// needed at redemption time**. `src/timecode.rs` names the case: "Useful when the
 /// parent is away (leave a code) or the network is down."
 class TimeCode {
-  /// 8 characters of Crockford base32, from the same generator as pairing tokens.
+  /// 6 characters of Crockford base32, from the same generator as pairing tokens.
+  ///
+  /// The length is nestwatch's to choose and is **not enforced here**: this app displays
+  /// codes, it never mints or validates them, so hard-coding a length would only add a
+  /// place to break the next time it changes. `tool/prove_timecodes.dart` pins the
+  /// agreed value against a live server, which is where a disagreement should surface.
+  ///
+  /// Short enough to read aloud, and safe because of the throttle rather than the
+  /// length: 32^6 is about 1.07 billion, and `/redeem-code` is LAN-gated and capped at
+  /// 5 attempts per minute per IP.
   ///
   /// A secret: it grants screen time to whoever types it. nestwatch deliberately keeps
   /// it out of the audit log for that reason ("The code itself is a secret (it grants

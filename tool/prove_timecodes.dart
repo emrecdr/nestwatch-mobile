@@ -10,7 +10,7 @@
 ///
 /// Checks the parts the UI cannot be trusted to get right on its own:
 ///
-///   1. a minted code appears in the active list, and is 8 Crockford-base32 characters
+///   1. a minted code appears in the active list, and is 6 Crockford-base32 characters
 ///   2. the server's limits are what the app refuses locally against
 ///   3. minting grants nothing until redeemed — the budget must not move
 ///   4. the code never appears in the audit log, which is nestwatch's own rule
@@ -55,11 +55,15 @@ Future<void> main(List<String> argv) async {
     '${minted.minutes}',
   );
 
-  // 8 characters of Crockford base32 — same generator as pairing tokens, no I/L/O/U.
-  final crockford = RegExp(r'^[0-9A-HJKMNP-TV-Z]{8}$');
+  // 6 characters of Crockford base32 — same generator as pairing tokens, no I/L/O/U.
+  //
+  // A literal rather than a constant this repo defines: asserting the app's own idea of
+  // the length against itself would pin nothing. The number belongs to nestwatch
+  // (`CODE_LEN`), so the only useful check is against what a real server actually mints.
+  final crockford = RegExp(r'^[0-9A-HJKMNP-TV-Z]{6}$');
   _check(
     crockford.hasMatch(minted.code),
-    'the code is 8 Crockford-base32 characters',
+    'the code is 6 Crockford-base32 characters',
     '${minted.code.length} chars',
   );
 

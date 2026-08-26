@@ -253,7 +253,12 @@ class _TimeCodesScreenState extends State<TimeCodesScreen> {
         title: Text(
           // Hidden by default. Revealing is a deliberate act, because anyone who reads
           // the code can spend it.
-          shown ? code.code : '••••••••',
+          //
+          // The mask is derived from the code rather than written as a fixed run of
+          // dots: nestwatch owns the length (it went from 8 to 6), and a literal here
+          // would have silently shown the wrong number of characters — which looks like
+          // a rendering bug and is really a stale assumption about someone else's data.
+          shown ? code.code : '•' * code.code.length,
           style: const TextStyle(
             fontFamily: 'monospace',
             fontSize: 20,

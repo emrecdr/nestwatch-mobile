@@ -198,12 +198,19 @@ it, and nestwatch keeps it out of the audit log for that reason. Codes are hidde
 reveal, never rendered by `toString`, and `prove_timecodes.dart` asserts the value never
 reaches the log.
 
+Codes are **6 characters** (nestwatch `CODE_LEN`), and that length lives on the server —
+this app displays codes, it never mints or validates them, so nothing here hard-codes it.
+The reveal mask is `'•' * code.length` rather than a literal run of dots, which is what
+made the 8 → 6 change a one-line edit to a doc comment rather than a silent rendering bug.
+`prove_timecodes.dart` pins the agreed length against a live server, with a literal
+instead of a constant this repo defines — asserting the app's own idea of the length
+against itself would pin nothing.
+
 Verified end to end across both halves of the system, on an emulator against a live
-server: the app minted `88S3E4YF`, a `POST /redeem-code` as the child would send it
-answered `{"minutes":15,"ok":true}`, today's granted minutes moved 580 → 595, a second
-redemption answered `{"ok":false}`, the code vanished from the app's list on refresh, and
-the audit log recorded `time_code_issued` / `time_code_redeemed` without ever containing
-the code itself.
+server: the app minted `3NRPM1`, a `POST /redeem-code` as the child would send it answered
+`{"minutes":15,"ok":true}`, today's granted minutes moved 645 → 660, a second redemption
+answered `{"ok":false}`, the code vanished from the app's list on refresh, and the audit
+log recorded `time_code_issued` / `time_code_redeemed` without ever containing the code.
 
 60 s and 5 s mirror `_pollMs` and `_refreshMs` in nestwatch `assets/app.js`. Every screen
 stops polling when its tab is not showing **and** when the app is backgrounded — a phone
