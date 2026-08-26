@@ -114,8 +114,18 @@ mutate "QR: http:// is accepted" \
 
 mutate "screenshot: ?tier= dropped (PLAN trap 4)" \
   lib/src/api/nestwatch_api.dart \
-  ".getUrl(Uri.parse('https://\$authority/api/screenshot?tier=preview'))" \
-  ".getUrl(Uri.parse('https://\$authority/api/screenshot'))"
+  "    final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';" \
+  "    final query = onTimer ? '?live=1' : '';"
+
+mutate "screenshot: timer frames omit live=1 (audit-log eviction)" \
+  lib/src/api/nestwatch_api.dart \
+  "    final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';" \
+  "    final query = '?tier=preview';"
+
+mutate "screenshot: a served 'full' tier is accepted silently" \
+  lib/src/api/nestwatch_api.dart \
+  "      if (served != null && served != 'preview') {" \
+  "      if (false) {"
 
 mutate "cookie: toString leaks the session token" \
   lib/src/api/session_cookie.dart \

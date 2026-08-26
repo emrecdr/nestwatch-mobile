@@ -324,26 +324,29 @@ class NestwatchClient {
 
   /// `GET /api/screenshot?tier=preview` → JPEG bytes.
   ///
-  /// **The tier is spelled out here and nowhere else**, because forgetting it is trap 4
-  /// and the failure is silent. `ShotTier::from_arg` is `Some("preview") => Preview,
-  /// _ => Full` (nestwatch `src/control/mod.rs`), so an omitted parameter does not error
-  /// — it quietly returns the expensive tier. Measured against the fake backend: 62,795
-  /// bytes at 1280x720 without it against 21,985 at 960x540 with it, and on a real 4K
-  /// desktop the gap is the "20 MB a frame" recent work removed.
+  /// **Two query parameters, both mandatory, for two different reasons.**
   ///
-  /// Worse than the bytes is the audit log. A Full capture records `screenshot_taken`
-  /// one-for-one — it is meant to be a deliberate human act — while Preview frames
-  /// coalesce into a single `live_view` entry, "because a per-frame line evicts the
-  /// entire security history in about 57 hours of live viewing". A viewer that omitted
-  /// the parameter would destroy the record of every login, kill and shutdown.
+  /// `tier=preview` is trap 4: `ShotTier::from_arg` maps unknown and absent alike to
+  /// `Full`, so omitting it does not error — it quietly returns native-resolution frames.
+  /// There is no `tier` argument on this method and no full-size equivalent, because an
+  /// argument with a default is how the wrong tier gets sent.
   ///
-  /// There is deliberately no `tier` parameter on this method and no Full equivalent:
-  /// the app has no reason to ask for one, and an argument with a default is exactly how
-  /// the wrong tier gets sent.
-  Future<Uint8List> screenshotPreview() async {
+  /// `live=1` is who asked. nestwatch audits **by asker, never by tier**: a frame a
+  /// person requested writes one `screenshot_taken` row, and timer frames coalesce into
+  /// a periodic `live_view` row carrying a count. The audit used to switch on tier, which
+  /// held only while the timer always asked for previews; live frames now follow the
+  /// visible surface, so the proxy broke. `audit.jsonl` rotates at 2 MiB with one backup,
+  /// so a timer that omits `live` writes ~720 rows an hour and evicts every login, kill
+  /// and password change to make room for itself.
+  ///
+  /// [onTimer] therefore has no default either. It is not "is this a live view" — it is
+  /// "did a timer ask for this, or did a person", which is the question the audit is
+  /// answering.
+  Future<Uint8List> screenshotPreview({required bool onTimer}) async {
+    final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';
     try {
       final request = await _client
-          .getUrl(Uri.parse('https://$authority/api/screenshot?tier=preview'))
+          .getUrl(Uri.parse('https://$authority/api/screenshot$query'))
           .timeout(timeout);
       final held = _cookie;
       if (held != null) request.cookies.add(held.toCookie());
@@ -351,6 +354,20 @@ class NestwatchClient {
       final response = await request.close().timeout(timeout);
       _adoptFrom(response);
       _requireOk(response);
+
+      // The server names the tier it actually served, so a client can record what it
+      // *got* rather than what it asked for. A mismatch means full frames on a timer —
+      // no error, no failing test, just the cost back — so it is worth failing loudly
+      // rather than streaming megabytes and finding out from a bandwidth bill.
+      // Checked only when present, so an older server without the header still works.
+      final served = response.headers.value('x-shot-tier');
+      if (served != null && served != 'preview') {
+        await response.drain<void>();
+        throw NestwatchException(
+          NestwatchFailure.unexpectedResponse,
+          'That PC sent a "$served" frame when this app asked for a preview.',
+        );
+      }
 
       final chunks = await response.toList();
       return Uint8List.fromList(chunks.expand((c) => c).toList());

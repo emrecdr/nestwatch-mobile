@@ -36,6 +36,10 @@ void main() {
   /// When true, `/api/screenshot` answers as `AppError::Control` does.
   var captureFails = false;
 
+  /// What the stub reports in `X-Shot-Tier`. `null` stands in for a server predating
+  /// the header.
+  String? servedTier = 'preview';
+
   /// Minimal JPEG: SOI, a stub SOF0 declaring 1x1, EOI. Enough for the client to hand
   /// back bytes; this file is about the request, not the image.
   final jpeg = <int>[
@@ -47,6 +51,7 @@ void main() {
   setUp(() async {
     seen.clear();
     captureFails = false;
+    servedTier = 'preview';
     final context = SecurityContext()
       ..useCertificateChain('$dir/server.cert.pem')
       ..usePrivateKey('$dir/server.key.pem');
@@ -99,8 +104,11 @@ void main() {
         } else {
           response
             ..statusCode = 200
-            ..headers.contentType = ContentType('image', 'jpeg')
-            ..add(jpeg);
+            ..headers.contentType = ContentType('image', 'jpeg');
+          if (servedTier != null) {
+            response.headers.set('x-shot-tier', servedTier!);
+          }
+          response.add(jpeg);
         }
       } else if (request.uri.path == '/login') {
         response
@@ -129,7 +137,7 @@ void main() {
 
   group('trap 4 — the screenshot tier', () {
     test('?tier=preview is on the wire, every time', () async {
-      await client.screenshotPreview();
+      await client.screenshotPreview(onTimer: true);
       expect(seen, hasLength(1));
       expect(
         seen.single.uri.queryParameters['tier'],
@@ -142,7 +150,7 @@ void main() {
 
     test('and on the second call, and the tenth', () async {
       for (var i = 0; i < 10; i++) {
-        await client.screenshotPreview();
+        await client.screenshotPreview(onTimer: true);
       }
       expect(seen, hasLength(10));
       for (final request in seen) {
@@ -150,11 +158,62 @@ void main() {
       }
     });
 
+    test('a timer frame carries live=1, so the audit coalesces it', () async {
+      // nestwatch audits by ASKER, not by tier. Without `live`, every timer frame
+      // writes a `screenshot_taken` row into a log that rotates at 2 MiB with one
+      // backup — ~720 rows an hour at this screen's cadence, evicting the record of
+      // every login, kill and password change to make room for a timer.
+      await client.screenshotPreview(onTimer: true);
+      expect(
+        seen.single.uri.queryParameters['live'],
+        isNotNull,
+        reason:
+            'the audit keys on presence, and this is what marks a timer frame',
+      );
+    });
+
+    test(
+      'a person-requested frame does NOT, so it is recorded one-for-one',
+      () async {
+        // The milder error in the other direction, but still an error: a deliberate look
+        // at a child's screen that goes unrecorded is exactly the accountability the
+        // audit log exists to provide.
+        await client.screenshotPreview(onTimer: false);
+        expect(seen.single.uri.queryParameters['live'], isNull);
+        expect(seen.single.uri.queryParameters['tier'], 'preview');
+      },
+    );
+
+    test('a full frame served against a preview request is refused', () async {
+      // X-Shot-Tier names what was actually served. A mismatch means full frames on a
+      // 5-second timer: no error, no failing test, just the cost back.
+      servedTier = 'full';
+      await expectLater(
+        client.screenshotPreview(onTimer: true),
+        throwsA(isA<NestwatchException>()),
+      );
+    });
+
+    test('and an older server with no X-Shot-Tier still works', () async {
+      servedTier = null;
+      expect(await client.screenshotPreview(onTimer: true), isNotEmpty);
+    });
+
     test('the client offers no way to ask for another tier', () {
-      // `screenshotPreview()` takes no arguments on purpose: a tier parameter with a
-      // default is exactly how the wrong one gets sent. This asserts the shape rather
-      // than the value, so adding such a parameter has to be a deliberate edit here.
-      expect(client.screenshotPreview, isA<Future<Object?> Function()>());
+      // A tier parameter with a default is exactly how the wrong one gets sent, so this
+      // method has none and there is no full-size equivalent. `onTimer` is required for
+      // the same reason and answers a different question — who asked, which is what the
+      // audit keys on. Asserting the shape means adding a defaulted parameter has to be
+      // a deliberate edit here.
+      expect(
+        client.screenshotPreview,
+        isA<Future<Object?> Function({required bool onTimer})>(),
+      );
+      expect(
+        client.screenshotPreview,
+        isNot(isA<Future<Object?> Function()>()),
+        reason: 'neither parameter may acquire a default',
+      );
     });
   });
 
@@ -274,7 +333,7 @@ void main() {
       // common and fixable.
       captureFails = true;
       try {
-        await client.screenshotPreview();
+        await client.screenshotPreview(onTimer: false);
         fail('expected the capture to fail');
       } on NestwatchException catch (e) {
         expect(e.failure, NestwatchFailure.operationFailed);

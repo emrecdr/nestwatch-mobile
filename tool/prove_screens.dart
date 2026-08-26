@@ -180,7 +180,7 @@ Future<void> main(List<String> argv) async {
 
   // ---------------------------------------------------------- 5. the tier
   stdout.writeln('\n5. The screenshot is the PREVIEW tier');
-  final preview = await client.screenshotPreview();
+  final preview = await client.screenshotPreview(onTimer: true);
   final previewSize = jpegSize(preview);
   _check(
     previewSize != null,
@@ -191,6 +191,36 @@ Future<void> main(List<String> argv) async {
     previewSize?.width == 960,
     'and its width is PREVIEW_W (960), so ?tier=preview was sent',
     '${previewSize?.width}x${previewSize?.height}',
+  );
+
+  // The audit keys on WHO ASKED, not on tier — a change that broke the old proxy. A
+  // timer frame without `live` writes one screenshot_taken row per frame into a log that
+  // rotates at 2 MiB, so this is trap 4 again through a different door.
+  final auditPath = args['audit'] ?? '/tmp/nestwatch-dev/audit.jsonl';
+  final audit = File(auditPath);
+  final rowsBefore = audit.existsSync()
+      ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
+      : 0;
+  for (var i = 0; i < 5; i++) {
+    await client.screenshotPreview(onTimer: true);
+  }
+  final rowsAfter = audit.existsSync()
+      ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
+      : 0;
+  _check(
+    rowsAfter == rowsBefore,
+    'five timer frames added NO screenshot_taken rows',
+    'they coalesce into live_view; without live=1 this would be +5, and ~720 an hour',
+  );
+
+  await client.screenshotPreview(onTimer: false);
+  final rowsPerson = audit.existsSync()
+      ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
+      : 0;
+  _check(
+    rowsPerson == rowsAfter + 1,
+    'and one person-requested frame added exactly one',
+    'a deliberate look at a child screen is meant to be on the record',
   );
 
   // What the same call looks like WITHOUT the parameter — the trap, measured.
@@ -211,7 +241,7 @@ Future<void> main(List<String> argv) async {
   for (final call in <(String, Future<Object?> Function())>[
     ('/api/time-requests', anonymous.timeRequests),
     ('/api/usage/today', anonymous.usageToday),
-    ('/api/screenshot', anonymous.screenshotPreview),
+    ('/api/screenshot', () => anonymous.screenshotPreview(onTimer: true)),
   ]) {
     try {
       await call.$2();

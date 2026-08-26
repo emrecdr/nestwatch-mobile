@@ -43,7 +43,10 @@ class ScreenshotScreen extends StatefulWidget {
 }
 
 class _ScreenshotScreenState extends State<ScreenshotScreen> {
-  late final Poller _poller = Poller(interval: liveFrameCadence, tick: _load);
+  late final Poller _poller = Poller(
+    interval: liveFrameCadence,
+    tick: () => _load(onTimer: true),
+  );
 
   Uint8List? _frame;
   DateTime? _frameAt;
@@ -81,10 +84,18 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
     _live ? _poller.start() : _poller.stop();
   }
 
-  Future<void> _load() async {
+  /// [onTimer] distinguishes the two callers, and the distinction is auditable.
+  ///
+  /// nestwatch records a person-requested frame as one `screenshot_taken` row and
+  /// coalesces timer frames into a periodic `live_view` row. Getting this backwards is
+  /// not cosmetic: a timer that claims to be a person writes ~720 rows an hour into a log
+  /// that rotates at 2 MiB, evicting the record of every login and shutdown. A person who
+  /// claims to be a timer is the milder error — their deliberate look at a child's screen
+  /// goes unrecorded, which is the accountability the audit log exists for.
+  Future<void> _load({required bool onTimer}) async {
     try {
       // ?tier=preview is inside the client, with no way to ask for anything else.
-      final bytes = await widget.client.screenshotPreview();
+      final bytes = await widget.client.screenshotPreview(onTimer: onTimer);
       if (!mounted) return;
       setState(() {
         _frame = bytes;
@@ -174,7 +185,7 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
                   ),
                   const SizedBox(width: 12),
                   OutlinedButton(
-                    onPressed: _live ? null : _load,
+                    onPressed: _live ? null : () => _load(onTimer: false),
                     child: const Text('One frame'),
                   ),
                 ],
@@ -183,9 +194,11 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
               Text(
                 _live
                     ? 'Updating every ${liveFrameCadence.inSeconds} seconds. Live '
-                          'viewing is recorded in that PC\'s audit log.'
+                          'viewing is recorded in that PC\'s audit log as a running '
+                          'count.'
                     : _frameAt == null
-                    ? 'Preview resolution, so text may not be legible.'
+                    ? 'Preview resolution, so text may not be legible. Each single '
+                          'frame is recorded on that PC.'
                     : 'Frame from ${_clock(_frameAt!)}.',
                 style: theme.textTheme.bodySmall,
                 textAlign: TextAlign.center,
