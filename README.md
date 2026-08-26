@@ -13,9 +13,9 @@ Walking skeleton (PLAN §9), **steps 2–3 of 5**:
 
 - **step 2** — the pinned `HttpClient`, proven by failure.
 - **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback.
+- **step 4** — token redemption, password login, and a session that survives a restart.
 
-Steps 4–5 (password login, the three screens) are not built. The pairing token is parsed
-and carried, but not yet redeemed.
+Step 5 (the three screens) is not built.
 
 ### Two ways to end up pinned
 
@@ -87,6 +87,23 @@ trust-on-first-use prompt, which would make Phase 1's fingerprint decorative:
 dart run tool/prove_tofu.dart --real 8443 --impostor 8444 --pin "$FINGERPRINT"
 ```
 
+Step 4 covers redemption, login and restart survival:
+
+```bash
+# --token is optional; mint one first to cover the redemption checks
+cd ../nestwatch && NESTWATCH_DATA_DIR=/tmp/nestwatch-dev cargo run -- pair
+
+dart run tool/prove_login.dart --pin "$FINGERPRINT" --password "$PW" [--token TOK]
+```
+
+That harness is deliberately re-runnable. A pairing token is single-use with a 15-minute
+TTL, and a deliberate wrong-password check spends one of the five attempts before
+nestwatch locks an IP out for a minute — so `--token` is optional and skips *aloud* when
+absent or spent, the wrong-password check runs last, and preflight signs in **correctly**
+(which clears the limiter, since `record_success` resets it). An earlier version required
+a fresh token and probed with a wrong password, and its second run reported ten failures
+that were all artifacts of itself.
+
 Both harnesses run under plain `dart run`, with no emulator. That is deliberate: the
 pairing state machine deposits no Flutter imports, so the part of this app that decides
 what to trust stays testable against a live server on every change. `ServerIdentityStore`
@@ -96,8 +113,34 @@ is abstract for the same reason — the Keystore-backed implementation lives apa
 ## Unit tests
 
 ```bash
-flutter test        # fingerprint, QR parsing, mismatch classification — no server needed
+flutter test        # fingerprint, QR parsing, mismatch classification, cookie handling
 ```
+
+## A correction to PLAN §5
+
+The plan states that *"Dart's `HttpClient` already keeps an in-process cookie jar across
+requests to the same server, so persistence is only needed across app launches."*
+
+**It does not.** Measured against nestwatch 0.3.0: a `POST /login` returning
+`200 {"ok":true}` with a `Set-Cookie: hh_session=…` is followed, *on the very same client
+instance*, by a `GET /session` answering `{"authenticated":false}`. `dart:io` exposes
+`response.cookies` and `request.cookies` and stores nothing in between — there is no jar.
+
+So `NestwatchClient` keeps one and applies it to every request, not merely at launch.
+Three things fell out of the same measurement: attaching by hand works; a brand-new
+client accepts the same cookie, so it is not bound to client identity; and `name` +
+`value` alone suffice, because `Secure`/`HttpOnly`/`Max-Age` are server→client
+instructions that are never echoed back.
+
+## Two secrets, two reasons
+
+| | stored for | losing it costs |
+|---|---|---|
+| certificate fingerprint | **integrity** — a rewritten pin defeats pinning silently and permanently | a re-pair |
+| `hh_session` cookie | **confidentiality** — a bearer token for the whole dashboard, 30 idle days | a password prompt |
+
+Both live in `flutter_secure_storage` under separate keys, so signing out cannot un-pair
+and re-pairing can drop a session without disturbing the pin it just established.
 
 ## Android notes
 

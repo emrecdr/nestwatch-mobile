@@ -25,6 +25,7 @@ import 'dart:io';
 import 'package:nestwatch_mobile/src/pairing/pair_invite.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
+import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 
@@ -52,7 +53,8 @@ Future<void> main(List<String> argv) async {
 
   PairingController fresh() => PairingController(
     overrides: overrides,
-    store: InMemoryServerIdentityStore(),
+    identities: InMemoryServerIdentityStore(),
+    sessions: InMemorySessionStore(),
   );
 
   // ---------------------------------------------- 1. today's QR, no fragment
@@ -91,31 +93,25 @@ Future<void> main(List<String> argv) async {
   }
 
   // ------------------------------------------------ 3. confirming pins it
-  stdout.writeln(
-    '\n3. Confirming the fingerprint pins it and the probe succeeds',
-  );
+  stdout.writeln('\n3. Confirming the fingerprint pins it');
   await c2.confirmFirstUse();
   final st3 = c2.state;
+  // The token here is invented, so it cannot redeem — which lands on the password
+  // prompt. That is the point: pinning succeeds independently of signing in.
   _check(
-    st3 is PairingSucceeded,
-    'paired',
-    st3 is PairingFailed ? st3.message : '',
+    st3 is PairingNeedsPassword,
+    'pinned, and asking for the password',
+    st3 is PairingFailed ? st3.message : st3.runtimeType.toString(),
   );
-  if (st3 is PairingSucceeded) {
-    _check(
-      st3.identity.provenance == PinProvenance.trustedOnFirstUse,
-      'provenance recorded as trust-on-first-use',
-    );
-    _check(
-      !st3.identity.provenance.isVerified,
-      'and it does NOT claim to be verified',
-    );
-    _check(
-      st3.session.version.isNotEmpty,
-      'session probe returned a version',
-      st3.session.toString(),
-    );
-  }
+  _check(overrides.pin == realPin, 'the pin is now the observed certificate');
+  _check(
+    c2.current?.provenance == PinProvenance.trustedOnFirstUse,
+    'provenance recorded as trust-on-first-use',
+  );
+  _check(
+    c2.current?.provenance.isVerified == false,
+    'and it does NOT claim to be verified',
+  );
 
   // ------------------------------- 4. Phase-1 QR pins before first connection
   stdout.writeln('\n4. A Phase-1 QR (#fp= present) pins before connecting');
@@ -126,16 +122,18 @@ Future<void> main(List<String> argv) async {
   await c4.begin(phase1);
   final st4 = c4.state;
   _check(
-    st4 is PairingSucceeded,
-    'paired with no fingerprint prompt',
+    st4 is! PairingNeedsFingerprintCheck,
+    'pinned with no fingerprint prompt',
     st4.runtimeType.toString(),
   );
-  if (st4 is PairingSucceeded) {
-    _check(
-      st4.identity.provenance == PinProvenance.verifiedFromQrCode,
-      'provenance recorded as verified from the QR code',
-    );
-  }
+  _check(
+    overrides.pin == realPin,
+    'the pin came from the QR, before connecting',
+  );
+  _check(
+    c4.current?.provenance == PinProvenance.verifiedFromQrCode,
+    'provenance recorded as verified from the QR code',
+  );
 
   // --------------------------- 5. wrong fingerprint is refused, not downgraded
   stdout.writeln('\n5. A Phase-1 QR naming the WRONG certificate is refused');

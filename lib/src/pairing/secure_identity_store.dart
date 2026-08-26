@@ -28,7 +28,9 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../api/session_cookie.dart';
 import 'server_identity.dart';
+import 'session_store.dart';
 
 class SecureServerIdentityStore implements ServerIdentityStore {
   /// Versioned so a future schema change cannot be misread as the current one.
@@ -58,6 +60,32 @@ class SecureServerIdentityStore implements ServerIdentityStore {
   @override
   Future<void> save(ServerIdentity identity) =>
       _storage.write(key: _key, value: jsonEncode(identity.toJson()));
+
+  @override
+  Future<void> clear() => _storage.delete(key: _key);
+}
+
+/// Keystore-backed [SessionStore].
+///
+/// Same backing as [SecureServerIdentityStore] but a separate key, so clearing one does
+/// not disturb the other: signing out must not un-pair, and re-pairing must be able to
+/// drop a session without touching the pin it just established.
+class SecureSessionStore implements SessionStore {
+  static const _key = 'nestwatch.session_cookie.v1';
+
+  final FlutterSecureStorage _storage;
+
+  const SecureSessionStore({this._storage = const FlutterSecureStorage()});
+
+  @override
+  Future<SessionCookie?> load() async {
+    final raw = await _storage.read(key: _key);
+    return (raw == null || raw.isEmpty) ? null : SessionCookie(raw);
+  }
+
+  @override
+  Future<void> save(SessionCookie cookie) =>
+      _storage.write(key: _key, value: cookie.value);
 
   @override
   Future<void> clear() => _storage.delete(key: _key);

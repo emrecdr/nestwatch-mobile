@@ -32,7 +32,8 @@ Future<void> main() async {
 
   final controller = PairingController(
     overrides: pinnedOverrides,
-    store: const SecureServerIdentityStore(),
+    identities: const SecureServerIdentityStore(),
+    sessions: const SecureSessionStore(),
   );
   // Re-apply a stored pin before the first frame, so the process is never briefly
   // unpinned while a previously-paired server is reachable.

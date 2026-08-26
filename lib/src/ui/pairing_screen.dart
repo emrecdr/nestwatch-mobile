@@ -20,6 +20,8 @@ class PairingScreen extends StatefulWidget {
 }
 
 class _PairingScreenState extends State<PairingScreen> {
+  final _password = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -29,7 +31,18 @@ class _PairingScreenState extends State<PairingScreen> {
   @override
   void dispose() {
     widget.controller.removeListener(_onChange);
+    _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _submitPassword() async {
+    final entered = _password.text;
+    if (entered.isEmpty) return;
+    // Clear before awaiting: the field must not keep the password around while the
+    // request is in flight, and the state machine re-renders this screen on a wrong
+    // password anyway.
+    _password.clear();
+    await widget.controller.submitPassword(entered);
   }
 
   void _onChange() => setState(() {});
@@ -75,11 +88,13 @@ class _PairingScreenState extends State<PairingScreen> {
     PairingBusy(:final what) => _busy(what),
     PairingNeedsFingerprintCheck(:final invite, :final observed) =>
       _confirmFirstUse(context, invite, observed),
-    PairingSucceeded(:final identity, :final session) => _succeeded(
+    PairingConnected(:final identity, :final session) => _connected(
       context,
       identity,
       session,
     ),
+    PairingNeedsPassword(:final authority, :final reason, :final message) =>
+      _needsPassword(context, authority, reason, message),
     PairingRefused(:final rejection, :final explanation) => _refused(
       context,
       explanation,
@@ -186,7 +201,7 @@ class _PairingScreenState extends State<PairingScreen> {
     );
   }
 
-  Widget _succeeded(
+  Widget _connected(
     BuildContext context,
     ServerIdentity identity,
     SessionInfo session,
@@ -286,6 +301,73 @@ class _PairingScreenState extends State<PairingScreen> {
       ),
     ],
   );
+
+  /// The password prompt.
+  ///
+  /// Reached far more often than it might look. Trap 3: the instruction printed under
+  /// the QR tells the parent to scan it with their phone's camera, which opens it in a
+  /// browser and spends the single-use token — so arriving here with a spent token is
+  /// the expected path, not a failure, and the copy says so.
+  Widget _needsPassword(
+    BuildContext context,
+    String authority,
+    PasswordPrompt reason,
+    String message,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final isError =
+        reason == PasswordPrompt.wrongPassword ||
+        reason == PasswordPrompt.rateLimited;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Sign in to $authority',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isError
+                ? scheme.errorContainer
+                : scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            message,
+            style: TextStyle(
+              color: isError ? scheme.onErrorContainer : scheme.onSurface,
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _password,
+          obscureText: true,
+          autofocus: true,
+          enableSuggestions: false,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            labelText: 'Control password',
+            helperText: 'The one set by `nestwatch install`',
+          ),
+          onSubmitted: (_) => _submitPassword(),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'After five wrong tries that PC stops accepting attempts for a minute.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 20),
+        FilledButton(onPressed: _submitPassword, child: const Text('Sign in')),
+        if (widget.controller.current case final paired?) ...[
+          const Divider(height: 40),
+          _pairedSummary(context, paired),
+        ],
+      ],
+    );
+  }
 
   /// Provenance, stated every time rather than only at pairing.
   Widget _pairedSummary(BuildContext context, ServerIdentity identity) {

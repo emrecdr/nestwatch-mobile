@@ -1,15 +1,16 @@
 /// The few nestwatch endpoints this app talks to.
 ///
-/// Only `/session` so far -- PLAN.md §9 stops the walking skeleton before the screens.
 /// Every request goes through `dart:io`'s `HttpClient`, which is pinned process-wide by
-/// `HttpOverrides.global`; there is deliberately no client object to configure here,
-/// because a second way to make requests would be a second way to make unpinned ones.
+/// `HttpOverrides.global`. There is deliberately no way to configure a client here — a
+/// second way to make requests would be a second way to make unpinned ones.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
-/// `GET /session` -- unauthenticated and LAN-gated (nestwatch `auth::me`).
+import 'session_cookie.dart';
+
+/// `GET /session` — unauthenticated and LAN-gated (nestwatch `auth::me`).
 ///
 /// §5 picks this as the first call for three reasons at once: it needs no credentials,
 /// so it can run before pairing; it is refused off-LAN by `require_lan_peer` before any
@@ -30,20 +31,26 @@ class SessionInfo {
   String toString() => 'SessionInfo(authenticated: $authenticated, $version)';
 }
 
-/// Why a request to nestwatch did not produce an answer.
 enum NestwatchFailure {
   /// The handshake was refused: the certificate did not match the pin.
   pinMismatch,
 
-  /// `require_lan_peer` answered 403 -- the phone is not on a private network as far as
-  /// the PC can see. PLAN.md §6 calls this out specifically: it is what a VPN active on
-  /// the phone looks like, and the message must say so rather than "server unreachable".
+  /// `require_lan_peer` answered 403. PLAN.md §6 calls this out specifically: it is what
+  /// a VPN active on the phone looks like, and the message must say so rather than
+  /// "server unreachable".
   notOnLan,
 
-  /// No route, refused connection, DNS failure, timeout.
-  unreachable,
+  /// The password was wrong (401 from `/login`).
+  badPassword,
 
-  /// Reached the server, but the answer was not what this app expects.
+  /// Locked out — 5 wrong tries in 60 seconds (`LoginLimiter::default`, nestwatch
+  /// `src/auth.rs`). The same limiter also gates `/p/{token}`.
+  rateLimited,
+
+  /// The session lapsed. §5: re-prompt for the password, do NOT re-pair.
+  sessionExpired,
+
+  unreachable,
   unexpectedResponse,
 }
 
@@ -56,36 +63,52 @@ class NestwatchException implements Exception {
   String toString() => message;
 }
 
-/// Fetch `/session` from `authority` (`host:port`).
-Future<SessionInfo> fetchSession(
-  String authority, {
-  Duration timeout = const Duration(seconds: 8),
-}) async {
-  final client = HttpClient()..connectionTimeout = timeout;
-  try {
-    final request = await client
-        .getUrl(Uri.parse('https://$authority/session'))
-        .timeout(timeout);
-    final response = await request.close().timeout(timeout);
+/// A connection to one nestwatch server, carrying its session.
+///
+/// ## The cookie is applied by hand, on every request
+///
+/// PLAN.md §5 says Dart's `HttpClient` "already keeps an in-process cookie jar across
+/// requests to the same server, so persistence is only needed across app launches".
+/// **It does not.** Measured against 0.3.0: a `POST /login` that returns `200 {"ok":true}`
+/// and a `Set-Cookie: hh_session=…` is followed, *on the very same client instance*, by a
+/// `GET /session` answering `{"authenticated":false}`. `dart:io` exposes
+/// `response.cookies` and `request.cookies` and stores nothing in between.
+///
+/// So the jar is here, and it is consulted for every request rather than only at launch.
+class NestwatchClient {
+  final String authority;
+  final Duration timeout;
 
-    if (response.statusCode == HttpStatus.forbidden) {
-      await response.drain<void>();
-      throw const NestwatchException(
-        NestwatchFailure.notOnLan,
-        'That PC refused the connection because this phone does not look like it is '
-        'on the same home network. If a VPN is switched on, turn it off — nestwatch '
-        'only answers devices on the LAN.',
-      );
-    }
+  SessionCookie? _cookie;
 
-    final body = await response.transform(utf8.decoder).join();
+  NestwatchClient(
+    this.authority, {
+    this._cookie,
+    this.timeout = const Duration(seconds: 10),
+  });
+
+  SessionCookie? get cookie => _cookie;
+
+  bool get hasSession => _cookie != null;
+
+  /// Called whenever the session changes, so it can be persisted.
+  void Function(SessionCookie?)? onSessionChanged;
+
+  void _adopt(SessionCookie? next) {
+    if (next == _cookie) return;
+    _cookie = next;
+    onSessionChanged?.call(next);
+  }
+
+  /// `GET /session` → `{authenticated, version}`.
+  Future<SessionInfo> session() async {
+    final (response, body) = await _send('GET', '/session');
     if (response.statusCode != HttpStatus.ok) {
       throw NestwatchException(
         NestwatchFailure.unexpectedResponse,
         'That PC answered with HTTP ${response.statusCode}.',
       );
     }
-
     try {
       return SessionInfo.fromJson(jsonDecode(body) as Map<String, dynamic>);
     } on Object {
@@ -94,17 +117,112 @@ Future<SessionInfo> fetchSession(
         'Something answered at that address, but it is not nestwatch.',
       );
     }
-  } on HandshakeException {
-    throw const NestwatchException(
-      NestwatchFailure.pinMismatch,
-      'The certificate did not match.',
+  }
+
+  /// `GET /p/{token}` — redeem a pairing token.
+  ///
+  /// **Returns nothing, on purpose.** PLAN.md trap 2: `auth::pair` ends at
+  /// `Redirect::to("/")` on every path — success, expired, already spent, wrong token —
+  /// deliberately, so a guessed token is not an oracle. The status code therefore carries
+  /// no information and this must not pretend otherwise. The caller learns whether it
+  /// worked by asking `/session` afterwards, which is the only thing that knows.
+  ///
+  /// Redirects are not followed: doing so would fetch the whole dashboard SPA to learn
+  /// nothing, since the answer is in the cookie, not the page.
+  Future<void> redeemPairingToken(String token) async {
+    await _send('GET', '/p/$token', followRedirects: false);
+  }
+
+  /// `POST /login` with `{"password": "…"}`.
+  ///
+  /// JSON, not a form: the handler takes `Json(body): Json<LoginRequest>`, so axum
+  /// requires `Content-Type: application/json` and would answer 415 to a form post.
+  Future<void> login(String password) async {
+    final (response, _) = await _send(
+      'POST',
+      '/login',
+      jsonBody: {'password': password},
     );
-  } on SocketException catch (e) {
-    throw NestwatchException(
-      NestwatchFailure.unreachable,
-      'Could not reach $authority. ${e.osError?.message ?? e.message}',
-    );
-  } finally {
-    client.close(force: true);
+
+    switch (response.statusCode) {
+      case HttpStatus.ok:
+        return;
+      case HttpStatus.unauthorized:
+        throw const NestwatchException(
+          NestwatchFailure.badPassword,
+          'That password was not accepted.',
+        );
+      case HttpStatus.tooManyRequests:
+        throw const NestwatchException(
+          NestwatchFailure.rateLimited,
+          'Too many wrong attempts. That PC has stopped accepting tries for a minute — '
+          'wait, then try again.',
+        );
+      default:
+        throw NestwatchException(
+          NestwatchFailure.unexpectedResponse,
+          'That PC answered with HTTP ${response.statusCode}.',
+        );
+    }
+  }
+
+  /// One request: attach the session, send, capture any session change.
+  Future<(HttpClientResponse, String)> _send(
+    String method,
+    String path, {
+    Map<String, Object?>? jsonBody,
+    bool followRedirects = true,
+  }) async {
+    final client = HttpClient()..connectionTimeout = timeout;
+    try {
+      final request = await client
+          .openUrl(method, Uri.parse('https://$authority$path'))
+          .timeout(timeout);
+      request.followRedirects = followRedirects;
+
+      final held = _cookie;
+      if (held != null) request.cookies.add(held.toCookie());
+
+      if (jsonBody != null) {
+        request.headers.contentType = ContentType.json;
+        request.write(jsonEncode(jsonBody));
+      }
+
+      final response = await request.close().timeout(timeout);
+
+      // Adopt before inspecting the status: a 401 that also clears the cookie has to
+      // drop the stored one, or the app retries forever with a dead session.
+      if (SessionCookie.clearsSession(response)) {
+        _adopt(null);
+      } else {
+        final issued = SessionCookie.fromResponse(response);
+        if (issued != null) _adopt(issued);
+      }
+
+      if (response.statusCode == HttpStatus.forbidden) {
+        await response.drain<void>();
+        throw const NestwatchException(
+          NestwatchFailure.notOnLan,
+          'That PC refused the connection because this phone does not look like it is '
+          'on the same home network. If a VPN is switched on, turn it off — nestwatch '
+          'only answers devices on the LAN.',
+        );
+      }
+
+      final body = await response.transform(utf8.decoder).join();
+      return (response, body);
+    } on HandshakeException {
+      throw const NestwatchException(
+        NestwatchFailure.pinMismatch,
+        'The certificate did not match.',
+      );
+    } on SocketException catch (e) {
+      throw NestwatchException(
+        NestwatchFailure.unreachable,
+        'Could not reach $authority. ${e.osError?.message ?? e.message}',
+      );
+    } finally {
+      client.close(force: true);
+    }
   }
 }
