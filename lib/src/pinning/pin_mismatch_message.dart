@@ -11,8 +11,16 @@
 /// ## What the evidence can and cannot settle
 ///
 /// The tempting signal is [PinRejection.certAge] -- how old the presented certificate
-/// was when it was refused. `cert::generate` mints a fresh key and certificate on every
-/// `nestwatch install`, so a legitimate reinstall presents a young certificate.
+/// was when it was refused. `cert::generate` mints a fresh key and certificate, so a
+/// reinstall that *reissues* presents a young one.
+///
+/// Most reinstalls do not reissue at all. `src/install.rs` computes
+/// `reuse = !force_new && covered && cert.exists() && key.exists()` and keeps the
+/// existing certificate while it still covers the current addresses -- "Devices you've
+/// already paired won't warn again." A new certificate follows only from `--new-cert`, a
+/// changed address, or a missing file. So this screen is rarer than it looks, and the
+/// copy must not tell a parent that installing always reissues. (PLAN §3 says "`install`
+/// rotates both"; that is the half of the claim which does not hold.)
 ///
 /// **That does not work in the direction it first appears to.** An impostor also mints
 /// its own certificate, so its certificate is young too -- and nestwatch backdates
@@ -88,8 +96,8 @@ String explainMismatch(PinRejection rejection) {
     case MismatchStory.consistentWithReinstall:
       buffer
         ..writeln(
-          'If you just re-ran `nestwatch install` on that PC, this is expected '
-          '— it makes a new certificate every time. Re-scan the pairing QR.',
+          'If you just re-ran `nestwatch install` on that PC and it issued a new '
+          'certificate, this is expected. Re-scan the pairing QR.',
         )
         ..writeln()
         ..writeln(

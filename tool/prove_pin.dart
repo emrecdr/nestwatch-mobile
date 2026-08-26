@@ -92,7 +92,6 @@ Future<void> main(List<String> argv) async {
 
   // -------------------------------------------------------------- 2. excludes
   stdout.writeln('\n2. It refuses a different certificate on the same LAN');
-  overrides.lastRejection = null;
   try {
     await _get('https://127.0.0.1:$impostorPort/session');
     _check(
@@ -101,7 +100,7 @@ Future<void> main(List<String> argv) async {
       'the request SUCCEEDED — the pin is not holding',
     );
   } on HandshakeException catch (e) {
-    final r = overrides.lastRejection;
+    final r = overrides.rejectionFor('127.0.0.1:$impostorPort');
     _check(
       true,
       'impostor refused with HandshakeException',

@@ -74,8 +74,23 @@ class PinRejection {
 class PinnedHttpOverrides extends HttpOverrides {
   Fingerprint? _pin;
 
-  /// The most recent refusal, for the UI to explain. Cleared on a successful pin swap.
-  PinRejection? lastRejection;
+  /// Refusals, keyed by `host:port`.
+  ///
+  /// Deliberately not a single "most recent" field, which is what this was. Dart is
+  /// single-threaded per isolate, but `badCertificateCallback` still interleaves with
+  /// everything else: request A's handshake fails and records, request B's handshake
+  /// fails and overwrites, and then A's `catch` reads B's value. The caller has already
+  /// returned from the callback by the time it looks.
+  ///
+  /// That is not a cosmetic race. What gets read is the fingerprint shown to a parent as
+  /// "this is what the PC presented, compare it against `nestwatch fingerprint`" — so
+  /// the failure mode is telling them to compare against the *wrong server's*
+  /// certificate, at the exact moment the app is asking them to make a security
+  /// decision. A wrong fingerprint there is worse than none.
+  ///
+  /// Keyed lookup removes the question: every caller already knows which authority it
+  /// was talking to.
+  final Map<String, PinRejection> _rejections = {};
 
   PinnedHttpOverrides({Fingerprint? pin})
     : _pin = pin; // ignore: prefer_initializing_formals
@@ -86,7 +101,7 @@ class PinnedHttpOverrides extends HttpOverrides {
   /// deliberate re-install.
   void trust(Fingerprint fingerprint) {
     _pin = fingerprint;
-    lastRejection = null;
+    _rejections.clear();
   }
 
   /// Drop the pin, so the next handshake is refused and the certificate it presented is
@@ -98,8 +113,15 @@ class PinnedHttpOverrides extends HttpOverrides {
   /// which is precisely the property step 2 proved on the wire.
   void distrust() {
     _pin = null;
-    lastRejection = null;
+    _rejections.clear();
   }
+
+  /// What `authority` (`host:port`) presented when it was last refused, if it was.
+  PinRejection? rejectionFor(String authority) => _rejections[authority];
+
+  /// Every refusal recorded since the last pin change. For diagnostics only — the UI
+  /// asks about one authority at a time.
+  Map<String, PinRejection> get rejections => Map.unmodifiable(_rejections);
 
   @override
   HttpClient createHttpClient(SecurityContext? context) {
@@ -110,6 +132,11 @@ class PinnedHttpOverrides extends HttpOverrides {
     // cleanly never reaches the callback at all — so anyone holding a publicly-trusted
     // certificate for this address is admitted by code that looks pinned. Emptying the
     // store makes every certificate fail, which makes the callback the sole authority.
+    //
+    // Note that `test/pinning_socket_test.dart` cannot prove this half: its fixtures are
+    // self-signed, so they fail under either setting and the callback fires regardless.
+    // Flipping this to `true` leaves that whole file green. It stays because it makes the
+    // callback the sole authority by construction rather than by luck.
     //
     // A deliberate second consequence: accepting from this callback accepts the cert
     // whatever the reason it failed, hostname mismatch included. The pin therefore
@@ -148,7 +175,7 @@ class PinnedHttpOverrides extends HttpOverrides {
       return true;
     }
 
-    lastRejection = PinRejection(
+    _rejections['$host:$port'] = PinRejection(
       host: host,
       port: port,
       observed: observed,

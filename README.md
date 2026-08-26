@@ -309,8 +309,20 @@ upload.
 ## Unit tests
 
 ```bash
-flutter test        # fingerprint, QR parsing, mismatch classification, cookie handling
+flutter test        # 65 tests, no servers needed
 ```
+
+`test/pinning_socket_test.dart` stands up a real TLS server on loopback and drives the
+pin through an actual handshake, asserting from the server's end that its request handler
+never ran. Before it existed, `flutter test` was green while the one security property
+this app exists for went unchecked by the suite — it was proven only by
+`tool/prove_pin.dart`, which needs three live servers and so cannot run in CI.
+
+Mutation-checked: making `badCertificateCallback` always accept fails 5 of its 7 tests.
+Flipping `withTrustedRoots` to `true` fails **none** of them — the fixtures are
+self-signed, so they fail under either setting and the callback fires regardless.
+Reaching that trap needs a certificate the platform genuinely trusts, which no test can
+obtain for `127.0.0.1`. That limit is recorded in the test file and beside the code.
 
 ## A correction to PLAN §5
 
@@ -337,6 +349,22 @@ instructions that are never echoed back.
 
 Both live in `flutter_secure_storage` under separate keys, so signing out cannot un-pair
 and re-pairing can drop a session without disturbing the pin it just established.
+
+## Connection reuse
+
+`NestwatchClient` holds one `HttpClient` and reuses it. Measured against a live server by
+counting rustls' per-handshake log line: **10 sequential requests cost 1 TLS handshake,
+where a client-per-request cost 10.** At the live-view screen's 5-second cadence that was
+a full handshake every five seconds.
+
+Reuse is safe because the pin is enforced during the handshake — a pooled connection is
+one whose certificate already satisfied `badCertificateCallback`, so a second request over
+it inherits that check rather than skipping one.
+
+What reuse must not survive is a **change of pin**: a pooled socket was established under
+whatever was trusted at the time, and re-pairing does not reach into a live pool.
+`PairingController._clientFor` therefore closes the previous client before building a new
+one, as do `signOut`, `unpair` and `dispose`.
 
 ## Android notes
 

@@ -129,7 +129,11 @@ class PairingController {
     }
   }
 
-  void dispose() => _listeners.clear();
+  void dispose() {
+    _listeners.clear();
+    _client?.close();
+    _client = null;
+  }
 
   PairingState get state => _state;
   ServerIdentity? get current => _current;
@@ -147,6 +151,12 @@ class PairingController {
   /// days (`SLIDING_REFRESH_SECS`, nestwatch `src/auth.rs`). Persisting only at login
   /// would leave a stale value behind after either.
   NestwatchClient _clientFor(String authority, {SessionCookie? cookie}) {
+    // Close the previous one first. Its pooled connections were established under
+    // whatever certificate was pinned at the time, and re-pairing does not reach back
+    // into a live pool — a kept-alive socket would carry the next request to the server
+    // this app has just stopped trusting.
+    _client?.close();
+
     final client = NestwatchClient(authority, cookie: cookie)
       ..onSessionChanged = (next) {
         if (next == null) {
@@ -244,7 +254,8 @@ class PairingController {
       );
     } on NestwatchException catch (e) {
       if (e.failure == NestwatchFailure.pinMismatch) {
-        final rejection = _overrides.lastRejection;
+        // Ask about the authority we were actually talking to, not "the last one".
+        final rejection = _overrides.rejectionFor(invite.authority);
         _emit(
           rejection == null
               ? const PairingFailed(
@@ -284,7 +295,7 @@ class PairingController {
         _emit(PairingFailed(e.message));
         return;
       }
-      final observed = _overrides.lastRejection?.observed;
+      final observed = _overrides.rejectionFor(invite.authority)?.observed;
       if (observed == null) {
         _emit(const PairingFailed("Could not read that PC's certificate."));
         return;
@@ -413,6 +424,7 @@ class PairingController {
   Future<void> signOut() async {
     await _sessions.clear();
     final identity = _current;
+    _client?.close();
     _client = null;
     if (identity == null) {
       _emit(const PairingIdle());
@@ -433,6 +445,7 @@ class PairingController {
     await _sessions.clear();
     await _identities.clear();
     _current = null;
+    _client?.close();
     _client = null;
     _overrides.distrust();
     _emit(const PairingIdle());

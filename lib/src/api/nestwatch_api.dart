@@ -87,6 +87,22 @@ class NestwatchClient {
 
   SessionCookie? _cookie;
 
+  /// One client, reused across requests.
+  ///
+  /// `dart:io` pools connections per `HttpClient`, so a client built per request means a
+  /// full TLS handshake per request — three round trips and an RSA verification every
+  /// five seconds while the live-view screen is open, against a PC on the same LAN.
+  ///
+  /// Reuse stays safe because the pin is enforced during the *handshake*: a pooled
+  /// connection is one whose certificate already satisfied `badCertificateCallback`, so
+  /// carrying a second request over it inherits that check rather than skipping one.
+  ///
+  /// What reuse must NOT survive is a change of pin. A pooled connection was established
+  /// under whatever was trusted at the time, and re-pairing to a different certificate
+  /// does not reach back into the pool. [close] therefore has to be called whenever the
+  /// client is replaced — see `PairingController._clientFor`.
+  HttpClient? _http;
+
   NestwatchClient(
     this.authority, {
     this._cookie,
@@ -96,6 +112,19 @@ class NestwatchClient {
   SessionCookie? get cookie => _cookie;
 
   bool get hasSession => _cookie != null;
+
+  HttpClient get _client => _http ??= HttpClient()
+    ..connectionTimeout = timeout
+    // The dashboard opens one connection and keeps it; matching that keeps a phone from
+    // holding sockets open against a PC that is also serving a browser.
+    ..maxConnectionsPerHost = 4
+    ..idleTimeout = const Duration(seconds: 30);
+
+  /// Drop the pooled connections. Required before this client outlives its pin.
+  void close() {
+    _http?.close(force: true);
+    _http = null;
+  }
 
   /// Called whenever the session changes, so it can be persisted.
   void Function(SessionCookie?)? onSessionChanged;
@@ -249,9 +278,8 @@ class NestwatchClient {
   /// the app has no reason to ask for one, and an argument with a default is exactly how
   /// the wrong tier gets sent.
   Future<Uint8List> screenshotPreview() async {
-    final client = HttpClient()..connectionTimeout = timeout;
     try {
-      final request = await client
+      final request = await _client
           .getUrl(Uri.parse('https://$authority/api/screenshot?tier=preview'))
           .timeout(timeout);
       final held = _cookie;
@@ -273,8 +301,6 @@ class NestwatchClient {
         NestwatchFailure.unreachable,
         'Could not reach $authority. ${e.osError?.message ?? e.message}',
       );
-    } finally {
-      client.close(force: true);
     }
   }
 
@@ -302,9 +328,8 @@ class NestwatchClient {
     Map<String, Object?>? jsonBody,
     bool followRedirects = true,
   }) async {
-    final client = HttpClient()..connectionTimeout = timeout;
     try {
-      final request = await client
+      final request = await _client
           .openUrl(method, Uri.parse('https://$authority$path'))
           .timeout(timeout);
       request.followRedirects = followRedirects;
@@ -345,8 +370,6 @@ class NestwatchClient {
         NestwatchFailure.unreachable,
         'Could not reach $authority. ${e.osError?.message ?? e.message}',
       );
-    } finally {
-      client.close(force: true);
     }
   }
 }
