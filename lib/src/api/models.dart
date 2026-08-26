@@ -202,7 +202,16 @@ class TimeCode {
 /// against that PC's source, which it cannot do to prose.
 class LoginLimits {
   static const int maxAttempts = 5;
-  static const Duration lockout = Duration(seconds: 60);
+
+  /// Seconds, and the [Duration] built over it — rather than the other way round.
+  ///
+  /// The plain number is what nestwatch's `LOGIN_LOCKOUT` holds and what
+  /// `tool/check_golden.sh` compares, and it reads it with the same one-line reader it
+  /// uses for every other mirrored constant. Written only as `Duration(seconds: 60)` it
+  /// needed a grep of its own, and a bespoke reader for one value is a reader that goes
+  /// stale on its own schedule.
+  static const int lockoutSeconds = 60;
+  static const Duration lockout = Duration(seconds: lockoutSeconds);
 
   /// The lockout as a parent would say it, for a message they read while locked out.
   ///
