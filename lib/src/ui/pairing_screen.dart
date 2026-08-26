@@ -163,7 +163,10 @@ class _PairingScreenState extends State<PairingScreen> {
             'This connection is not verified yet.\n\n'
             'The pairing code from ${invite.authority} did not include the PC\'s '
             'certificate fingerprint, so this app has no way to tell on its own whether '
-            'the certificate below really belongs to your PC.',
+            'the certificate below really belongs to your PC.\n\n'
+            'That usually means the PC is running an older nestwatch. Updating it and '
+            'pairing again removes this step entirely — the code will carry the '
+            'fingerprint and the app will check it for you.',
             style: TextStyle(color: scheme.onTertiaryContainer),
           ),
         ),

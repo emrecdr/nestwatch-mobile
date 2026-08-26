@@ -56,6 +56,15 @@ enum NestwatchFailure {
   /// somebody already resolved. Not really a failure; see [NestwatchClient.approve].
   alreadyResolved,
 
+  /// The PC reached us, understood the request, and could not carry it out.
+  ///
+  /// `AppError::Control` (nestwatch `src/error.rs`) covers every OS operation that can
+  /// fail — capture, process list, kill, shutdown — and answers **500** with the OS
+  /// detail logged rather than leaked, so the body says only `"operation failed"`. The
+  /// status therefore says *which layer* gave up but never *why*, and the app has to
+  /// supply the "why" from knowing which endpoint it called.
+  operationFailed,
+
   unreachable,
   unexpectedResponse,
 }
@@ -291,6 +300,21 @@ class NestwatchClient {
 
       final chunks = await response.toList();
       return Uint8List.fromList(chunks.expand((c) => c).toList());
+    } on NestwatchException catch (e) {
+      // A 500 from anywhere means `AppError::Control` or `AppError::Internal`, and the
+      // body is deliberately uninformative. This is the one call site that knows the
+      // operation was a screen capture, so it is the only place the message can be
+      // specific — and on the screenshot screen "HTTP 500" is close to useless, while
+      // the real cause is both common and fixable.
+      if (e.failure != NestwatchFailure.operationFailed) rethrow;
+      throw const NestwatchException(
+        NestwatchFailure.operationFailed,
+        'That PC could not take a picture of its screen.\n\n'
+        'The usual cause is Windows being older than version 1903: below that build '
+        'the screen-capture API is simply absent, and every screenshot fails while '
+        'everything else on this app keeps working. Updating Windows on that PC fixes '
+        'it.',
+      );
     } on HandshakeException {
       throw const NestwatchException(
         NestwatchFailure.pinMismatch,
@@ -313,6 +337,16 @@ class NestwatchClient {
       throw const NestwatchException(
         NestwatchFailure.sessionExpired,
         'That sign-in expired.',
+      );
+    }
+    if (response.statusCode == HttpStatus.internalServerError) {
+      // AppError::Control and AppError::Internal both land here, with the OS detail
+      // logged on the server and deliberately not in the body — so this says which
+      // layer gave up and never why. Callers that know what they asked for can say
+      // more; see screenshotPreview.
+      throw const NestwatchException(
+        NestwatchFailure.operationFailed,
+        'That PC could not carry out the request.',
       );
     }
     throw NestwatchException(

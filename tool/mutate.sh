@@ -4,6 +4,34 @@
 # A green suite says nothing about whether it would go red. Each mutation below is a real
 # defect this codebase argues about somewhere in its comments; a SURVIVED line means the
 # argument is not defended by a test.
+#
+# ---------------------------------------------------------------------------------
+# Write mutations that INVERT A DECISION, not ones that delete a line.
+# ---------------------------------------------------------------------------------
+#
+# Deleting is what anyone reaches for first, and it is the weaker kind. Removing a call
+# proves only that the code does what the code does: some test somewhere observes the
+# missing effect, and it would have failed for a typo just as readily. Inverting the
+# decision asks the question that matters — is the *choice* defended, or merely
+# implemented?
+#
+# The poll-ordering entry is the worked example. `pollOnce` announces before it persists,
+# and the reason is load-bearing: persisting first marks a request seen before the parent
+# is told, so a failing notify loses it permanently and silently. The first version of
+# that mutation deleted the save. It was killed, but by a test for something else
+# entirely — nothing checked the ordering. Replacing it with a mutation that puts the
+# save back *in front* of the notify is what made the audit defend the argument rather
+# than restate the implementation.
+#
+# Three ways a mutation lies about coverage, all of which have happened here:
+#
+#   * it lands in a comment      -> guarded below; reported as NO-OP (hit a comment)
+#   * it is a no-op in disguise  -> `x != 'a' && x != 'a'` is the same condition twice
+#   * the fixture cannot reach the condition it claims to test -- a stub answering 200
+#     can never disprove "we do not follow redirects"
+#
+# The first two are detectable mechanically. The third is not, and is the reason a
+# mutation surviving deserves reading before it is believed.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export PATH="/Users/emrec/development/flutter/bin:$PATH"

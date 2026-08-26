@@ -33,6 +33,9 @@ void main() {
   /// Every request the server saw, most recent last.
   final seen = <HttpRequest>[];
 
+  /// When true, `/api/screenshot` answers as `AppError::Control` does.
+  var captureFails = false;
+
   /// Minimal JPEG: SOI, a stub SOF0 declaring 1x1, EOI. Enough for the client to hand
   /// back bytes; this file is about the request, not the image.
   final jpeg = <int>[
@@ -43,6 +46,7 @@ void main() {
 
   setUp(() async {
     seen.clear();
+    captureFails = false;
     final context = SecurityContext()
       ..useCertificateChain('$dir/server.cert.pem')
       ..usePrivateKey('$dir/server.key.pem');
@@ -68,6 +72,12 @@ void main() {
           ..statusCode = 200
           ..cookies.add(Cookie('some_other_cookie', 'not-the-session'))
           ..write('{"authenticated":false,"version":"test"}');
+      } else if (request.uri.path == '/api/capture-broken') {
+        // What AppError::Control answers: 500, with the OS detail logged on the server
+        // and deliberately not in the body.
+        response
+          ..statusCode = HttpStatus.internalServerError
+          ..write('{"error":"operation failed"}');
       } else if (request.uri.path == '/api/logged-out') {
         // What a server sends when it ends a session: the same cookie, emptied and
         // expired immediately.
@@ -82,10 +92,16 @@ void main() {
             '[{"id":"r1","ts":"2026-08-26T10:00:00Z","minutes":5,"reason":"x"}]',
           );
       } else if (request.uri.path == '/api/screenshot') {
-        response
-          ..statusCode = 200
-          ..headers.contentType = ContentType('image', 'jpeg')
-          ..add(jpeg);
+        if (captureFails) {
+          response
+            ..statusCode = HttpStatus.internalServerError
+            ..write('{"error":"operation failed"}');
+        } else {
+          response
+            ..statusCode = 200
+            ..headers.contentType = ContentType('image', 'jpeg')
+            ..add(jpeg);
+        }
       } else if (request.uri.path == '/login') {
         response
           ..statusCode = 200
@@ -233,6 +249,43 @@ void main() {
             'anonymous while the app believes it is signed in — it would retry '
             'forever instead of asking for the password',
       );
+    });
+  });
+
+  group('a failed OS operation', () {
+    test('a 500 reads as operationFailed, not an unexpected answer', () async {
+      await expectLater(
+        client.rawGetForTest('/api/capture-broken'),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.operationFailed,
+          ),
+        ),
+      );
+    });
+
+    test('and on the screenshot path it says what actually went wrong', () async {
+      // AppError::Control answers 500 for every OS operation with a body of
+      // "operation failed", so the status says which layer gave up and never why. This
+      // is the one call site that knows the operation was a capture — and on the
+      // screenshot screen "HTTP 500" is close to useless while the real cause is both
+      // common and fixable.
+      captureFails = true;
+      try {
+        await client.screenshotPreview();
+        fail('expected the capture to fail');
+      } on NestwatchException catch (e) {
+        expect(e.failure, NestwatchFailure.operationFailed);
+        expect(e.message, contains('picture of its screen'));
+        expect(e.message, contains('1903'));
+        expect(
+          e.message,
+          isNot(contains('500')),
+          reason: 'a status code is not an explanation a parent can act on',
+        );
+      }
     });
   });
 

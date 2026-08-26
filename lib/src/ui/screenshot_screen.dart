@@ -99,6 +99,9 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
       }
       setState(() => _error = e.message);
       // A failing frame every 5 seconds is noise; let the parent retry deliberately.
+      // This matters most for `operationFailed`: on a Windows below the capture floor
+      // every frame fails structurally, so retrying is not a transient-error recovery,
+      // it is a loop that never terminates and costs the PC work each time.
       if (_live) {
         setState(() => _live = false);
         _poller.stop();

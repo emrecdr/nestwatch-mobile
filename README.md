@@ -391,6 +391,20 @@ instructions that are never echoed back.
 Both live in `flutter_secure_storage` under separate keys, so signing out cannot un-pair
 and re-pairing can drop a session without disturbing the pin it just established.
 
+## When the PC cannot do the thing
+
+`AppError::Control` (nestwatch `src/error.rs`) covers every OS operation that can fail —
+capture, process list, kill, shutdown — and answers **500** with the OS detail logged
+rather than leaked, so the body says only `"operation failed"`. The status names the layer
+that gave up and never the reason.
+
+`screenshotPreview()` is the one call site that knows what it asked for, so it is the only
+place the message can be specific: a failed capture is almost always Windows older than
+1903, where the capture API is simply absent and every screenshot fails while the rest of
+the app works normally. "HTTP 500" on that screen is close to useless; the real cause is
+common and fixable. Live view also stops itself on that failure — retrying every five
+seconds against a PC that structurally cannot capture is a loop, not a recovery.
+
 ## Connection reuse
 
 `NestwatchClient` holds one `HttpClient` and reuses it. Measured against a live server by
