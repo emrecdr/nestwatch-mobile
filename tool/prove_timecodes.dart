@@ -23,6 +23,7 @@ import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 
 Future<void> main(List<String> argv) async {
@@ -101,20 +102,24 @@ Future<void> main(List<String> argv) async {
 
   // ----------------------------------- 4. the code stays out of the log
   stdout.writeln('\n4. The code never reaches the audit log');
-  final auditPath = args['audit'] ?? '/tmp/nestwatch-dev/audit.jsonl';
-  final audit = File(auditPath);
-  if (!audit.existsSync()) {
-    stdout.writeln('  [SKIP] no audit log at $auditPath');
+  final audit = AuditLog.openOrNull(args);
+  if (audit == null) {
+    // Through skip(), not a raw writeln. Printing [SKIP] without counting it left
+    // finish() free to say "All checks passed" over a check that never ran, which is the
+    // thing this whole file exists to be careful about.
+    final why =
+        'no audit log at ${args['audit'] ?? AuditLog.defaultPath} — pass --audit';
+    skip('nestwatch records that a code was issued, never which code', why);
+    skip('while still recording that one was issued', why);
   } else {
-    final text = audit.readAsStringSync();
     check(
-      !text.contains(minted.code),
+      !audit.mentions(minted.code),
       'nestwatch records that a code was issued, never which code',
       'its own rule: "The code itself is a secret (it grants time), so it is NOT '
           'written to the audit log"',
     );
     check(
-      text.contains('time_code_issued'),
+      audit.mentions('time_code_issued'),
       'while still recording that one was issued',
     );
   }

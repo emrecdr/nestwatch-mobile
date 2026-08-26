@@ -51,6 +51,38 @@ Future<NestwatchClient> signInOrStop(String authority, String password) async {
   }
 }
 
+/// That PC's audit log, when there is one to read.
+///
+/// [openOrNull] returns null rather than an empty string, and the difference is the whole
+/// reason this is a class. Both harnesses used to write
+/// `audit.existsSync() ? count(...) : 0` inline, which turns "there is no log here" into
+/// "the log contains nothing" — and a check comparing two such counts then passes.
+/// `prove_screens` asserted that five timer frames add no `screenshot_taken` rows, and
+/// with no log present that read 0 == 0 and reported PASS: the check defending trap 4
+/// through the audit door, succeeding because it could not see anything.
+///
+/// Returning null makes the caller decide, and the only honest decision is [skip].
+class AuditLog {
+  static const String defaultPath = '/tmp/nestwatch-dev/audit.jsonl';
+
+  final File _file;
+  const AuditLog._(this._file);
+
+  static AuditLog? openOrNull(Map<String, String> args) {
+    final file = File(args['audit'] ?? defaultPath);
+    return file.existsSync() ? AuditLog._(file) : null;
+  }
+
+  String get path => _file.path;
+
+  /// Re-read on every call. The harnesses count rows either side of a request, so a
+  /// snapshot taken once would compare a number against itself.
+  int count(String event) =>
+      RegExp(event).allMatches(_file.readAsStringSync()).length;
+
+  bool mentions(String text) => _file.readAsStringSync().contains(text);
+}
+
 /// Post a time request the way the child's own LAN page does.
 ///
 /// `jsonEncode` rather than string interpolation. The second copy of this built its body

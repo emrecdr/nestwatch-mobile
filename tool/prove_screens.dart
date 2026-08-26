@@ -165,32 +165,38 @@ Future<void> main(List<String> argv) async {
   // The audit keys on WHO ASKED, not on tier — a change that broke the old proxy. A
   // timer frame without `live` writes one screenshot_taken row per frame into a log that
   // rotates at 2 MiB, so this is trap 4 again through a different door.
-  final auditPath = args['audit'] ?? '/tmp/nestwatch-dev/audit.jsonl';
-  final audit = File(auditPath);
-  final rowsBefore = audit.existsSync()
-      ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
-      : 0;
+  final audit = AuditLog.openOrNull(args);
+
+  // The frames go out either way — they exercise the endpoint, which is worth doing even
+  // when the log cannot be read. What changes is whether anything can be concluded.
+  final rowsBefore = audit?.count('screenshot_taken');
   for (var i = 0; i < 5; i++) {
     await client.screenshotPreview(onTimer: true);
   }
-  final rowsAfter = audit.existsSync()
-      ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
-      : 0;
-  check(
-    rowsAfter == rowsBefore,
-    'five timer frames added NO screenshot_taken rows',
-    'they coalesce into live_view; without live=1 this would be +5, and ~720 an hour',
-  );
-
+  final rowsAfter = audit?.count('screenshot_taken');
   await client.screenshotPreview(onTimer: false);
-  final rowsPerson = audit.existsSync()
-      ? RegExp('screenshot_taken').allMatches(audit.readAsStringSync()).length
-      : 0;
-  check(
-    rowsPerson == rowsAfter + 1,
-    'and one person-requested frame added exactly one',
-    'a deliberate look at a child screen is meant to be on the record',
-  );
+  final rowsPerson = audit?.count('screenshot_taken');
+
+  if (audit == null) {
+    // Not a pass. With no log to read, both counts were 0 and the first assertion below
+    // compared 0 to 0 and reported success — the check that defends trap 4 through the
+    // audit door, succeeding precisely because it could see nothing.
+    final why =
+        'no audit log at ${args['audit'] ?? AuditLog.defaultPath} — pass --audit';
+    skip('five timer frames added NO screenshot_taken rows', why);
+    skip('and one person-requested frame added exactly one', why);
+  } else {
+    check(
+      rowsAfter == rowsBefore,
+      'five timer frames added NO screenshot_taken rows',
+      'they coalesce into live_view; without live=1 this would be +5, and ~720 an hour',
+    );
+    check(
+      rowsPerson == rowsAfter! + 1,
+      'and one person-requested frame added exactly one',
+      'a deliberate look at a child screen is meant to be on the record',
+    );
+  }
 
   // What the same call looks like WITHOUT the parameter — the trap, measured.
   final full = await rawShot(authority, client, '');
