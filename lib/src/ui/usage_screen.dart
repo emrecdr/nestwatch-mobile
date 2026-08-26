@@ -20,6 +20,7 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
+import 'notice.dart';
 import 'polled_screen.dart';
 
 class UsageScreen extends PolledScreen {
@@ -57,8 +58,8 @@ class _UsageScreenState extends State<UsageScreen>
         padding: const EdgeInsets.all(16),
         children: [
           // Caveats first: they change what the numbers below mean.
-          if (usage.enforcementMayBeStopped) _enforcerWarning(context, usage),
-          if (!usage.enabled) _disabledNotice(context),
+          if (usage.enforcementMayBeStopped) _enforcerWarning(usage),
+          if (!usage.enabled) _disabledNotice(),
           _headline(context, usage),
           if (usage.extraMinutes > 0) ...[
             const SizedBox(height: 8),
@@ -69,7 +70,7 @@ class _UsageScreenState extends State<UsageScreen>
           ],
           _section(context, 'Apps with limits', usage.perApp),
           _section(context, 'Groups', usage.groups),
-          if (usage.focusMissing) _focusMissingNotice(context),
+          if (usage.focusMissing) _focusMissingNotice(),
           _section(context, 'Most used', usage.focused),
           _section(context, 'Pages', usage.pages),
         ],
@@ -110,72 +111,36 @@ class _UsageScreenState extends State<UsageScreen>
   }
 
   /// "Nothing happened" and "nothing was watching" look identical without this.
-  Widget _enforcerWarning(BuildContext context, UsageToday usage) {
+  Widget _enforcerWarning(UsageToday usage) {
     final age = usage.enforcerAgeSeconds;
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
+    return Notice(
+      age == null
+          ? 'That PC did not report whether screen-time enforcement is running. '
+                'The figures below may not mean anything.'
+          : 'Screen-time enforcement last reported ${_age(age)} ago. If that keeps '
+                'growing, nothing is being measured or enforced — and a low number '
+                'below would mean nobody was watching, not that nobody was using '
+                'the PC.',
+      tone: NoticeTone.warning,
+      icon: Icons.warning_amber,
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_amber, color: scheme.onErrorContainer),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              age == null
-                  ? 'That PC did not report whether screen-time enforcement is running. '
-                        'The figures below may not mean anything.'
-                  : 'Screen-time enforcement last reported ${_age(age)} ago. If that '
-                        'keeps growing, nothing is being measured or enforced — and a '
-                        'low number below would mean nobody was watching, not that '
-                        'nobody was using the PC.',
-              style: TextStyle(color: scheme.onErrorContainer),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _disabledNotice(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        'Screen-time rules are switched off on that PC. Time is still measured, but '
-        'nothing is enforced.',
-        style: TextStyle(color: scheme.onTertiaryContainer),
-      ),
-    );
-  }
+  Widget _disabledNotice() => const Notice(
+    'Screen-time rules are switched off on that PC. Time is still measured, but '
+    'nothing is enforced.',
+    tone: NoticeTone.advisory,
+    margin: EdgeInsets.only(bottom: 16),
+  );
 
-  Widget _focusMissingNotice(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      margin: const EdgeInsets.only(top: 20),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        'The PC was in use, but nothing recorded which apps were in front. The list '
-        'below is empty because the watcher is not reporting — not because nothing '
-        'was used.',
-        style: TextStyle(color: scheme.onTertiaryContainer),
-      ),
-    );
-  }
+  Widget _focusMissingNotice() => const Notice(
+    'The PC was in use, but nothing recorded which apps were in front. The list '
+    'below is empty because the watcher is not reporting — not because nothing '
+    'was used.',
+    tone: NoticeTone.advisory,
+    margin: EdgeInsets.only(top: 20),
+  );
 
   Widget _section(BuildContext context, String title, List<UsageRow> rows) {
     if (rows.isEmpty) return const SizedBox.shrink();

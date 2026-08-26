@@ -8,6 +8,7 @@ import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
 import '../pinning/fingerprint.dart';
 import 'fingerprint_view.dart';
+import 'notice.dart';
 import 'scan_screen.dart';
 
 class PairingScreen extends StatefulWidget {
@@ -149,26 +150,18 @@ class _PairingScreenState extends State<PairingScreen> {
     PairInvite invite,
     Fingerprint observed,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: scheme.tertiaryContainer,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            'This connection is not verified yet.\n\n'
-            'The pairing code from ${invite.authority} did not include the PC\'s '
-            'certificate fingerprint, so this app has no way to tell on its own whether '
-            'the certificate below really belongs to your PC.\n\n'
-            'That usually means the PC is running an older nestwatch. Updating it and '
-            'pairing again removes this step entirely — the code will carry the '
-            'fingerprint and the app will check it for you.',
-            style: TextStyle(color: scheme.onTertiaryContainer),
-          ),
+        Notice(
+          'This connection is not verified yet.\n\n'
+          'The pairing code from ${invite.authority} did not include the PC\'s '
+          'certificate fingerprint, so this app has no way to tell on its own whether '
+          'the certificate below really belongs to your PC.\n\n'
+          'That usually means the PC is running an older nestwatch. Updating it and '
+          'pairing again removes this step entirely — the code will carry the '
+          'fingerprint and the app will check it for you.',
+          tone: NoticeTone.advisory,
         ),
         const SizedBox(height: 20),
         Text('On that PC, run:', style: Theme.of(context).textTheme.titleSmall),
@@ -207,21 +200,10 @@ class _PairingScreenState extends State<PairingScreen> {
     Fingerprint observed,
     Fingerprint? expected,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: scheme.errorContainer,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            explanation,
-            style: TextStyle(color: scheme.onErrorContainer),
-          ),
-        ),
+        Notice(explanation, tone: NoticeTone.warning),
         const SizedBox(height: 20),
         Text('It presented:', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
@@ -247,19 +229,7 @@ class _PairingScreenState extends State<PairingScreen> {
   Widget _failed(BuildContext context, String message) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          message,
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onErrorContainer,
-          ),
-        ),
-      ),
+      Notice(message, tone: NoticeTone.warning),
       const SizedBox(height: 20),
       OutlinedButton(
         onPressed: widget.controller.reset,
@@ -280,7 +250,6 @@ class _PairingScreenState extends State<PairingScreen> {
     PasswordPrompt reason,
     String message,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     final isError =
         reason == PasswordPrompt.wrongPassword ||
         reason == PasswordPrompt.rateLimited;
@@ -292,20 +261,9 @@ class _PairingScreenState extends State<PairingScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isError
-                ? scheme.errorContainer
-                : scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            message,
-            style: TextStyle(
-              color: isError ? scheme.onErrorContainer : scheme.onSurface,
-            ),
-          ),
+        Notice(
+          message,
+          tone: isError ? NoticeTone.warning : NoticeTone.plain,
         ),
         const SizedBox(height: 20),
         TextField(
