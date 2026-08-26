@@ -55,7 +55,33 @@ void main() {
     server.listen((request) async {
       seen.add(request);
       final response = request.response;
-      if (request.uri.path == '/api/screenshot') {
+      if (request.uri.path.startsWith('/p/')) {
+        // Trap 2: nestwatch answers 302 to `/` identically on success and failure.
+        // The stub has to actually redirect, or a test asserting "we do not follow it"
+        // passes for want of anything to follow.
+        response.statusCode = HttpStatus.found;
+        response.headers.set(HttpHeaders.locationHeader, '/');
+      } else if (request.uri.path == '/api/unauthorized') {
+        response.statusCode = HttpStatus.unauthorized;
+      } else if (request.uri.path == '/api/other-cookie') {
+        response
+          ..statusCode = 200
+          ..cookies.add(Cookie('some_other_cookie', 'not-the-session'))
+          ..write('{"authenticated":false,"version":"test"}');
+      } else if (request.uri.path == '/api/logged-out') {
+        // What a server sends when it ends a session: the same cookie, emptied and
+        // expired immediately.
+        response
+          ..statusCode = 200
+          ..cookies.add(Cookie('hh_session', '')..maxAge = 0)
+          ..write('{"authenticated":false,"version":"test"}');
+      } else if (request.uri.path == '/api/time-requests') {
+        response
+          ..statusCode = 200
+          ..write(
+            '[{"id":"r1","ts":"2026-08-26T10:00:00Z","minutes":5,"reason":"x"}]',
+          );
+      } else if (request.uri.path == '/api/screenshot') {
         response
           ..statusCode = 200
           ..headers.contentType = ContentType('image', 'jpeg')
@@ -155,13 +181,57 @@ void main() {
 
     test('redemption does not follow the redirect', () async {
       // Trap 2: /p/{token} answers 302 identically on success and failure, so following
-      // it would fetch the whole dashboard SPA to learn nothing.
+      // it would fetch the whole dashboard SPA to learn nothing. The stub really does
+      // redirect, so a client that followed would land a second request on `/`.
       await client.redeemPairingToken('ABCDEFGHJKMNPQRS');
       expect(seen.single.uri.path, '/p/ABCDEFGHJKMNPQRS');
       expect(
-        seen,
-        hasLength(1),
-        reason: 'a followed redirect would show a second GET /',
+        seen.map((r) => r.uri.path),
+        isNot(contains('/')),
+        reason: 'a followed 302 would show a second request for the dashboard',
+      );
+      expect(seen, hasLength(1));
+    });
+
+    test('a 401 from /api reads as an expired session, not a puzzle', () async {
+      // §5: a 401 means re-prompt for the password, do NOT re-pair — the certificate is
+      // still trusted, only the session lapsed. Reporting it as an unexpected answer
+      // would send a parent back through pairing for no reason.
+      await expectLater(
+        client.rawGetForTest('/api/unauthorized'),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.sessionExpired,
+          ),
+        ),
+      );
+    });
+
+    test('a cookie that is not hh_session is not mistaken for one', () async {
+      await client.rawGetForTest('/api/other-cookie');
+      expect(
+        client.cookie,
+        isNull,
+        reason:
+            'adopting any Set-Cookie would let an unrelated cookie stand in for '
+            'the session, and the real one would never be noticed missing',
+      );
+    });
+
+    test('a session the server clears is dropped, not kept and retried', () async {
+      await client.login('hunter2');
+      expect(client.cookie, isNotNull);
+
+      await client.rawGetForTest('/api/logged-out');
+      expect(
+        client.cookie,
+        isNull,
+        reason:
+            'holding a cookie the server has expired means every later request is '
+            'anonymous while the app believes it is signed in — it would retry '
+            'forever instead of asking for the password',
       );
     });
   });

@@ -120,5 +120,62 @@ mutate "watch: session limit exceeds the daily budget" \
   'const Duration watchSessionLimit = Duration(minutes: 30);' \
   'const Duration watchSessionLimit = Duration(hours: 8);'
 
+mutate "provenance: an unknown stored value reads as verified" \
+  lib/src/pairing/server_identity.dart \
+  "      orElse: () => PinProvenance.trustedOnFirstUse," \
+  "      orElse: () => PinProvenance.verifiedFromQrCode,"
+
+mutate "rejection: any authority's answer will do" \
+  lib/src/pinning/pinned_http_overrides.dart \
+  "  PinRejection? rejectionFor(String authority) => _rejections[authority];" \
+  "  PinRejection? rejectionFor(String authority) =>
+      _rejections[authority] ?? (_rejections.isEmpty ? null : _rejections.values.last);"
+
+mutate "session: a 401 from /api reads as an unexpected answer" \
+  lib/src/api/nestwatch_api.dart \
+  "        NestwatchFailure.sessionExpired,
+        'That sign-in expired.'," \
+  "        NestwatchFailure.unexpectedResponse,
+        'That sign-in expired.',"
+
+mutate "cookie: a cleared session is not noticed" \
+  lib/src/api/session_cookie.dart \
+  "  static bool clearsSession(HttpClientResponse response) => response.cookies" \
+  "  static bool clearsSession(HttpClientResponse response) => false || response.cookies
+      .where((_) => false)"
+
+mutate "cookie: any cookie name is taken as the session" \
+  lib/src/api/session_cookie.dart \
+  "      if (cookie.name != name) continue;" \
+  "      if (false) continue;"
+
+mutate "token: normalisation stops uppercasing" \
+  lib/src/pairing/pair_invite.dart \
+  "    .toUpperCase();" \
+  "    .toLowerCase();"
+
+mutate "poll: notify before persisting (re-announces after a crash)" \
+  lib/src/background/poll_logic.dart \
+  "  await store.save(diff.next);" \
+  "  await Future<void>.delayed(Duration.zero);"
+
+mutate "login: posts a form instead of JSON" \
+  lib/src/api/nestwatch_api.dart \
+  "        request.headers.contentType = ContentType.json;" \
+  "        request.headers.contentType = ContentType('application', 'x-www-form-urlencoded');"
+
+mutate "redemption: follows the 302 into the dashboard" \
+  lib/src/api/nestwatch_api.dart \
+  "    await _send('GET', '/p/\$token', followRedirects: false);" \
+  "    await _send('GET', '/p/\$token');"
+
+mutate "reuse: close() leaves the pool alive across a pin change" \
+  lib/src/api/nestwatch_api.dart \
+  "  void close() {
+    _http?.close(force: true);
+    _http = null;
+  }" \
+  "  void close() {}"
+
 echo
 echo "killed=$killed survived=$survived"

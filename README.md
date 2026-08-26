@@ -326,12 +326,25 @@ this app exists for went unchecked by the suite — it was proven only by
 
 A green suite says nothing about whether it *would* go red. Each mutation is a real defect
 this codebase argues against somewhere in its comments; a `SURVIVED` line means the
-argument is not defended by a test. Currently **12 killed, 0 survived**.
+argument is not defended by a test. Currently **22 killed, 0 survived**.
 
-It found one genuine gap: deleting `?tier=preview` left `flutter test` entirely green.
-Trap 4 — the plan's most dangerous silent failure, where the wrong tier returns a valid
-200 JPEG and shreds the audit log — was guarded only by `prove_screens.dart`, which needs
-a live nestwatch. `test/api_wire_test.dart` now pins it against a loopback TLS server.
+It has found six genuine gaps so far, each now closed:
+
+| mutation that survived | why it mattered |
+|---|---|
+| `?tier=preview` deleted | trap 4 — a valid 200 JPEG at the expensive tier, shredding the audit log |
+| unknown stored provenance read as **verified** | a storage-format change silently promoting trust-on-first-use |
+| a `401` from `/api` read as an unexpected answer | sends a parent back through pairing when only the session lapsed |
+| any `Set-Cookie` taken as the session | an unrelated cookie standing in, the real one never missed |
+| a cleared session kept and retried | the app believes it is signed in while every request is anonymous |
+| notify before persisting the seen-set | a crash between the two re-announces, teaching the parent to swipe it away |
+
+Five of those were reachable only through `prove_*` harnesses, which need live servers and
+so never run in CI.
+
+One test also turned out to assert a property its own fixture could not exercise: the
+"does not follow the redirect" check passed because the stub answered `200`, so there was
+never a redirect to follow. The stub now really returns `302`.
 
 Two lessons are baked into the script itself, both from false gaps it reported:
 

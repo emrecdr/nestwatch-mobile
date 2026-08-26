@@ -321,6 +321,19 @@ class NestwatchClient {
     );
   }
 
+  /// A bare GET against `path`, for tests that need to drive a specific server
+  /// response through the same code path a real call takes.
+  ///
+  /// Public rather than private because the alternative — reaching the 401 and
+  /// Set-Cookie handling only through `session()` — would test them against a stub
+  /// pretending to be `/session`, which is a weaker thing to assert. Not annotated
+  /// `@visibleForTesting`: that would pull `package:meta` into a file kept deliberately
+  /// free of dependencies beyond `dart:io`.
+  Future<void> rawGetForTest(String path) async {
+    final (response, _) = await _send('GET', path);
+    _requireOk(response);
+  }
+
   /// One request: attach the session, send, capture any session change.
   Future<(HttpClientResponse, String)> _send(
     String method,
