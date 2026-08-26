@@ -261,6 +261,60 @@ class NestwatchClient {
     return true;
   }
 
+  /// `GET /api/time-codes` → the issued codes nobody has redeemed yet.
+  Future<List<TimeCode>> timeCodes() async {
+    final (response, body) = await _send('GET', '/api/time-codes');
+    _requireOk(response);
+    final list = jsonDecode(body) as List;
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(TimeCode.fromJson)
+        .toList();
+  }
+
+  /// `POST /api/time-codes` → mint one worth `minutes`.
+  ///
+  /// The server rejects anything outside 1..=[TimeCodeLimits.maxMinutes] and refuses
+  /// once [TimeCodeLimits.maxActive] are outstanding — both as 400 with a body naming
+  /// the reason, which is worth distinguishing because "too many active codes" is fixed
+  /// by using some, and "minutes out of range" by asking for fewer.
+  Future<TimeCode> issueTimeCode(int minutes) async {
+    final (response, body) = await _send(
+      'POST',
+      '/api/time-codes',
+      jsonBody: {'minutes': minutes},
+    );
+    if (response.statusCode == HttpStatus.badRequest) {
+      final reason = _errorFrom(body);
+      throw NestwatchException(
+        NestwatchFailure.unexpectedResponse,
+        reason.contains('too many')
+            ? 'That PC already has the most codes it will hold '
+                  '(${TimeCodeLimits.maxActive}). Use or wait out some of the ones '
+                  'below before making another.'
+            : 'That PC would not issue a code for $minutes minutes. It allows '
+                  '1 to ${TimeCodeLimits.maxMinutes}.',
+      );
+    }
+    _requireOk(response);
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    return TimeCode(
+      code: json['code'] as String? ?? '',
+      ts: DateTime.now().toUtc().toIso8601String(),
+      minutes: (json['minutes'] as num?)?.toInt() ?? minutes,
+    );
+  }
+
+  /// nestwatch answers errors as `{"error": "..."}`; anything else is not from it.
+  static String _errorFrom(String body) {
+    try {
+      return (jsonDecode(body) as Map<String, dynamic>)['error'] as String? ??
+          '';
+    } on Object {
+      return '';
+    }
+  }
+
   /// `GET /api/usage/today`.
   Future<UsageToday> usageToday() async {
     final (response, body) = await _send('GET', '/api/usage/today');

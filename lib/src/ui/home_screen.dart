@@ -1,8 +1,15 @@
-/// Three screens, and only three.
+/// Four screens.
 ///
-/// PLAN.md §5: "Rules, routines, curfew and the audit log stay in the browser:
-/// configuration, done rarely, and each one added is a second interface to keep in step
-/// with 24 routes forever."
+/// PLAN.md §5 said "three, and only three", and kept rules, routines, curfew and the
+/// audit log in the browser: "configuration, done rarely, and each one added is a second
+/// interface to keep in step with 24 routes forever."
+///
+/// Time codes are the fourth, and the exception is deliberate. That test is really about
+/// *where the parent is* when they need the thing — and a time code is used **because**
+/// you are away from the browser. The phone is not a worse dashboard for that task, it is
+/// the only thing in reach. §7 calls away-from-home support impossible, which holds for
+/// notification but not for this: nestwatch already solved it offline, and the app was
+/// simply not surfacing it.
 ///
 /// The tabs are built with an [IndexedStack] rather than a `TabBarView` so each screen
 /// keeps its state across switches — but each is told whether it is `visible`, and stops
@@ -17,6 +24,7 @@ import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
 import 'notifications_sheet.dart';
 import 'screenshot_screen.dart';
+import 'time_codes_screen.dart';
 import 'time_requests_screen.dart';
 import 'usage_screen.dart';
 
@@ -102,6 +110,11 @@ class _HomeScreenState extends State<HomeScreen> {
             visible: _tab == 2,
             onFailure: _onFailure,
           ),
+          TimeCodesScreen(
+            client: widget.client,
+            visible: _tab == 3,
+            onFailure: _onFailure,
+          ),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -114,6 +127,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.desktop_windows),
             label: 'Screen',
           ),
+          NavigationDestination(icon: Icon(Icons.key), label: 'Codes'),
         ],
       ),
     );

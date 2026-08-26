@@ -145,3 +145,49 @@ class UsageToday {
     return age > enforcerStaleAfter.inSeconds;
   }
 }
+
+/// An issued, not-yet-redeemed time code (nestwatch `timecode::ActiveCode`).
+///
+/// The parent mints one before leaving, writes it down, and the child types it into the
+/// LAN page to add the minutes to today's budget — **no parent action and no internet
+/// needed at redemption time**. `src/timecode.rs` names the case: "Useful when the
+/// parent is away (leave a code) or the network is down."
+class TimeCode {
+  /// 8 characters of Crockford base32, from the same generator as pairing tokens.
+  ///
+  /// A secret: it grants screen time to whoever types it. nestwatch deliberately keeps
+  /// it out of the audit log for that reason ("The code itself is a secret (it grants
+  /// time), so it is NOT written to the audit log") — this app should be no looser.
+  final String code;
+
+  /// ISO-8601 UTC, as sent.
+  final String ts;
+  final int minutes;
+
+  const TimeCode({required this.code, required this.ts, required this.minutes});
+
+  static TimeCode fromJson(Map<String, dynamic> json) => TimeCode(
+    code: json['code'] as String? ?? '',
+    ts: json['ts'] as String? ?? '',
+    minutes: (json['minutes'] as num?)?.toInt() ?? 0,
+  );
+
+  DateTime? get issuedAt => DateTime.tryParse(ts)?.toLocal();
+
+  /// Never render the code by accident. Showing it is always a deliberate act.
+  @override
+  String toString() => 'TimeCode($minutes min, code redacted)';
+}
+
+/// Limits from nestwatch `src/timecode.rs`, mirrored so the UI can refuse locally
+/// instead of round-tripping to a 400.
+class TimeCodeLimits {
+  /// `MAX_CODE_MINUTES`.
+  static const int maxMinutes = 240;
+
+  /// `MAX_ACTIVE_CODES` — the cap on outstanding, unredeemed codes.
+  static const int maxActive = 50;
+
+  static bool isValidMinutes(int minutes) =>
+      minutes > 0 && minutes <= maxMinutes;
+}

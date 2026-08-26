@@ -174,13 +174,29 @@ what to trust stays testable against a live server on every change. `ServerIdent
 is abstract for the same reason — the Keystore-backed implementation lives apart, in
 `secure_identity_store.dart`.
 
-## The three screens
+## The four screens
 
 | screen | endpoint | cadence |
 |---|---|---|
 | Requests | `GET /api/time-requests`, `POST …/approve`, `…/deny` | 60 s |
 | Today | `GET /api/usage/today` | 60 s |
 | Screen | `GET /api/screenshot?tier=preview` | 5 s, **off by default** |
+| Codes | `GET`/`POST /api/time-codes` | 60 s |
+
+PLAN §5 said "three, and only three", keeping rules, routines and curfew in the browser as
+"configuration, done rarely". Codes is a deliberate exception, and the reason is that the
+test is really about *where the parent is* when they need the thing. A time code is used
+**because** you are away from the browser — the parent mints one before leaving, the child
+types it on the ask page, and the minutes land in that day's budget with no parent action
+and no internet at redemption. §7 calls away-from-home support impossible, which holds for
+*notification* but not for this: nestwatch already solved it offline (`src/timecode.rs` —
+"Useful when the parent is away (leave a code) or the network is down") and the app was
+simply not surfacing it.
+
+The code is treated as a secret, because it is one: it grants screen time to whoever types
+it, and nestwatch keeps it out of the audit log for that reason. Codes are hidden behind a
+reveal, never rendered by `toString`, and `prove_timecodes.dart` asserts the value never
+reaches the log.
 
 60 s and 5 s mirror `_pollMs` and `_refreshMs` in nestwatch `assets/app.js`. Every screen
 stops polling when its tab is not showing **and** when the app is backgrounded — a phone
