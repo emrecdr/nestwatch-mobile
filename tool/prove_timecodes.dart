@@ -29,6 +29,7 @@ import 'dev_server.dart';
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'audit', 'password', 'pin', 'real'});
   final port = int.parse(args['real'] ?? '8443');
+  await requireListening(port, 'nestwatch');
   HttpOverrides.global = PinnedHttpOverrides(
     pin: Fingerprint.parse(requireArg(args, 'pin')),
   );

@@ -39,6 +39,7 @@ void _reportOverrides(SendPort send) {
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'password', 'pin', 'real'});
   final port = int.parse(args['real'] ?? '8443');
+  await requireListening(port, 'nestwatch');
   final authority = '127.0.0.1:$port';
   final pin = Fingerprint.parse(requireArg(args, 'pin'));
   final password = requireArg(args, 'password');

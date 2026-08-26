@@ -41,6 +41,7 @@ import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 
 /// Coverage this run did not achieve, said out loud.
@@ -50,6 +51,7 @@ import 'harness.dart';
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'password', 'pin', 'real', 'token'});
   final port = int.parse(args['real'] ?? '8443');
+  await requireListening(port, 'nestwatch');
   final pin = Fingerprint.parse(requireArg(args, 'pin'));
   final password = requireArg(args, 'password');
   final token = args['token'];

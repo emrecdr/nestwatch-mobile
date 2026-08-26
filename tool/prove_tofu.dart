@@ -29,12 +29,16 @@ import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'impostor', 'pin', 'real'});
   final realPort = int.parse(args['real'] ?? '8443');
   final impostorPort = int.parse(args['impostor'] ?? '8444');
+
+  await requireListening(realPort, 'nestwatch');
+  await requireListening(impostorPort, 'the impostor server');
   final realPin = Fingerprint.parse(requireArg(args, 'pin'));
 
   final overrides = PinnedHttpOverrides();

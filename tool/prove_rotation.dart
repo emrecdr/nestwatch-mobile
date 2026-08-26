@@ -33,12 +33,16 @@ import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pin_mismatch_message.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'lan-gate', 'new-pin', 'old-pin', 'real'});
   final port = int.parse(args['real'] ?? '8445');
   final gatePort = int.parse(args['lan-gate'] ?? '9444');
+
+  await requireListening(port, 'the rotated nestwatch');
+  await requireListening(gatePort, 'tool/lan_gate_stub.py');
   final oldPin = Fingerprint.parse(requireArg(args, 'old-pin'));
   final newPin = Fingerprint.parse(requireArg(args, 'new-pin'));
   final authority = '127.0.0.1:$port';

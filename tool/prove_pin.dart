@@ -24,6 +24,7 @@ import 'package:crypto/crypto.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
+import 'dev_server.dart';
 
 /// Recognisable bytes to look for on the wire. If this string ever shows up in the
 /// sink's log while the wrong certificate is pinned, the pin let a request body out.
@@ -37,6 +38,12 @@ Future<void> main(List<String> argv) async {
   final realPort = int.parse(args['real'] ?? '8443');
   final impostorPort = int.parse(args['impostor'] ?? '8444');
   final sinkPort = int.parse(args['sink'] ?? '9443');
+
+  // Before any check, so a stopped server reads as "nothing was checked" rather than as
+  // three failures that look like a broken pin.
+  await requireListening(realPort, 'nestwatch');
+  await requireListening(impostorPort, 'the impostor server');
+  await requireListening(sinkPort, 'tool/wire_sink.py');
 
   final overrides = PinnedHttpOverrides(pin: pin);
   // The one line that pins the whole process. In the app this sits at the top of

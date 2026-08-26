@@ -51,6 +51,35 @@ Future<NestwatchClient> signInOrStop(String authority, String password) async {
   }
 }
 
+/// Refuse to start when the thing under test is not there.
+///
+/// A bare TCP connect, no TLS: the only question is whether anything is listening.
+///
+/// Without this, a harness run against a stopped nestwatch reports its checks as FAIL —
+/// `prove_pin` says "the pinned client reaches the real server: FAIL, connection
+/// refused", which reads as a broken pin and sends somebody looking for one. The
+/// distinction is the same one `signInOrStop` already draws for a rate-limited PC: this
+/// is the harness environment, not a defect. Nothing was checked, and that is not the
+/// same fact as a check having failed.
+///
+/// Exits 2 like every other "could not run" here, so a shell can tell it from a failure.
+Future<void> requireListening(int port, String what) async {
+  try {
+    final socket = await Socket.connect(
+      InternetAddress.loopbackIPv4,
+      port,
+      timeout: const Duration(seconds: 2),
+    );
+    socket.destroy();
+  } on SocketException {
+    stop(
+      'Nothing is listening on 127.0.0.1:$port ($what).\n'
+      '         This harness needs it live — see docs/PLAN.md §0. Nothing was checked,\n'
+      '         which is not the same as anything having failed.',
+    );
+  }
+}
+
 /// That PC's audit log, when there is one to read.
 ///
 /// [openOrNull] returns null rather than an empty string, and the difference is the whole
