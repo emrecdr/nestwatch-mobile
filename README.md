@@ -198,6 +198,13 @@ it, and nestwatch keeps it out of the audit log for that reason. Codes are hidde
 reveal, never rendered by `toString`, and `prove_timecodes.dart` asserts the value never
 reaches the log.
 
+Verified end to end across both halves of the system, on an emulator against a live
+server: the app minted `88S3E4YF`, a `POST /redeem-code` as the child would send it
+answered `{"minutes":15,"ok":true}`, today's granted minutes moved 580 → 595, a second
+redemption answered `{"ok":false}`, the code vanished from the app's list on refresh, and
+the audit log recorded `time_code_issued` / `time_code_redeemed` without ever containing
+the code itself.
+
 60 s and 5 s mirror `_pollMs` and `_refreshMs` in nestwatch `assets/app.js`. Every screen
 stops polling when its tab is not showing **and** when the app is backgrounded — a phone
 in a pocket must not keep asking for frames, not least because each one writes to that
