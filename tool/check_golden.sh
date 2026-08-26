@@ -4,6 +4,19 @@
 # `test/golden/` holds copies, so `flutter test` runs on a machine that has this repo and
 # nothing else. The cost of a copy is that it can drift; this is what catches that.
 #
+# It used to do a second job: grepping nestwatch's Rust for the constants a phone renders
+# before it can ask — "1 to 240 minutes", "5 tries, then a minute". That channel is gone.
+# nestwatch publishes them as `limits.json` now, so they are vendored like every other
+# golden file and asserted in `test/models_golden_test.dart`, which runs on every commit
+# rather than whenever somebody remembers to point this at a sibling checkout.
+#
+# Worth recording why the grep had to go, because it never reported a wrong number. It
+# stopped being able to report anything: the constants were given names on that side —
+# an improvement there — and the reader looking for the old inline shape found nothing,
+# hours after it was written. A checker whose failure mode is "it stopped checking" is
+# worse than one that is merely wrong, and the only reason it was caught is that it had
+# been built to shout when it could not read rather than to shrug.
+#
 # Not part of `flutter test` on purpose. Wiring it in would mean skipping wherever
 # nestwatch is absent, and a check that quietly stops running reports success either way —
 # which is how this repo lost a mutation for a while: the anchor stopped matching, the
@@ -53,60 +66,6 @@ for mine in "$MINE"/*.json; do
     drift=$((drift + 1))
   fi
 done
-
-# ---------------------------------------------------------------------------------
-# Constants this app mirrors but no golden file carries.
-# ---------------------------------------------------------------------------------
-#
-# `test/time_code_test.dart` pins these against literals, which is right and is also only
-# half of it: it pins *this* app's constant against *this* app's literal. If nestwatch
-# moves MAX_CODE_MINUTES to 300, that test still passes and the screen goes on telling a
-# parent "1 to 240" while the PC accepts 300.
-#
-# The code length needs nothing here. Its golden sample is generated from CODE_LEN, so a
-# change drifts time-codes.json above and the length assertion fails on the copy. These
-# two appear in no golden file, so there is nothing to drift.
-#
-# A constant that cannot be found must read as an error, never as agreement. Renaming
-# MAX_ACTIVE_CODES would otherwise turn this whole section into eight quiet "same" lines.
-
-echo
-echo "Constants mirrored from $SRC/src"
-echo
-
-# Reads `NAME: Type = 5;` and `NAME: Duration = Duration::from_secs(60);` alike. The
-# second shape was a 26-line special case until nestwatch gave the limiter named
-# constants; teaching the general reader one more shape retired the whole branch.
-rust_const() { grep -hoE "\\b$2\\b *: *[A-Za-z0-9]+ *= *(Duration::from_secs\\()?[0-9]+" "$1" 2>/dev/null | grep -oE '[0-9]+$' | head -1; }
-dart_const() { grep -hoE "\\b$2\\b *= *[0-9]+" "$1" 2>/dev/null | grep -oE '[0-9]+$' | head -1; }
-
-compare_const() {
-  local theirs_file="$1" theirs_name="$2" mine_file="$3" mine_name="$4"
-  local t m
-  t=$(rust_const "$theirs_file" "$theirs_name")
-  m=$(dart_const "$mine_file" "$mine_name")
-
-  if [ -z "$t" ]; then
-    echo "  UNREADABLE    $theirs_name not found in $theirs_file — renamed, or moved."
-    echo "                Nothing was compared. This is not agreement."
-    drift=$((drift + 1))
-  elif [ -z "$m" ]; then
-    echo "  UNREADABLE    $mine_name not found in $mine_file."
-    drift=$((drift + 1))
-  elif [ "$t" != "$m" ]; then
-    echo "  DISAGREES     $mine_name is $m here, $theirs_name is $t there"
-    drift=$((drift + 1))
-  else
-    echo "  same          $mine_name = $m"
-  fi
-  checked=$((checked + 1))
-}
-
-compare_const "$SRC/src/timecode.rs" MAX_CODE_MINUTES lib/src/api/models.dart maxMinutes
-compare_const "$SRC/src/timecode.rs" MAX_ACTIVE_CODES lib/src/api/models.dart maxActive
-
-compare_const "$SRC/src/auth.rs" LOGIN_MAX_FAILS lib/src/api/models.dart maxAttempts
-compare_const "$SRC/src/auth.rs" LOGIN_LOCKOUT lib/src/api/models.dart lockoutSeconds
 
 echo
 if [ "$drift" -eq 0 ]; then

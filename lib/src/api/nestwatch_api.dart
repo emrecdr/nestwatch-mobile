@@ -174,10 +174,14 @@ class NestwatchClient {
   /// `GET /session` → `{authenticated, version}`.
   Future<SessionInfo> session() async {
     final (response, body) = await _send('GET', '/session');
+    // Not [_requireOk], deliberately. That maps 401 to sessionExpired, which is the right
+    // reading everywhere behind `require_auth` and the wrong one here: `/session` is
+    // unauthenticated, so a 401 from it would not mean a lapsed sign-in and telling a
+    // parent to enter their password again would send them somewhere useless.
     if (response.statusCode != HttpStatus.ok) {
       throw NestwatchException(
         NestwatchFailure.unexpectedResponse,
-        'That PC answered with HTTP ${response.statusCode}.',
+        _unexpectedStatus(response),
       );
     }
     try {
@@ -232,7 +236,7 @@ class NestwatchClient {
       default:
         throw NestwatchException(
           NestwatchFailure.unexpectedResponse,
-          'That PC answered with HTTP ${response.statusCode}.',
+          _unexpectedStatus(response),
         );
     }
   }
@@ -321,6 +325,10 @@ class NestwatchClient {
       minutes: (json['minutes'] as num?)?.toInt() ?? minutes,
     );
   }
+
+  /// What to say when a status code carries no more meaning than itself.
+  static String _unexpectedStatus(HttpClientResponse response) =>
+      'That PC answered with HTTP ${response.statusCode}.';
 
   /// nestwatch answers errors as `{"error": "..."}`; anything else is not from it.
   static String _errorFrom(String body) {
@@ -414,7 +422,7 @@ class NestwatchClient {
     }
     throw NestwatchException(
       NestwatchFailure.unexpectedResponse,
-      'That PC answered with HTTP ${response.statusCode}.',
+      _unexpectedStatus(response),
     );
   }
 

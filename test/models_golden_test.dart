@@ -73,8 +73,9 @@ void main() {
       expect(codes, hasLength(1));
       expect(
         codes.single.code.length,
-        6,
-        reason: 'nestwatch shortened CODE_LEN to 6; this app follows it',
+        object('limits')['code_len'],
+        reason: 'the sample is minted from CODE_LEN, and limits.json publishes it — '
+            'two files from the same constants, checked against each other',
       );
       expect(codes.single.minutes, 45);
       expect(codes.single.issuedAt, isNotNull);
@@ -87,6 +88,40 @@ void main() {
 
     test('none outstanding is an empty list', () {
       expect(list('time-codes-empty'), isEmpty);
+    });
+  });
+
+  group('limits — the numbers shown before a request can answer', () {
+    // These run on every commit now. They used to be `tool/check_golden.sh` grepping
+    // nestwatch's Rust for the constants, which is an out-of-band script somebody has to
+    // remember to point at a sibling checkout — and whose failure mode is that the check
+    // stops running rather than that a number is wrong. It did stop, hours after it was
+    // written, when those constants were given names.
+    //
+    // A phone renders "1 to 240 minutes" and "5 tries, then a minute" from its own
+    // compiled-in copies, before any call it could be corrected by. That is what makes
+    // them contract rather than configuration.
+    test('agree with what that PC enforces', () {
+      final limits = object('limits');
+      expect(TimeCodeLimits.maxMinutes, limits['max_code_minutes']);
+      expect(TimeCodeLimits.maxActive, limits['max_active_codes']);
+      expect(LoginLimits.maxAttempts, limits['login_max_fails']);
+      expect(LoginLimits.lockoutSeconds, limits['login_lockout_secs']);
+    });
+
+    test('and the sentences built from them say the real numbers', () {
+      final limits = object('limits');
+      // The lockout used to exist here only as the word "minute" inside a sentence.
+      expect(
+        LoginLimits.lockoutInWords(),
+        'a minute',
+        reason: 'renders ${limits['login_lockout_secs']} seconds',
+      );
+      expect(
+        LoginLimits.lockout.inSeconds,
+        limits['login_lockout_secs'],
+        reason: 'the Duration and the number it is built from cannot disagree',
+      );
     });
   });
 

@@ -352,6 +352,40 @@ never ran. Before it existed, `flutter test` was green while the one security pr
 this app exists for went unchecked by the suite — it was proven only by
 `tool/prove_pin.dart`, which needs three live servers and so cannot run in CI.
 
+## The contract with that PC
+
+```bash
+NESTWATCH_REPO=../nestwatch ./tool/check_golden.sh
+```
+
+Two repos have to agree about more than they can see of each other: the JSON shapes this
+app parses, and a handful of numbers it renders in front of a parent before any request
+completes — "1 to 240 minutes", "5 failures in a minute".
+
+`test/golden/` holds files nestwatch's own serde types produced, `limits.json` among them.
+They are **copies**, so `flutter test` runs on a machine that has this repo and nothing
+else; the alternative is reading a sibling checkout and skipping when it is absent, and a
+test that quietly stops running reports success either way. The assertions live in
+`test/models_golden_test.dart` and run on every commit. This script's only job is keeping
+the copies honest.
+
+Three outcomes, and the third is the point:
+
+| | |
+|---|---|
+| `same` | checked, and they agree |
+| `DRIFTED` / `ORPHANED` / `MISSING HERE` | checked, and they do not — exit 1 |
+| nestwatch absent | **nothing was compared** — exit 2, never silence |
+
+That last row earned itself twice in one afternoon. The limits used to be read by grepping
+nestwatch's Rust for its constants; those constants were then given names — an improvement
+on that side — and the reader looking for the old shape found nothing. It said *"Nothing
+was compared. This is not agreement."* rather than printing four quiet `same` lines, which
+is the only reason either session noticed. The grep is gone; `limits.json` replaced it.
+
+`MISSING HERE` fired for real too: it is what reported that nestwatch had begun producing
+`limits.json` before this app consumed it.
+
 ## Mutation audit
 
 ```bash
