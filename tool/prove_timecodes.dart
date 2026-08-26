@@ -64,23 +64,29 @@ Future<void> main(List<String> argv) async {
   );
 
   // ------------------------------------------- 2. the limits agree
-  stdout.writeln('\n2. The app refuses locally what the server refuses');
+  //
+  // Agreement is the claim, and it is the only part of this that needs a live PC. The
+  // first version asserted `!isValidMinutes(bad)` on its own line — a pure function,
+  // already owned by test/time_code_test.dart, but here reachable only when somebody has
+  // a server up and runs this by hand. A property that can be checked on every commit
+  // should not be checked once a fortnight.
+  stdout.writeln('\n2. The app refuses locally exactly what the server refuses');
   for (final bad in [0, TimeCodeLimits.maxMinutes + 1]) {
-    check(
-      !TimeCodeLimits.isValidMinutes(bad),
-      'the app rejects $bad minutes without asking',
-    );
+    final appRefuses = !TimeCodeLimits.isValidMinutes(bad);
+    bool serverRefuses;
     try {
       await client.issueTimeCode(bad);
-      check(false, 'and the server rejects $bad too');
+      serverRefuses = false;
     } on NestwatchException {
-      check(true, 'and the server rejects $bad too');
+      serverRefuses = true;
     }
+    check(
+      appRefuses && serverRefuses,
+      'both refuse $bad minutes',
+      'app: ${appRefuses ? 'refused' : 'ALLOWED'}, '
+          'server: ${serverRefuses ? 'refused' : 'ALLOWED'}',
+    );
   }
-  check(
-    TimeCodeLimits.isValidMinutes(TimeCodeLimits.maxMinutes),
-    'the boundary itself is allowed (MAX_CODE_MINUTES is inclusive)',
-  );
 
   // --------------------------------- 3. minting grants nothing yet
   stdout.writeln('\n3. Minting grants nothing until the child redeems');

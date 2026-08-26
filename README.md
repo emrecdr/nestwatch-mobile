@@ -343,7 +343,7 @@ upload.
 ## Unit tests
 
 ```bash
-flutter test        # 65 tests, no servers needed
+flutter test        # no servers needed; the run prints its own count
 ```
 
 `test/pinning_socket_test.dart` stands up a real TLS server on loopback and drives the
@@ -360,7 +360,14 @@ this app exists for went unchecked by the suite — it was proven only by
 
 A green suite says nothing about whether it *would* go red. Each mutation is a real defect
 this codebase argues against somewhere in its comments; a `SURVIVED` line means the
-argument is not defended by a test. Currently **22 killed, 0 survived**.
+argument is not defended by a test.
+
+The run ends with `killed=N survived=N anchors-missing=N` and exits non-zero unless the
+last two are zero. That count is not repeated here on purpose. This file used to say
+"65 tests" and "22 killed" while the suite reported 123 and 28 — a number copied into
+prose with nothing checking the copy, which is the exact failure the rest of this
+document is about, one layer up. The commands print the current figures; nothing here
+can drift from them if nothing here restates them.
 
 It has found six genuine gaps so far, each now closed:
 
