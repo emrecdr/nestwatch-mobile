@@ -11,7 +11,10 @@ library;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:workmanager/workmanager.dart';
 
+import 'src/background/background_poll.dart';
+import 'src/background/notifications.dart';
 import 'src/pairing/pairing_controller.dart';
 import 'src/pairing/secure_identity_store.dart';
 import 'src/pinning/pinned_http_overrides.dart';
@@ -30,6 +33,14 @@ Future<void> main() async {
   HttpOverrides.global = pinnedOverrides;
 
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Hands WorkManager the background entry point. This only *registers* the dispatcher;
+  // nothing is scheduled until the parent turns notifications on.
+  //
+  // The task runs in its own isolate, which never executes this function — see
+  // `background_session.dart` for why that matters more than it looks.
+  await Workmanager().initialize(callbackDispatcher);
+  await initNotifications();
 
   final controller = PairingController(
     overrides: pinnedOverrides,

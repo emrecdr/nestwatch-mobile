@@ -29,6 +29,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../api/session_cookie.dart';
+import '../background/seen_requests.dart';
 import 'server_identity.dart';
 import 'session_store.dart';
 
@@ -89,4 +90,28 @@ class SecureSessionStore implements SessionStore {
 
   @override
   Future<void> clear() => _storage.delete(key: _key);
+}
+
+/// Keystore-backed [SeenRequestStore].
+class SecureSeenRequestStore implements SeenRequestStore {
+  static const _key = 'nestwatch.seen_requests.v1';
+  static const _separator = ',';
+
+  /// The server caps the queue at 5, so this can never grow unboundedly — but it is
+  /// pruned to what is currently pending on every poll anyway, so a resolved request
+  /// cannot keep a slot forever.
+  final FlutterSecureStorage _storage;
+
+  const SecureSeenRequestStore({this._storage = const FlutterSecureStorage()});
+
+  @override
+  Future<Set<String>> load() async {
+    final raw = await _storage.read(key: _key);
+    if (raw == null || raw.isEmpty) return {};
+    return raw.split(_separator).where((s) => s.isNotEmpty).toSet();
+  }
+
+  @override
+  Future<void> save(Set<String> ids) =>
+      _storage.write(key: _key, value: ids.join(_separator));
 }

@@ -15,6 +15,8 @@ Walking skeleton (PLAN §9), **steps 2–3 of 5**:
 - **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback.
 - **step 4** — token redemption, password login, and a session that survives a restart.
 - **step 5** — three screens: time requests, today's usage, the screenshot.
+- **notifications (baseline tier)** — a WorkManager periodic poll that tells the parent a
+  request is waiting.
 
 The walking skeleton is complete. Rules, routines, curfew and the audit log stay in the
 browser, deliberately — configuration is done rarely, and each screen added here is a
@@ -113,6 +115,34 @@ dart run tool/prove_screens.dart --pin "$FINGERPRINT" --password "$PW"
 It checks the preview tier **by JPEG dimensions**, because the wrong tier also returns 200
 with a valid image — size is the only thing that can tell them apart.
 
+The notification tier:
+
+```bash
+dart run tool/prove_background.dart --pin "$FINGERPRINT" --password "$PW"
+```
+
+Its first check asserts a *vulnerability*: that a freshly spawned isolate reports
+`HttpOverrides.current == null`. If that ever starts failing, Dart changed something and
+the pinning story needs re-checking — it is not a reason to celebrate.
+
+### What was verified on a device, and what was not
+
+Verified on an Android 13 emulator against the live server: the permission prompt; that
+WorkManager schedules with the requested constraints; that the background isolate runs,
+loads the pin and cookie out of the Keystore, makes a *pinned* HTTPS request and posts a
+notification while the app is backgrounded; and — on a genuine 15-minute cycle, not a
+forced one — that a request resolved elsewhere has its notification withdrawn on the next
+poll.
+
+Not verified on a device: that a *still-pending* request is not re-announced on the second
+poll. `cmd jobscheduler run -f` cannot force a periodic WorkManager task early — it logs
+`"Delaying execution ... because it is being executed before schedule"` and re-enqueues —
+so a second run inside one period is not reachable from the shell. That branch is covered
+headlessly by `prove_background.dart` check 3 and by `test/seen_requests_test.dart`, both
+exercising the same `pollOnce`.
+
+Also still unverified anywhere: the QR camera path, which needs real hardware.
+
 That harness is deliberately re-runnable. A pairing token is single-use with a 15-minute
 TTL, and a deliberate wrong-password check spends one of the five attempts before
 nestwatch locks an IP out for a minute — so `--token` is optional and skips *aloud* when
@@ -170,6 +200,72 @@ pinned: `ImageCache` keys on the URL, this URL never changes, and a 5-second ref
 redisplay one cached frame forever. Fetching bytes through the pinned client and rendering
 `Image.memory` also avoids threading the session cookie in as a raw header.
 
+## Notifications
+
+The baseline tier from PLAN §5, and only that tier. A `dataSync` foreground service
+polling round the clock is the wrong shape twice over: Android 15 caps `dataSync` at
+**6 hours per 24 shared across all of an app's services**, so it is deaf three quarters of
+the day, and Google documents it as heading for deprecation with WorkManager named as the
+replacement.
+
+WorkManager has a 15-minute floor — anything shorter is silently clamped — no 6-hour cap,
+no persistent notification and no Play foreground-service declaration. The app's copy says
+exactly that rather than implying immediacy: *"Android will not check more often than every
+15 minutes for an app that is not running, so this is a heads-up rather than an alert."*
+
+### The trap: a background isolate is not pinned
+
+`HttpOverrides._global` is a plain `static` field (`dart-sdk/lib/_http/overrides.dart`),
+and **Dart statics are per-isolate**. A WorkManager task runs in its own isolate, spawned
+from `callbackDispatcher`, which never executes `main()` — so it starts with
+`HttpOverrides.current == null`. The workmanager docs teach exactly that shape: their
+"Manage Resources in Background Isolates" example constructs `HttpClient()` with no
+overrides.
+
+What that costs is worth stating precisely, because the obvious guess is wrong. It does
+**not** silently talk to an impostor — no public CA vouches for a self-signed certificate
+on a private LAN address, so an un-bootstrapped isolate cannot connect at all. The
+handshake is refused and the poll quietly does nothing.
+
+That is the trap. The symptom is "background notifications never arrive", and the fix that
+symptom invites is `badCertificateCallback = (_, _, _) => true` in the background isolate —
+which accepts anything, is catastrophic, and reads in a diff as making background sync
+work. `openBackgroundSession()` is the only way to get a client in that isolate, and it
+installs the pin before anything else.
+
+The same rule bars writing the polling in Kotlin: native HTTP never enters `dart:io`, so it
+cannot be pinned by this mechanism at all — exactly why `cronet_http` is banned.
+
+### Permissions WorkManager brings with it
+
+`androidx.work` merges these into the manifest whether or not you use them:
+
+```
+FOREGROUND_SERVICE
+FOREGROUND_SERVICE_SHORT_SERVICE
+WAKE_LOCK
+RECEIVE_BOOT_COMPLETED
+```
+
+They are there because *expedited* work runs as a short foreground service on API 31+.
+This app never requests expedited work — but **Play does not care who declared them**.
+PLAN §5 warns that foreground-service types need a Play Console declaration and that
+"updates are rejected for omitting it", and that now applies even though the foreground
+service tier was deliberately not built. For a child-monitoring app an unexplained
+foreground-service permission also invites extra review.
+
+Two options, neither taken here without a decision: declare `shortService` in Play Console
+at upload time, or strip it with `tools:node="remove"` since nothing requests expedited
+work. Stripping a permission a library declares is the kind of thing that breaks quietly
+later, so it is flagged rather than done.
+
+### Store paperwork
+
+`<meta-data android:name="isMonitoringTool" android:value="child_monitoring" />` is in the
+main manifest from day one. Apps are rejected specifically for omitting it, and it must be
+present in **every version code across every track** — including the first internal-test
+upload.
+
 ## Unit tests
 
 ```bash
@@ -205,7 +301,10 @@ and re-pairing can drop a session without disturbing the pin it just established
 ## Android notes
 
 - `compileSdk = 37`, above Flutter's default of 36, because `flutter_secure_storage` 11
-  requires it. `minSdk` stays at Flutter's 24, which clears both plugin floors.
+  requires it. `minSdk` stays at Flutter's 24, which clears every plugin floor.
+- Core library desugaring is enabled — `flutter_local_notifications` 10+ declares the
+  requirement in its AAR metadata, so without it the build fails at
+  `:app:checkDebugAarMetadata` rather than crashing on an old phone at runtime.
 - `INTERNET` is declared in the **main** manifest. Flutter's template puts it only in
   `debug`/`profile`, so a release build would ship with no network access.
 - The MLKit barcode model is **bundled**, not downloaded — see `android/gradle.properties`

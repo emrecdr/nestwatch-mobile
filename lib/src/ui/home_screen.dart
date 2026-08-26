@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import '../api/nestwatch_api.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
+import 'notifications_sheet.dart';
 import 'screenshot_screen.dart';
 import 'time_requests_screen.dart';
 import 'usage_screen.dart';
@@ -65,6 +66,15 @@ class _HomeScreenState extends State<HomeScreen> {
               size: 20,
             ),
             onPressed: () => _showIdentity(context),
+          ),
+          IconButton(
+            tooltip: 'Notifications',
+            icon: const Icon(Icons.notifications_none),
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              showDragHandle: false,
+              builder: (_) => const NotificationsSheet(),
+            ),
           ),
           IconButton(
             tooltip: 'Sign out',

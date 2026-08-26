@@ -4,6 +4,11 @@
          this app is an HTTPS call to a nestwatch server on the LAN. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Android 13+ requires this to be granted at runtime before any notification is
+         shown. Both notification tiers need it; without it the baseline poll runs and
+         tells nobody. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="Nestwatch"
         android:name="${applicationName}"
@@ -32,6 +37,15 @@
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <!-- Play's monitoring-app policy, required from day one.
+             Apps are rejected specifically for omitting it, and it must be present in
+             EVERY version code across EVERY track — including the first internal-test
+             upload, because a track that has ever shipped without it stays blocked.
+             See docs/PLAN.md §5, "Store paperwork from day one". -->
+        <meta-data
+            android:name="isMonitoringTool"
+            android:value="child_monitoring" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
