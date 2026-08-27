@@ -1,0 +1,89 @@
+/// The fixture certificates, inlined.
+///
+/// An integration test runs inside the app's own sandbox on a device, where
+/// `test/fixtures/` does not exist — and declaring those files as Flutter assets would
+/// ship a private key inside the real app, which is a worse trade than a copy.
+///
+/// So they are copied, and `test/inlined_fixtures_test.dart` compares this copy against
+/// the files on every ordinary `flutter test` run. A copy that can drift silently is the
+/// defect this repo keeps finding; a copy with a comparison on the host is not one.
+///
+/// These keys are deliberately public and worthless — see `test/fixtures/README.md`.
+library;
+
+const String serverCertPem = '''
+-----BEGIN CERTIFICATE-----
+MIIDPTCCAiWgAwIBAgIUf2Zs8psNPOKc58yvDUGZRgCt2TAwDQYJKoZIhvcNAQEL
+BQAwIDEeMBwGA1UEAwwVbmVzdHdhdGNoLXRlc3Qtc2VydmVyMB4XDTI2MDgyNjEy
+NDc0MloXDTM2MDgyMzEyNDc0MlowIDEeMBwGA1UEAwwVbmVzdHdhdGNoLXRlc3Qt
+c2VydmVyMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuj/Ub0LM+C6B
+999TqjLpeAGi8WHjRcereoIToDfe8rmE6Eb5wIXae0s417oISXdPvB1JVCPaHtds
+UnLa1PpA0NSWsBeLAorXgE1XcvjVV8v6sqz2D7+KUcktY959czHnKAisY2qZzwSz
+XAN6qXYWk60Q3IH9OtQ1zNqSjw1nBBTP1zlZFND2NWa9/h1bg7cik9fAi3yjyp/J
+YD6h/s+09FP4UbqA9kEz7QWeTPP+V5ND7a6aD/5vyGEzfF1AoYIXYjBvHd63dPAE
+BBcAMZ2IRZC+I13wNOGh1rfdLPxqyeWL61TQ31MgoMQ20zI+K0+lEip2b4Cx++yA
+vnGZotJfMwIDAQABo28wbTAdBgNVHQ4EFgQUnmwBMARRL2prVUGzhSPM61LmMUcw
+HwYDVR0jBBgwFoAUnmwBMARRL2prVUGzhSPM61LmMUcwDwYDVR0TAQH/BAUwAwEB
+/zAaBgNVHREEEzARhwR/AAABgglsb2NhbGhvc3QwDQYJKoZIhvcNAQELBQADggEB
+ABDpxlt9qhUgmOIqO3zCKftX9vCooDAG9z5wD/MQWjchwMoSsolINO8tPPbYMtRT
+cF4yM8L+id616qLesykjVC7NmBrJcvU6HdEMrep7duHVnlC1NzpyJeGjDTBEQN0l
+IBcihCORJCKCa797dOFOmLJ1V/k54u6kCvm2SNmwYNLnnUAF9OgPIrVWb7fAs7ad
+rzb/eGN+GMtxRR3K12iWtGqrMTdH5cn0/LnaPUC1DCe9b8oR2hl6Bb0UGeliZ5If
+rqgowYcGKG1deeoAG4x+5UHZ4Kffd8fmzjmSfGWkDJSOJ5I4kmnDPJWRFTBZxrLQ
+Z9DftEuhgOKsxATqWXZQxZE=
+-----END CERTIFICATE-----
+''';
+
+const String serverKeyPem = '''
+-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC6P9RvQsz4LoH3
+31OqMul4AaLxYeNFx6t6ghOgN97yuYToRvnAhdp7SzjXughJd0+8HUlUI9oe12xS
+ctrU+kDQ1JawF4sCiteATVdy+NVXy/qyrPYPv4pRyS1j3n1zMecoCKxjapnPBLNc
+A3qpdhaTrRDcgf061DXM2pKPDWcEFM/XOVkU0PY1Zr3+HVuDtyKT18CLfKPKn8lg
+PqH+z7T0U/hRuoD2QTPtBZ5M8/5Xk0PtrpoP/m/IYTN8XUChghdiMG8d3rd08AQE
+FwAxnYhFkL4jXfA04aHWt90s/GrJ5YvrVNDfUyCgxDbTMj4rT6USKnZvgLH77IC+
+cZmi0l8zAgMBAAECggEAVFA49vUinOdQ5skussnBbxYukV9i51/wfNEN2WXxg6gA
+RrZ6sXDm6xGuddo9jiR48AvB+lkQkQ2sd9aOwgNX/DGA1c6Sm2AHFonsoJuM2OX6
+Y5BxA8gN8eBEsAU0fUWGA1WJ1KeZYWIbX/gjOzu+FLQwAeLGpC8U+9umpSPIEswj
+OH13y5UjQ2y9dFBOSmA/Hy3YffctAu7eSWuYqXBTB5oD7CmaalgFW51ioTZGyfUR
+hA3JkAfn7Hu7GjC8qIi+ItDLqqTvN9Xoe3a83eid0/ao9OSDoMrulaY/2fC3dxCw
+STp2v2NyOdQ+xbLCRbPY3GaSkZzwGTxRidg+4JcPQQKBgQDj+wqK+h7MLR94lwSU
+aiIB0b8G2KBlPtWExTGnz/PDPgUPJjyuo8JbWnBkvcBr42dzXZCEMlis9MB94GsB
++ZtnFYbxHJ608pAZuDMD4UgM3dyDHapRhETNW2Qs+BohqySGLDduDRDnX73/3/k0
+KXz/jmPZRo9YIvUwE5I0ej8ByQKBgQDRI8vQEAXOAnrUUk2qzwrHF6bT5b0ezuxk
+oiUEN9MarrSzV3w/Auqso0O/1gTfdJYpMEZII5AV+H47cWPp4BR3qeWqXKQxEFOO
+VfnL4h0e7v/y/iFOFdvBvCOy91aXDrzRMp0gmuCQ4JoJ2zixtobULWOQWmhPeWO8
+/goD6/M3GwKBgQCBwPu7JagppPToeWtN3SoFxw7mIp0Hgr+blXAxhpXCZaYTfTvE
+WcfgnpShga3mucLDUllSJCV8KsDz46qDsUDVZtcqm5NogTWqrb+7UZjkWdGLfnLV
+emZ+Sqm1PnABAZsEEl5p8F3SkhddbmgzW/mcqboCi7pB+4N5HWp1G66IoQKBgAsC
+cWZAka2on8KxmnkVcSHN8vBQtcX7aqJZjs1MCwbqj4SpZFcE1knERnrAz3zb7FO6
+wNhnVtxxOmPysinLrAgon3h6bAJRM7TYfc/n1VSdjEfEbQhpSipGtzJipuJI2lPA
+8FiZDp1R1YoTSkbArxRYV1dwCvG0GDYIwYo3T5RlAoGAY+NTSUcNbrDtrT38IzeN
+BzgnJcsduirVFr5syDLMMG1Z1FT1yLTZNXxtg7WerLZlWOE3FvxILGBTvs46UEfr
+nTuMLmHb5djV/pYJvQ4EYyjF6b97lywd9X8mUVMKhgzJN+lWANW9og9ur7AskWj2
+jvw0inutmU3iOzg6xSuCXJE=
+-----END PRIVATE KEY-----
+''';
+
+const String impostorCertPem = '''
+-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgIUe2ZZa56XjMk4GJCNebMXGM9BAC0wDQYJKoZIhvcNAQEL
+BQAwIjEgMB4GA1UEAwwXbmVzdHdhdGNoLXRlc3QtaW1wb3N0b3IwHhcNMjYwODI2
+MTI0NzQyWhcNMzYwODIzMTI0NzQyWjAiMSAwHgYDVQQDDBduZXN0d2F0Y2gtdGVz
+dC1pbXBvc3RvcjCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKWe9uns
+haXajm7lYsBXZonIs1Bd8Q+BQ07GIJ+RkPEG76uVCiWlc8gwnDzcB0MBMnGT5xfM
+Ojh8UXvxa2QvcwOJGa8RsFxYgyWr9BWq7BQs9SRuMlfB+8VcH0gErpAG1zYABpej
+wTq+8zVfrQ0pJC3P/LD04yRLP5IcHvFy8F72dj+f77O/H5xuo0jRok6magOhgiQc
+DNzQoCXd5V0WJlwvqAbErdbC7WL/xrGSAZmeZGEQCdfB68/M36ad/kGa0fQvNPu/
+JMfJRyX0X05KxUGXsd63q551mfpZhPNTINtUVWtVvSmH+6GQ0GChy//PpuWP49vX
+DBeB9xk5sgGdxgkCAwEAAaNvMG0wHQYDVR0OBBYEFMw1r6luyO0EQqwoXPseWpR8
+BA65MB8GA1UdIwQYMBaAFMw1r6luyO0EQqwoXPseWpR8BA65MA8GA1UdEwEB/wQF
+MAMBAf8wGgYDVR0RBBMwEYcEfwAAAYIJbG9jYWxob3N0MA0GCSqGSIb3DQEBCwUA
+A4IBAQAq3sySqXgHtj2rKWTcMPJU0yOt3LIL4vCwbcxYBUSijf9AwkS/Ku7Ql+4p
+O4SnJ8Qpp6DQNlpnrnWq0oqFE2x+hpITqTB1yRCaxCqAGRcf0K/Uca6KCFgZyEjq
+3fl2+3Lv0UGnQVenhztjH77XjsVLVzSAvra4Z27awii84myUBrkPIxJw/nGWmQ2c
+ef974Ft62dMNdD9KEMQrkLbBgdjGq6EBZ/p6EaQi3JI1CEOeOTboyOquiRY1w/6d
+l0oNRP4WxUFK7djIazdoWEbM30JwGX+rZiv+dIHcpmMBTlCIUhL3XOpPaOwj7l1T
+NgJfkDDCQi8Rd6B2WY8bx3axE4KO
+-----END CERTIFICATE-----
+''';

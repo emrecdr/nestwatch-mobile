@@ -223,6 +223,39 @@ the wrong row.
 and less irritating than a confirmation dialog, and it stops being optional if `M10` moves
 approval to a lock screen.
 
+### M15 · The iOS target is scaffolded and has never been built
+
+`ios/` exists, the bundle identifier matches Android's `com.nestwatch.mobile`, the display
+name is set, and `Info.plist` carries `NSLocalNetworkUsageDescription` and
+`NSCameraUsageDescription` — with **no ATS exception, deliberately**, because the claim
+under test is that `dart:io` never consults ATS.
+
+Nothing has compiled. Measured 2026-08-27: Xcode 26.5 lists the iOS 26.5 SDK, but the iOS
+**platform** component is not installed, so both `flutter build ios --no-codesign` and a
+simulator run fail with *"iOS 26.5 is not installed. Please download and install the
+platform from Xcode > Settings > Components."* The only simulator runtime present is 18.2,
+left over from an older Xcode.
+
+**Unblock with** `xcodebuild -downloadPlatform iOS` (several GB), or Xcode → Settings →
+Components.
+
+Then, in order:
+
+1. `flutter build ios --no-codesign` — does it even compile.
+2. `flutter test integration_test/pinning_on_ios_test.dart -d <simulator>` — **the ATS
+   question**. Written, analyser-clean, never run. If ATS were in `dart:io`'s path, a
+   self-signed certificate on a bare IP could not connect and these fail.
+3. On **real hardware**, not the Simulator: local-network privacy. PLAN §7 is explicit that
+   the Simulator does not implement it, and that a local-network call attempted in the
+   background while the permission is undetermined "is denied silently without even
+   recording the denial" — which is the notification path failing invisibly.
+
+**Two things that are not merely untested but different on iOS.** `workmanager_apple` uses
+BGTaskScheduler, which the OS schedules at its own discretion — the honest Android promise
+of "within about fifteen minutes" is not true there and the copy would have to change. And
+the opt-in "watch now" tier has no iOS equivalent at all; `dataSync` foreground services do
+not exist.
+
 ### M7 · Store paperwork that only a Play Console can finish
 
 None of this is code, and none of it can be checked from here:
