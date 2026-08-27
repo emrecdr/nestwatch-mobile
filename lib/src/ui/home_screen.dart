@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
 import '../api/server_contract.dart';
+import '../pinning/certificate_expiry.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
 import 'notice.dart';
@@ -72,6 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final verified = widget.identity.provenance.isVerified;
     final contract = ContractCheck.of(widget.session.version);
+    final expiry = CertificateExpiry.of(widget.controller.pinnedNotAfter);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.identity.authority),
@@ -114,6 +116,16 @@ class _HomeScreenState extends State<HomeScreen> {
               contract.message!,
               tone: NoticeTone.warning,
               icon: Icons.warning_amber,
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            ),
+          // Only once it has actually lapsed. Inside the 30-day window everything still
+          // works everywhere, so that belongs in the identity dialog rather than across
+          // every screen for a month.
+          if (expiry != null && expiry.isWarning)
+            Notice(
+              expiry.message!,
+              tone: NoticeTone.warning,
+              icon: Icons.event_busy,
               margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             ),
           Expanded(
@@ -167,6 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final identity = widget.identity;
     final verified = identity.provenance.isVerified;
     final contract = ContractCheck.of(widget.session.version);
+    final expiry = CertificateExpiry.of(widget.controller.pinnedNotAfter);
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -197,6 +210,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   'That PC is running nestwatch ${contract.reported}, which is what '
                       'this app was built and tested against.',
             ),
+            if (expiry?.message case final warning?) ...[
+              const SizedBox(height: 12),
+              Text(warning),
+            ],
           ],
         ),
         actions: [

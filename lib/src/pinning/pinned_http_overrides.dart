@@ -90,16 +90,35 @@ class PinnedHttpOverrides extends HttpOverrides {
   /// was talking to.
   final Map<String, PinRejection> _rejections = {};
 
+  /// When the certificate this app *accepted* stops being valid.
+  ///
+  /// Recorded on a match rather than a refusal, which is the opposite of [_rejections]
+  /// and the reason it is a separate field: a refused certificate's dates describe
+  /// somebody else's certificate and are worth nothing here.
+  ///
+  /// nestwatch warns about this 30 days out, into a log on the child's PC. Because the
+  /// pin overrules expiry — measured in `test/expiry_test.dart`, not assumed — this app
+  /// is the client that goes on working after the browser stops, so it is the one that
+  /// has to say why.
+  DateTime? _acceptedNotAfter;
+
   PinnedHttpOverrides({Fingerprint? pin})
     : _pin = pin; // ignore: prefer_initializing_formals
 
   Fingerprint? get pin => _pin;
+
+  /// The end date of the last certificate this app accepted, or null before the first
+  /// successful handshake. See [CertificateExpiry] for why null is not an outcome.
+  DateTime? get acceptedNotAfter => _acceptedNotAfter;
 
   /// Swap the pinned certificate — after pairing, or after the parent confirms a
   /// deliberate re-install.
   void trust(Fingerprint fingerprint) {
     _pin = fingerprint;
     _rejections.clear();
+    // The recorded end date described the certificate being replaced. Carrying it over
+    // would warn about the old one's expiry on the strength of the new one's handshake.
+    _acceptedNotAfter = null;
   }
 
   /// Drop the pin, so the next handshake is refused and the certificate it presented is
@@ -112,6 +131,7 @@ class PinnedHttpOverrides extends HttpOverrides {
   void distrust() {
     _pin = null;
     _rejections.clear();
+    _acceptedNotAfter = null;
   }
 
   /// What `authority` (`host:port`) presented when it was last refused, if it was.
@@ -166,6 +186,7 @@ class PinnedHttpOverrides extends HttpOverrides {
     final expected = _pin;
 
     if (expected != null && expected.matches(observed.bytes)) {
+      _acceptedNotAfter = cert.endValidity;
       return true;
     }
 

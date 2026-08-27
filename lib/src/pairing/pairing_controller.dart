@@ -155,6 +155,11 @@ class PairingController {
   }
 
   PairingState get state => _state;
+
+  /// When the certificate this app accepted stops being valid, or null before the first
+  /// handshake. Read off the overrides rather than stored again here — one place decides
+  /// what was accepted, and it is the one that saw the certificate.
+  DateTime? get pinnedNotAfter => _overrides.acceptedNotAfter;
   ServerIdentity? get current => _current;
   NestwatchClient? get client => _client;
 

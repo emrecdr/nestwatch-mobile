@@ -98,6 +98,35 @@ else
   checked=$((checked + 1))
 fi
 
+# The renewal threshold the phone warns at, which must be the one nestwatch warns at.
+#
+# nestwatch's own comment says RENEW_WARN_DAYS is `pub` so that `doctor` "nags at the same
+# threshold as the service log", because two different answers to "is this cert about to
+# lapse?" would have the parent reading a diagnostic that contradicts their log. A phone
+# disagreeing with both would be a third answer.
+#
+# This is a named, `pub` constant rather than the inline literal whose refactor killed the
+# last reader of this kind -- but the UNREADABLE branch is here anyway, because that is
+# exactly what the last one thought too.
+theirs_warn=$(sed -n 's/^pub const RENEW_WARN_DAYS: u64 = \([0-9]*\);.*/\1/p' \
+  "$SRC/src/cert.rs" 2>/dev/null | head -1)
+mine_warn=$(sed -n 's/^const int renewWarnDays = \([0-9]*\);.*/\1/p' \
+  lib/src/pinning/certificate_expiry.dart | head -1)
+
+echo
+if [ -z "$theirs_warn" ] || [ -z "$mine_warn" ]; then
+  echo "  UNREADABLE    renew warning: nestwatch=[${theirs_warn:-?}] here=[${mine_warn:-?}]"
+  echo "                One of the two readers found nothing. Nothing was compared."
+  drift=$((drift + 1))
+elif [ "$theirs_warn" != "$mine_warn" ]; then
+  echo "  DRIFTED       renew warning: nestwatch warns at $theirs_warn days, this app at $mine_warn"
+  echo "                A parent would get two answers to the same question."
+  drift=$((drift + 1))
+else
+  echo "  same          renew warning ($mine_warn days, both sides)"
+  checked=$((checked + 1))
+fi
+
 echo
 if [ "$drift" -eq 0 ]; then
   echo "$checked checks, nothing drifted."

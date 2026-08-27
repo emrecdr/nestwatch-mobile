@@ -295,6 +295,19 @@ mutate "version: an older PC reported as a newer one" \
           ? ContractAgreement.serverOlder
           : ContractAgreement.serverNewer,"
 
+# The expiry warning. The first stops the end date ever being recorded, which is the
+# silent version of this feature not existing; the second removes the expired branch, so a
+# lapsed certificate reads as merely close to lapsing.
+mutate "expiry: the accepted end date is never recorded" \
+  lib/src/pinning/pinned_http_overrides.dart \
+  "      _acceptedNotAfter = cert.endValidity;" \
+  "      _acceptedNotAfter = null;"
+
+mutate "expiry: an expired certificate reads as merely expiring" \
+  lib/src/pinning/certificate_expiry.dart \
+  "      < 0 => CertificateLife.expired," \
+  "      < -99999 => CertificateLife.expired,"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 
