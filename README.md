@@ -9,18 +9,29 @@ source of truth for the server contract — read it before changing anything her
 
 ## Status
 
-Walking skeleton (PLAN §9), **steps 2–3 of 5**:
+Walking skeleton (PLAN §9), **complete** — each step proven against a live server before
+the next began, by the harness named beside it:
 
-- **step 2** — the pinned `HttpClient`, proven by failure.
-- **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback.
+- **step 2** — the pinned `HttpClient`, proven by failure. `prove_pin.dart`
+- **step 3** — QR scan, `#fp=` parsing, and the trust-on-first-use fallback. `prove_tofu.dart`
 - **step 4** — token redemption, password login, and a session that survives a restart.
-- **step 5** — three screens: time requests, today's usage, the screenshot.
+  `prove_login.dart`
+- **step 5** — time requests, today's usage, the screenshot, and [a fourth screen the plan
+  did not ask for](#the-four-screens). `prove_screens.dart`, `prove_timecodes.dart`
 - **notifications** — both tiers: a WorkManager periodic poll, and an opt-in "watch now"
-  `dataSync` foreground service.
+  `dataSync` foreground service. `prove_background.dart`
 
-The walking skeleton is complete. Rules, routines, curfew and the audit log stay in the
-browser, deliberately — configuration is done rarely, and each screen added here is a
-second interface to keep in step with 24 routes forever.
+Verified first use — the QR carrying `#fp=` — needed PLAN Phase 1, which lives in the
+nestwatch repo and landed there; `prove_phase1.dart` checks it against that server's own
+`pair_url` output rather than a fragment this side synthesised.
+
+What remains is all outside this repo: a Play Console `dataSync` declaration, a privacy
+policy, a release signing keystore, the QR camera path (needs hardware), and
+`Service.onTimeout` (needs API 35 and six real background hours).
+
+Rules, routines, curfew and the audit log stay in the browser, deliberately —
+configuration is done rarely, and each screen added here is a second interface to keep in
+step with 24 routes forever.
 
 ### Two ways to end up pinned
 
