@@ -7,6 +7,24 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/server_contract.dart';
 
+/// Versions expressed *relative to* [ContractCheck.testedAgainst], never spelled out.
+///
+/// The first cut of this file hardcoded '0.4.0' as the newer one. nestwatch shipped 0.4.0
+/// the same day, `testedAgainst` moved to match, and the test that claimed to describe a
+/// newer PC was suddenly describing an identical one — it failed loudly, which is the good
+/// case, but only because the branch it asserted happened to change. A fixture that names
+/// a constant it is defined against is a fixture with an expiry date on it.
+String _relative(int minorOffset) {
+  final parts = ContractCheck.testedAgainst.split('.');
+  return '${parts[0]}.${int.parse(parts[1]) + minorOffset}.0';
+}
+
+/// One whole major version ahead of whatever this app was tested against.
+String _majorAhead() {
+  final parts = ContractCheck.testedAgainst.split('.');
+  return '${int.parse(parts[0]) + 1}.0.0';
+}
+
 void main() {
   group('agreement', () {
     test('the version the goldens came from agrees with itself', () {
@@ -20,7 +38,9 @@ void main() {
       // nestwatch is pre-1.0: minor carries the breaking changes, patch carries fixes.
       // Warning on a patch bump would put a notice on a parent's screen for a release
       // that cannot have moved anything this app parses.
-      expect(ContractCheck.of('0.3.99').agreement, ContractAgreement.agreed);
+      final parts = ContractCheck.testedAgainst.split('.');
+      final laterPatch = '${parts[0]}.${parts[1]}.99';
+      expect(ContractCheck.of(laterPatch).agreement, ContractAgreement.agreed);
     });
   });
 
@@ -28,13 +48,13 @@ void main() {
     test(
       'an older PC is the warning case, because the parent holds the fix',
       () {
-        final check = ContractCheck.of('0.2.9');
+        final check = ContractCheck.of(_relative(-1));
         expect(check.agreement, ContractAgreement.serverOlder);
         expect(check.isWarning, isTrue);
         expect(check.message, contains('Updating nestwatch'));
         expect(
           check.message,
-          contains('0.2.9'),
+          contains(_relative(-1)),
           reason:
               'a parent has to be able to repeat back what their PC reported',
         );
@@ -42,7 +62,7 @@ void main() {
     );
 
     test('a newer PC says so without alarm — this app is the stale one', () {
-      final check = ContractCheck.of('0.4.0');
+      final check = ContractCheck.of(_relative(1));
       expect(check.agreement, ContractAgreement.serverNewer);
       expect(check.isWarning, isFalse);
       expect(check.message, isNotNull);
@@ -51,15 +71,15 @@ void main() {
 
     test('a major bump is a disagreement, not a rounding difference', () {
       expect(
-        ContractCheck.of('1.0.0').agreement,
+        ContractCheck.of(_majorAhead()).agreement,
         ContractAgreement.serverNewer,
       );
     });
 
     test('the two directions are not the same sentence', () {
       expect(
-        ContractCheck.of('0.2.0').message,
-        isNot(ContractCheck.of('0.4.0').message),
+        ContractCheck.of(_relative(-1)).message,
+        isNot(ContractCheck.of(_relative(1)).message),
         reason: 'the actions are opposite: update that PC, or update this app',
       );
     });
