@@ -148,6 +148,81 @@ Nothing here needs doing until then — and the way this repo finds out that day
 `tool/check_findings.sh` reporting that reference dangling, because a fixed entry is a
 deleted entry on both sides.
 
+### M10 · The notification is a dead end, on the app's only loop
+
+A child asks, the phone buzzes, and answering takes six steps: unlock, find the app, find
+the tab, find the row, press. `notifications.dart` sets no `actions:` and registers no tap
+handler (`onDidReceiveNotificationResponse` appears nowhere, measured 2026-08-27).
+
+`AndroidNotificationAction` exists in the plugin already, and `openBackgroundSession()`
+already returns a pinned, signed-in client inside a background isolate — it is how the
+fifteen-minute poll works. So the expensive half is built.
+
+**Fix.** Approve and Deny actions, handled in the background isolate, cancelling the
+notification on success. Two taps from a lock screen.
+
+**Pairs with `M14`.** Granting from a lock screen with no confirmation is the case that
+makes undo necessary rather than nice.
+
+Full reasoning in `docs/UX-REVIEW.md` §1.
+
+### M11 · Away from home reads exactly like a broken PC
+
+`nestwatch_api.dart` builds one sentence for every transport failure and appends
+`e.osError?.message` to it, and `PolledScreenState.waitingPane` renders that verbatim.
+Nothing in `lib/` consults connectivity — the only `wifi` match in the tree is
+`allowWifiLock` (measured 2026-08-27).
+
+For a LAN-only app, leaving the house is not an error. It is the most common thing that
+will ever happen, and it currently produces the same screen as a switched-off PC, with an
+`errno` string appended that no parent can act on. The careful `require_lan_peer` copy only
+fires when the server answers, which off-network it cannot.
+
+**Fix.** Consult connectivity first, and separate the three states a parent acts on
+differently: not on Wi-Fi, on a different Wi-Fi, or home and the PC is genuinely down.
+
+Full reasoning in `docs/UX-REVIEW.md` §2.
+
+### M12 · Nothing in the app has a semantic label
+
+`Semantics`, `semanticLabel`, `MergeSemantics` and `excludeSemantics` appear zero times in
+`lib/` (measured 2026-08-27). Five `tooltip:` strings are the whole accessibility surface.
+
+Worst three: the screenshot is an `Image.memory` with no label, so the screen whose entire
+content is an image announces nothing; the fingerprint is 95 characters of hex read aloud
+one character at a time; and Approve/Deny repeat per row with nothing naming which request.
+
+Touch targets are fine — all interactive elements are Material widgets, which enforce 48dp
+themselves. Labelling is the part nothing gives you for free.
+
+Full reasoning in `docs/UX-REVIEW.md` §3.
+
+### M13 · No `SafeArea`, and edge-to-edge is no longer optional at API 36
+
+`SafeArea`, `viewPadding` and `viewInsets` appear zero times in `lib/`. Flutter has
+defaulted to edge-to-edge since 3.27, and Android removed the opt-out for apps targeting
+API 36 — which this app does.
+
+`Scaffold` covers the tabs via the app bar and `NavigationBar`. The exposed screen is
+`pairing_screen.dart`: a `SingleChildScrollView` with flat `EdgeInsets.all(20)` whose last
+element is the privacy link, which is the one element Play requires to be reachable.
+
+**Reasoned, not observed.** Confirm on a device before changing anything — this is the kind
+of claim that is obvious in theory and wrong on hardware.
+
+### M14 · Approve grants minutes with no way back
+
+`time_requests_screen.dart` debounces with `_deciding`, shows a `SnackBar` on completion,
+and offers neither undo nor confirmation (measured 2026-08-27).
+
+The server is idempotent under a mutex, so a double tap is safe — that is what the debounce
+and the mutex are for, and PLAN §5 asks for exactly it. Neither helps the parent who tapped
+the wrong row.
+
+**Fix.** The `SnackBar` already exists; give it an `Undo` action while it is up. Cheaper
+and less irritating than a confirmation dialog, and it stops being optional if `M10` moves
+approval to a lock screen.
+
 ### M7 · Store paperwork that only a Play Console can finish
 
 None of this is code, and none of it can be checked from here:

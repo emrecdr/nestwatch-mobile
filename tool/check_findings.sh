@@ -96,10 +96,36 @@ while read -r from ref; do
   fi
 done <<< "$refs"
 
+# References within one file, which are the easy ones to get wrong precisely because they
+# look too simple to check. Added after a "pairs with M11" was written pointing at the
+# connectivity entry when it meant the undo one — caught by a shell loop run by hand, which
+# is not a thing anybody will remember to do twice.
+#
+# Cheap and local: no sibling checkout needed, so this half still runs when the other does
+# not. Scoped to entries for the same reason as above.
+echo
+internal_report=$(mktemp)
+for pair in "$MINE M" "$THEIRS O"; do
+  set -- $pair
+  file="$1"; prefix="$2"
+  for id in $(sed -n '/^## Open/,$p' "$file" | grep -ohE "\b$prefix[0-9]+\b" | sort -u); do
+    grep -qE "^### $id( |·|\`)" "$file" ||
+      echo "  DANGLING      $id — cited inside $file, but no '### $id' in it" >> "$internal_report"
+  done
+done
+internal=$(wc -l < "$internal_report" | tr -d ' ')
+if [ "$internal" -eq 0 ]; then
+  echo "  all same-file references resolve, both sides"
+else
+  cat "$internal_report"
+  dangling=$((dangling + internal))
+fi
+rm -f "$internal_report"
+
 echo
 if [ "$dangling" -eq 0 ]; then
-  echo "$checked reference(s), all resolving."
+  echo "$checked cross-repo reference(s) resolving, and no dangling same-file ones."
 else
-  echo "$dangling of $checked dangling — see above. Most likely good news."
+  echo "$dangling dangling — see above. Across repos, most likely good news."
 fi
 exit "$dangling"
