@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
 import '../api/server_contract.dart';
+import '../api/server_events.dart';
 import '../pinning/certificate_expiry.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
@@ -58,6 +59,60 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
+
+  /// One revision counter per subject that PC can invalidate.
+  ///
+  /// A counter rather than a callback list because the screens are rebuilt with new
+  /// widget instances on every tab change: a [Listenable] they can re-bind to survives
+  /// that, where a closure captured at construction would go stale.
+  final Map<String, ValueNotifier<int>> _stale = {
+    for (final subject in knownEventTags) subject: ValueNotifier<int>(0),
+  };
+
+  /// The single event connection. One for the whole screen, not one per tab — four
+  /// subscriptions to the same stream would be four held connections to that PC.
+  late final ServerEvents _events = ServerEvents(
+    open: () => widget.client.events(),
+    onChanged: (subject) => _stale[subject]?.value++,
+    // A 401 here means what it means anywhere else, and reconnecting cannot fix it.
+    onFatal: (_) => widget.controller.signOut(),
+  );
+
+  /// Stops the stream while the app is backgrounded.
+  ///
+  /// [Poller] already does this for polling, but it holds no connection between ticks —
+  /// this does. A pocketed phone keeping a TCP connection open to that PC costs battery
+  /// for events nobody can see, and the OS is liable to tear it down anyway, which would
+  /// just feed the backoff loop.
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _events.start();
+    _lifecycle = AppLifecycleListener(
+      onStateChange: (state) {
+        final foreground =
+            state == AppLifecycleState.resumed ||
+            state == AppLifecycleState.inactive;
+        if (foreground) {
+          _events.start();
+        } else {
+          _events.stop();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    _events.stop();
+    for (final notifier in _stale.values) {
+      notifier.dispose();
+    }
+    super.dispose();
+  }
 
   /// A 401 from any `/api/*` path means the session lapsed.
   ///
@@ -136,11 +191,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   client: widget.client,
                   visible: _tab == 0,
                   onFailure: _onFailure,
+                  invalidatedBy: _stale['requests'],
                 ),
                 UsageScreen(
                   client: widget.client,
                   visible: _tab == 1,
                   onFailure: _onFailure,
+                  invalidatedBy: _stale['usage'],
                 ),
                 ScreenshotScreen(
                   client: widget.client,

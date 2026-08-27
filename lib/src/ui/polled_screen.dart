@@ -13,6 +13,8 @@
 /// only [loadOnce], which is the part that actually has to agree.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
@@ -32,6 +34,14 @@ abstract class PolledScreen extends StatefulWidget {
 
   /// Where a lapsed session goes. See [loadOnce] for why it must not stop here.
   void Function(NestwatchException) get onFailure;
+
+  /// Fires when that PC says this screen's data has changed (`GET /api/events`).
+  ///
+  /// Null for a screen with no tag of its own, which then just polls. This is an
+  /// *early* refetch and never the only one — the cadence below is what guarantees a
+  /// screen is not stale, because a stream that died quietly looks exactly like a house
+  /// where nothing is happening.
+  Listenable? get invalidatedBy => null;
 }
 
 mixin PolledScreenState<W extends PolledScreen, T> on State<W> {
@@ -63,18 +73,36 @@ mixin PolledScreenState<W extends PolledScreen, T> on State<W> {
     poller
       ..wanted = true
       ..visible = widget.visible;
+    widget.invalidatedBy?.addListener(_invalidated);
   }
 
   @override
   void didUpdateWidget(W oldWidget) {
     super.didUpdateWidget(oldWidget);
     poller.visible = widget.visible;
+    if (!identical(oldWidget.invalidatedBy, widget.invalidatedBy)) {
+      oldWidget.invalidatedBy?.removeListener(_invalidated);
+      widget.invalidatedBy?.addListener(_invalidated);
+    }
   }
 
   @override
   void dispose() {
+    widget.invalidatedBy?.removeListener(_invalidated);
     poller.dispose();
     super.dispose();
+  }
+
+  /// That PC says this screen is stale.
+  ///
+  /// Gated on visibility for the same reason the poller is: an off-screen tab that
+  /// refetches is a real request to that PC for something nobody is reading, and with
+  /// four tabs alive at once one event would become four. A tab coming back on screen
+  /// already fires immediately — [Poller] does that on the transition into running — so
+  /// nothing is lost by waiting.
+  void _invalidated() {
+    if (!widget.visible || !mounted) return;
+    unawaited(load());
   }
 
   Future<void> load() async {

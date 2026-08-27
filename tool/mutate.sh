@@ -308,6 +308,22 @@ mutate "expiry: an expired certificate reads as merely expiring" \
   "      < 0 => CertificateLife.expired," \
   "      < -99999 => CertificateLife.expired,"
 
+# The event stream. Dispatch is gated on the data buffer rather than on having seen an
+# `event:` line, and that gate is what keeps axum's keep-alive — the literal bytes ":\n\n"
+# every 15 seconds — from registering as news and turning a quiet house into a refetch
+# loop. The second is the framing space, whose loss would make every tag unrecognisable.
+mutate "events: a keep-alive counts as news" \
+  lib/src/api/server_events.dart \
+  "      final dispatched = hasData
+          ? [name.isEmpty ? 'message' : name]
+          : const <String>[];" \
+  "      final dispatched = [name.isEmpty ? 'message' : name];"
+
+mutate "events: the framing space is kept as part of the tag" \
+  lib/src/api/server_events.dart \
+  "    if (value.startsWith(' ')) value = value.substring(1);" \
+  "    // framing space kept"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 

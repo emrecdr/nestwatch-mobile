@@ -10,6 +10,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'models.dart';
+import 'server_events.dart';
 import 'session_cookie.dart';
 
 /// One screenshot, and what the server said it actually sent.
@@ -241,6 +242,31 @@ class NestwatchClient {
     }
   }
 
+  /// `GET /api/events` → one connection's worth of change tags (nestwatch 0.4.0).
+  ///
+  /// Yields tag names until the connection ends, and ends with it — reconnecting is
+  /// [ServerEvents]'s job, not this method's. Splitting it that way keeps the part that
+  /// talks to that PC free of the part that decides how eagerly to try again.
+  ///
+  /// Deliberately **not** wrapped in [_mappingTransportFailures]. Everywhere else a
+  /// dropped connection is a failure worth a sentence on a screen; here it is the
+  /// expected end of a long-lived stream — a phone that slept, a Wi-Fi handover — and
+  /// turning that into "that PC is unreachable" would put an alarm in front of a parent
+  /// every time their phone changed rooms. The caller reconnects instead, and the 60 s
+  /// poll underneath it is what actually guarantees the screen is not stale.
+  ///
+  /// The one failure that must not be swallowed is a lapsed session, which is why
+  /// [_requireOk] still runs: a 401 here means the same thing it means anywhere else.
+  Stream<String> events() async* {
+    final response = await _open(
+      'GET',
+      '/api/events',
+      accept: 'text/event-stream',
+    );
+    _requireOk(response);
+    yield* serverSentEventNames(response);
+  }
+
   /// `GET /api/time-requests` → at most 5 pending, newest first.
   Future<List<TimeRequest>> timeRequests() async {
     final (response, body) = await _send('GET', '/api/time-requests');
@@ -450,11 +476,13 @@ class NestwatchClient {
     String path, {
     Map<String, Object?>? jsonBody,
     bool followRedirects = true,
+    String? accept,
   }) async {
     final request = await _client
         .openUrl(method, Uri.parse('https://$authority$path'))
         .timeout(timeout);
     request.followRedirects = followRedirects;
+    if (accept != null) request.headers.set(HttpHeaders.acceptHeader, accept);
 
     final held = _cookie;
     if (held != null) request.cookies.add(held.toCookie());

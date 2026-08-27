@@ -29,12 +29,15 @@ class UsageScreen extends PolledScreen {
   final bool visible;
   @override
   final void Function(NestwatchException) onFailure;
+  @override
+  final Listenable? invalidatedBy;
 
   const UsageScreen({
     super.key,
     required this.client,
     required this.visible,
     required this.onFailure,
+    this.invalidatedBy,
   });
 
   @override

@@ -282,6 +282,38 @@ pinned: `ImageCache` keys on the URL, this URL never changes, and a 5-second ref
 redisplay one cached frame forever. Fetching bytes through the pinned client and rendering
 `Image.memory` also avoids threading the session cookie in as a raw header.
 
+## Events, and why the poll stays
+
+nestwatch 0.4.0 serves `GET /api/events` — a `text/event-stream` of bare tags,
+`requests` and `usage`, plus `all` when a subscriber has fallen behind. No payload: the
+tag is the whole message and the answer is to refetch through the ordinary endpoint.
+
+PLAN §7 deferred long-polling because "it changes server behaviour for a client that does
+not exist yet. Revisit once the app is real." The app is real, and the behaviour changed
+anyway — for nestwatch's own dashboard. One held connection replaces about sixty requests
+an hour and takes worst-case latency from a minute to about a second.
+
+**The 60 s poll stays underneath it.** A poller that stops is silent for one interval; a
+stream that stops is silent forever and looks exactly like a house where nothing is
+happening. Events make the poll arrive early; they are never the only source of truth.
+
+Three things were read rather than assumed, because the parser turns on them:
+
+| | |
+|---|---|
+| the keep-alive is the literal bytes `":\n\n"` | `Event::DEFAULT_KEEP_ALIVE` in axum 0.8.9 |
+| dispatch is gated on the **data** buffer, not on an `event:` line | the SSE spec — and it is what stops that keep-alive registering as news |
+| `HttpClientResponse` is a `Stream<List<int>>` | `dart:io`, which is why `utf8.decoder` binds to it |
+
+Reconnection lives in `ServerEvents`, apart from the wire code, and backs off from one
+second to a cap of thirty. Only a delivered **event** resets that backoff — a successful
+*connect* would also be satisfied by a server that accepts and immediately closes, which
+turns backoff into a busy loop that reports itself as healthy. A 401 is handed up rather
+than retried: another connection cannot fix a lapsed session.
+
+`isReceiving` is exposed because a screen claiming live updates it is not receiving is
+worse than one that admits to polling.
+
 ## Notifications
 
 The baseline tier from PLAN §5, and only that tier. A `dataSync` foreground service
