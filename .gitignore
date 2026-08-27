@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle's own output. `/build/` above is anchored to the repo root and does not cover
+# this one, which is why a `git add -A` after a Gradle run swept a file out of it.
+/android/build/
+/android/.gradle/

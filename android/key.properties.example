@@ -1,0 +1,16 @@
+# Copy to android/key.properties and fill in. That file is untracked on purpose: it names
+# a keystore and holds its passwords, and neither belongs in a repository.
+#
+# Generate the upload key once (it can never be replaced without Play's help):
+#
+#   keytool -genkey -v -keystore ~/nestwatch-upload.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# Then enrol in Play App Signing, so that the key Google signs releases with is not the
+# one sitting on this laptop — losing an upload key is recoverable, losing an app signing
+# key is not.
+
+storePassword=
+keyPassword=
+keyAlias=upload
+storeFile=/absolute/path/to/nestwatch-upload.jks
