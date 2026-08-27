@@ -459,6 +459,24 @@ on that side — and the reader looking for the old shape found nothing. It said
 was compared. This is not agreement."* rather than printing four quiet `same` lines, which
 is the only reason either session noticed. The grep is gone; `limits.json` replaced it.
 
+### The other file the two repos share
+
+`docs/OPEN-FINDINGS.md` exists on both sides, with the same rules, and they cite each other
+as `repo#ID`. `tool/check_findings.sh` follows those references in both directions.
+
+It is worth having for one reason. Both files **delete** an entry when it is fixed — so a
+reference that resolved yesterday and dangles today is not sloppiness, it is the other side
+having shipped something, and for an entry that was *waiting* on it that is exactly when the
+wait ends. `M6` waits on `nestwatch#O72`; the way this repo finds out that day came is the
+`O72` heading vanishing.
+
+So the script reports a dangling reference as likely good news rather than as a failure, and
+its third outcome is the usual one: no sibling checkout, nothing compared, exit 2.
+
+```bash
+tool/check_findings.sh    # 0 all resolve · 1 something dangles · 2 could not look
+```
+
 `MISSING HERE` fired for real too: it is what reported that nestwatch had begun producing
 `limits.json` before this app consumed it.
 

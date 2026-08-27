@@ -24,6 +24,38 @@ Same rules as the sibling repo's, for the same reasons:
   wrong within a week and nothing will tell you.
 - **Verify before writing, and say how.** Mark measured claims as measured, with the date.
 
+## Writing across the two repos
+
+nestwatch keeps the same file, and the two now cite each other. That makes this a channel,
+and a channel needs an address rather than a sentence.
+
+**Cite a counterpart as `repo#ID`** — `nestwatch#O72`, `nestwatch-mobile#M6` — anywhere in
+the entry's prose. On an entry that crosses the boundary, open it with one line:
+
+```
+> **Cross-repo** · filed by `nestwatch` · blocked on `nestwatch#O72`
+```
+
+Only the parts that apply, and only when they are not the default:
+
+| | |
+|---|---|
+| `filed by <repo>` | omit when this repo wrote it — say it when the other side did, because prose lands under whoever commits and `git blame` will be wrong |
+| `blocked on <repo>#<ID>` | this entry cannot start until that one is done |
+| `pairs with <repo>#<ID>` | same subject, both sides have work, neither waits |
+
+**`tool/check_findings.sh` follows those references and is the reason they are addresses.**
+Both files delete an entry the moment it is fixed. So a reference that resolved yesterday
+and dangles today does not mean somebody was sloppy — it means *the other side shipped it*,
+and for a `blocked on` entry that is the exact moment the wait ends and the work begins.
+`M6` is the worked example: the way this repo learns that nestwatch published the constant
+is the `O72` heading disappearing.
+
+A dangling reference is therefore not an error to tidy away. It is the notification, and
+the script says so rather than reporting a failure. Its third outcome is the usual one —
+without the sibling checkout on the machine, nothing was compared, and it exits 2 saying so
+instead of reporting a clean run.
+
 **Two things this repo cannot check for itself, and both bite the entries below.** There is
 no CI — no `.github/`, no runner config of any kind — and `.git/hooks/` holds only the
 shipped `.sample` files (checked 2026-08-27). So `flutter test`, `tool/mutate.sh`,
@@ -103,14 +135,18 @@ this side wrote, and the framing was read out of axum's source rather than off a
 
 ### M6 · The `sed` over nestwatch's `src/cert.rs` should be deleted, not maintained
 
+> **Cross-repo** · blocked on `nestwatch#O72`
+
 `tool/check_golden.sh` reads `RENEW_WARN_DAYS` out of the sibling repo's Rust to keep
 `renewWarnDays` honest. It has an `UNREADABLE` branch and both failure modes were watched to
 fire — but it is a bespoke reader of another repository's source, which is the channel both
 repos retired when `limits.json` was introduced.
 
-Tracked on the other side as **nestwatch `O72`**, which proposes publishing the constant in
-`limits.json`. This entry is this side's half: once that lands, vendor the enlarged file and
-delete the reader.
+`nestwatch#O72` is the other half, and proposes publishing the constant in `limits.json`.
+This entry is this side's: once that lands, vendor the enlarged file and delete the reader.
+Nothing here needs doing until then — and the way this repo finds out that day arrived is
+`tool/check_findings.sh` reporting that reference dangling, because a fixed entry is a
+deleted entry on both sides.
 
 ### M7 · Store paperwork that only a Play Console can finish
 
