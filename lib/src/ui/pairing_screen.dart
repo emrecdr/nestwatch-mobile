@@ -10,6 +10,7 @@ import '../pairing/server_identity.dart';
 import '../pinning/fingerprint.dart';
 import 'fingerprint_view.dart';
 import 'notice.dart';
+import 'privacy_screen.dart';
 import 'scan_screen.dart';
 
 class PairingScreen extends StatefulWidget {
@@ -76,7 +77,23 @@ class _PairingScreenState extends State<PairingScreen> {
     ),
     body: SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      child: _body(context),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _body(context),
+          // Reachable without pairing, deliberately. Play requires the policy inside the
+          // app, and a reviewer has no nestwatch to pair with — behind sign-in it would
+          // be a policy nobody assessing this app can open.
+          const SizedBox(height: 32),
+          Center(
+            child: TextButton(
+              onPressed: () =>
+                  Navigator.of(context).push(PrivacyScreen.route()),
+              child: const Text('How this app handles your data'),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 

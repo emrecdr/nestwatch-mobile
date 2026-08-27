@@ -2,6 +2,11 @@
 
 Written 2026-08-27, against nestwatch `18e3b49` (0.4.0) and this repo at `ac2c7c3`.
 
+**Status: 1, 2, 4, 5, 6 and 7 are implemented. 3 was withdrawn** — research showed the fix
+it proposed does not exist and the default already does what it claimed to add. Each entry
+below is left as written, with what changed marked, because a list that quietly edits
+itself to match what got built is no longer a record of what was decided.
+
 ## How this list was made
 
 Every item was checked against the code rather than recalled, and each says plainly
@@ -57,7 +62,29 @@ only while the Screen tab is visible leaves a real gap (the toggle races the thu
 capture on the way out) and costs a parent the ability to screenshot the fingerprint for
 their own records, which the identity dialog already shows as selectable text.
 
-## 3. The child's own words, on a lock screen
+## 3. The child's own words, on a lock screen — **withdrawn**
+
+**The fix proposed here does not exist, and the default already does what it claimed to
+add.** Both halves were wrong, and checking is what showed it.
+
+`NotificationCompat.Builder` initialises `mVisibility` to `0` — `VISIBILITY_PRIVATE` —
+read out of the bytecode of `androidx.core:core:1.16.0` rather than from documentation
+that does not state it. flutter_local_notifications applies nothing when `visibility` is
+null, so setting `private` explicitly changes not one byte. And the package has no
+`publicVersion` API at all, so the *"1 request waiting"* redaction this recommended cannot
+be built on it.
+
+What remains after that is much narrower than the original entry implied. The text is
+written **by the child**, so the person most able to read the parent's lock screen already
+knows what it says; the residual exposure is a sibling, a guest, or an installed
+notification-listener app. `VISIBILITY_SECRET` would close it and costs the entire point
+of the notification, which is a glance.
+
+So: no change, and the entry is kept rather than deleted because a withdrawn finding is
+worth as much as a confirmed one. The real lesson is that "set the visibility explicitly"
+reads like diligence and would have been a line of code doing nothing.
+
+## 3b. The original entry, for the record
 
 **Verified.** `notifications.dart` sets no `visibility`, and the notification body is the
 child's free-text reason:
@@ -121,9 +148,11 @@ gone. Declaring the exclusion also makes the intent legible to the next reader.
 `signingConfig = signingConfigs.getByName("debug")` under `release`, with the generated
 TODO above it.
 
-Needed before any upload, and worth doing together: a real keystore (with Play App
-Signing), R8 enabled, and `--obfuscate --split-debug-info` so stack traces stay readable
-without shipping symbol names. None of this is security theatre for a LAN app, but the
+Needed before any upload. **R8 was wrong in this list**: Flutter enables code shrinking
+for every release build and documents that `--no-shrink` has no effect, so there was
+nothing to turn on. What is left is a real keystore with Play App Signing, and
+`--obfuscate --split-debug-info` so stack traces stay readable without shipping symbol
+names — a build flag rather than a Gradle setting. None of this is security theatre for a LAN app, but the
 debug key is a genuine "anyone can sign an update that looks like yours" problem the day
 this leaves the machine.
 

@@ -26,6 +26,7 @@ import '../pinning/certificate_expiry.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
 import 'notice.dart';
+import 'privacy_screen.dart';
 import 'notifications_sheet.dart';
 import 'screenshot_screen.dart';
 import 'time_codes_screen.dart';
@@ -274,6 +275,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(PrivacyScreen.route());
+            },
+            child: const Text('Privacy'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();
