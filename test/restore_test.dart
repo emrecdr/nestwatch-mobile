@@ -68,32 +68,39 @@ void main() {
       expect(
         overrides.pin,
         pin,
-        reason: 'the process must never be briefly unpinned while that PC is reachable',
+        reason:
+            'the process must never be briefly unpinned while that PC is reachable',
       );
     });
 
-    test('with a session to check, it says so rather than showing nothing', () async {
-      final c = await controllerWith(
-        identity: paired,
-        cookie: const SessionCookie('a-session'),
-        overrides: PinnedHttpOverrides(),
-      );
-      await c.restorePin();
-      expect(c.state, isA<PairingBusy>());
-    });
+    test(
+      'with a session to check, it says so rather than showing nothing',
+      () async {
+        final c = await controllerWith(
+          identity: paired,
+          cookie: const SessionCookie('a-session'),
+          overrides: PinnedHttpOverrides(),
+        );
+        await c.restorePin();
+        expect(c.state, isA<PairingBusy>());
+      },
+    );
 
-    test('with no stored session it goes straight to the password prompt', () async {
-      final c = await controllerWith(
-        identity: paired,
-        overrides: PinnedHttpOverrides(),
-      );
-      await c.restorePin();
-      expect(c.state, isA<PairingNeedsPassword>());
-      expect(
-        (c.state as PairingNeedsPassword).reason,
-        PasswordPrompt.sessionLapsed,
-      );
-    });
+    test(
+      'with no stored session it goes straight to the password prompt',
+      () async {
+        final c = await controllerWith(
+          identity: paired,
+          overrides: PinnedHttpOverrides(),
+        );
+        await c.restorePin();
+        expect(c.state, isA<PairingNeedsPassword>());
+        expect(
+          (c.state as PairingNeedsPassword).reason,
+          PasswordPrompt.sessionLapsed,
+        );
+      },
+    );
 
     test('an unpaired device pins nothing and asks for nothing', () async {
       final overrides = PinnedHttpOverrides();

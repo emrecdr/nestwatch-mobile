@@ -28,7 +28,6 @@ import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 import 'dev_server.dart';
 
-
 /// Width and height out of a JPEG's SOF marker.
 ///
 /// Reading the dimensions is the only way to tell the tiers apart on the wire: both are
@@ -233,7 +232,7 @@ Future<void> main(List<String> argv) async {
 
   finish(
     'All checks passed. Approve grants once, the tier is preview, and a lapsed '
-              'session is named as one.',
+    'session is named as one.',
   );
 }
 

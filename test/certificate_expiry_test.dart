@@ -24,7 +24,11 @@ void main() {
     test('inside the window it explains, without alarm', () {
       final e = at(12)!;
       expect(e.life, CertificateLife.expiringSoon);
-      expect(e.isWarning, isFalse, reason: 'everything still works, including a browser');
+      expect(
+        e.isWarning,
+        isFalse,
+        reason: 'everything still works, including a browser',
+      );
       expect(e.message, contains('12 days'));
       expect(
         e.message,
@@ -41,7 +45,8 @@ void main() {
       expect(
         e.message,
         contains('not because the PC is broken'),
-        reason: 'this is the whole reason the phone is the one that has to say it',
+        reason:
+            'this is the whole reason the phone is the one that has to say it',
       );
     });
   });

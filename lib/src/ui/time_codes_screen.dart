@@ -167,16 +167,11 @@ class _TimeCodesScreenState extends State<TimeCodesScreen>
                 60,
               ].where(TimeCodeLimits.isValidMinutes))
                 FilledButton.tonal(
-                  onPressed:
-                      _minting || atCap
-                      ? null
-                      : () => _mint(minutes),
+                  onPressed: _minting || atCap ? null : () => _mint(minutes),
                   child: Text('$minutes min'),
                 ),
               OutlinedButton(
-                onPressed: _minting || atCap
-                    ? null
-                    : _askForMinutes,
+                onPressed: _minting || atCap ? null : _askForMinutes,
                 child: const Text('Other…'),
               ),
             ],

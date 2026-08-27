@@ -263,7 +263,13 @@ class NestwatchClient {
       '/api/events',
       accept: 'text/event-stream',
     );
-    _requireOk(response);
+    if (response.statusCode != HttpStatus.ok) {
+      // Drain before throwing, or the socket is held until the idle timeout for a
+      // response nobody will read. Everywhere else the body is consumed on the way to
+      // the failure; here the stream is the return value, so nothing else would.
+      await response.drain<void>();
+      _requireOk(response);
+    }
     yield* serverSentEventNames(response);
   }
 

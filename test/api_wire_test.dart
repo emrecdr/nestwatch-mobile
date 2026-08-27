@@ -261,29 +261,32 @@ void main() {
     // own request instead of going through the shared one, and the copy had no 403
     // branch — so the single endpoint a parent reaches for when they are away from the
     // house was the one that could not tell them why it had failed.
-    test('including the screenshot, which used to build its own request', () async {
-      lanRefused = true;
+    test(
+      'including the screenshot, which used to build its own request',
+      () async {
+        lanRefused = true;
 
-      await expectLater(
-        client.session(),
-        throwsA(
-          isA<NestwatchException>().having(
-            (e) => e.failure,
-            'failure',
-            NestwatchFailure.notOnLan,
+        await expectLater(
+          client.session(),
+          throwsA(
+            isA<NestwatchException>().having(
+              (e) => e.failure,
+              'failure',
+              NestwatchFailure.notOnLan,
+            ),
           ),
-        ),
-      );
+        );
 
-      await expectLater(
-        client.screenshotPreview(onTimer: false),
-        throwsA(
-          isA<NestwatchException>()
-              .having((e) => e.failure, 'failure', NestwatchFailure.notOnLan)
-              .having((e) => e.message, 'names the cause', contains('VPN')),
-        ),
-      );
-    });
+        await expectLater(
+          client.screenshotPreview(onTimer: false),
+          throwsA(
+            isA<NestwatchException>()
+                .having((e) => e.failure, 'failure', NestwatchFailure.notOnLan)
+                .having((e) => e.message, 'names the cause', contains('VPN')),
+          ),
+        );
+      },
+    );
   });
 
   group('requests carry what they should', () {

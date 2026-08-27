@@ -15,7 +15,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const path = 'android/app/src/main/kotlin/com/nestwatch/mobile/MainActivity.kt';
+  const path =
+      'android/app/src/main/kotlin/com/nestwatch/mobile/MainActivity.kt';
 
   test('MainActivity is where FLAG_SECURE lives, and it is readable', () {
     expect(

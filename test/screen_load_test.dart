@@ -29,35 +29,32 @@ void main() {
       expect((outcome as Failed<int>).message, 'turn the VPN off');
     });
 
-    test(
-      'a lapsed session is handed up, and is NOT something to say',
-      () async {
-        // The whole point. A screen that renders this gives a parent a Try again button
-        // that cannot work — the session is gone and only a password brings it back —
-        // and hides the fact that the controller was never told to ask for one.
-        final outcome = await loadOnce<int>(
-          () async => throw const NestwatchException(
-            NestwatchFailure.sessionExpired,
-            'That sign-in expired.',
-          ),
-        );
-
-        expect(
-          outcome,
-          isA<HandedBack<int>>(),
-          reason: 'sessionExpired must travel past the screen to the controller',
-        );
-        expect(
-          outcome,
-          isNot(isA<Failed<int>>()),
-          reason: 'and must never become a message the screen shows instead',
-        );
-        expect(
-          (outcome as HandedBack<int>).failure.failure,
+    test('a lapsed session is handed up, and is NOT something to say', () async {
+      // The whole point. A screen that renders this gives a parent a Try again button
+      // that cannot work — the session is gone and only a password brings it back —
+      // and hides the fact that the controller was never told to ask for one.
+      final outcome = await loadOnce<int>(
+        () async => throw const NestwatchException(
           NestwatchFailure.sessionExpired,
-        );
-      },
-    );
+          'That sign-in expired.',
+        ),
+      );
+
+      expect(
+        outcome,
+        isA<HandedBack<int>>(),
+        reason: 'sessionExpired must travel past the screen to the controller',
+      );
+      expect(
+        outcome,
+        isNot(isA<Failed<int>>()),
+        reason: 'and must never become a message the screen shows instead',
+      );
+      expect(
+        (outcome as HandedBack<int>).failure.failure,
+        NestwatchFailure.sessionExpired,
+      );
+    });
 
     test('a defect in this app is not dressed up as an answer', () async {
       // Only NestwatchException means "that PC said something". A StateError is this

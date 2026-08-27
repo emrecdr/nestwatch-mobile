@@ -23,7 +23,6 @@ import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 
-
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'fingerprint', 'password', 'qr'});
   final qr = requireArg(args, 'qr');
@@ -116,6 +115,6 @@ Future<void> main(List<String> argv) async {
 
   finish(
     'All checks passed. Against a Phase 1 nestwatch this app performs verified '
-              'first use, with no fingerprint comparison asked of the parent.',
+    'first use, with no fingerprint comparison asked of the parent.',
   );
 }

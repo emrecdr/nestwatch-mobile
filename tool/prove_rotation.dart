@@ -35,9 +35,11 @@ import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 import 'dev_server.dart';
 
-
 Future<void> main(List<String> argv) async {
-  final args = parseArgs(argv, known: {'lan-gate', 'new-pin', 'old-pin', 'real'});
+  final args = parseArgs(
+    argv,
+    known: {'lan-gate', 'new-pin', 'old-pin', 'real'},
+  );
   final port = int.parse(args['real'] ?? '8445');
   final gatePort = int.parse(args['lan-gate'] ?? '9444');
 
@@ -171,6 +173,6 @@ Future<void> main(List<String> argv) async {
 
   finish(
     "All checks passed. A rotated certificate is refused and explained; an "
-              "off-LAN 403 is named rather than mistaken for a dead server.",
+    "off-LAN 403 is named rather than mistaken for a dead server.",
   );
 }

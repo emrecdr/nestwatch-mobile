@@ -41,11 +41,20 @@ class PrivacyScreen extends StatelessWidget {
             'is sent anywhere except back to that computer.',
           ),
           _h(theme, 'What it keeps on this phone'),
-          _bullet(theme, 'The fingerprint of that computer\'s certificate — the value '
-              'that lets this app tell the right computer from an impostor.'),
-          _bullet(theme, 'A sign-in cookie, so you do not retype the password daily.'),
-          _bullet(theme, 'The identifiers of requests you have already been told about, '
-              'so the same one is not announced twice.'),
+          _bullet(
+            theme,
+            'The fingerprint of that computer\'s certificate — the value '
+            'that lets this app tell the right computer from an impostor.',
+          ),
+          _bullet(
+            theme,
+            'A sign-in cookie, so you do not retype the password daily.',
+          ),
+          _bullet(
+            theme,
+            'The identifiers of requests you have already been told about, '
+            'so the same one is not announced twice.',
+          ),
           _p(
             theme,
             'All three are held in Android\'s encrypted store, under a key that cannot '

@@ -42,7 +42,10 @@ void main() {
 
   group('/session', () {
     test('both answers read as themselves', () {
-      expect(SessionInfo.fromJson(object('session-signed-in')).authenticated, isTrue);
+      expect(
+        SessionInfo.fromJson(object('session-signed-in')).authenticated,
+        isTrue,
+      );
       expect(
         SessionInfo.fromJson(object('session-signed-out')).authenticated,
         isFalse,
@@ -74,7 +77,8 @@ void main() {
       expect(
         codes.single.code.length,
         object('limits')['code_len'],
-        reason: 'the sample is minted from CODE_LEN, and limits.json publishes it — '
+        reason:
+            'the sample is minted from CODE_LEN, and limits.json publishes it — '
             'two files from the same constants, checked against each other',
       );
       expect(codes.single.minutes, 45);

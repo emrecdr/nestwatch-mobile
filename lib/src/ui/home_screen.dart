@@ -26,6 +26,7 @@ import '../pinning/certificate_expiry.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
 import 'notice.dart';
+import 'poller.dart';
 import 'privacy_screen.dart';
 import 'notifications_sheet.dart';
 import 'screenshot_screen.dart';
@@ -92,16 +93,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _events.start();
     _lifecycle = AppLifecycleListener(
-      onStateChange: (state) {
-        final foreground =
-            state == AppLifecycleState.resumed ||
-            state == AppLifecycleState.inactive;
-        if (foreground) {
-          _events.start();
-        } else {
-          _events.stop();
-        }
-      },
+      onStateChange: (state) =>
+          isForeground(state) ? _events.start() : _events.stop(),
     );
   }
 
@@ -114,6 +107,19 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     super.dispose();
   }
+
+  /// The caveats worth a strip across every screen, in the order a parent should read
+  /// them. Empty on the ordinary day, which is why the strip is a loop over nothing
+  /// rather than a widget that renders blank.
+  List<({String message, IconData icon})> _caveats(
+    ContractCheck contract,
+    CertificateExpiry? expiry,
+  ) => [
+    if (contract.isWarning)
+      (message: contract.message!, icon: Icons.warning_amber),
+    if (expiry != null && expiry.isWarning)
+      (message: expiry.message!, icon: Icons.event_busy),
+  ];
 
   /// A 401 from any `/api/*` path means the session lapsed.
   ///
@@ -164,24 +170,21 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
-          // Only the case where a screen is actually going to break gets a permanent
-          // strip. Being newer than this app, or unreadable, is worth saying in the
-          // identity dialog and not worth a band across every screen forever.
-          if (contract.isWarning)
+          // Both verdicts render identically; only the icon differs. Written out twice
+          // they were two places to change a margin, and a third caveat would have been
+          // a third copy. The types stay separate — a version disagreement and a lapsed
+          // certificate are different subjects with different sentences — but "a caveat
+          // bad enough for a permanent strip" is one rendering.
+          //
+          // Each is here only for the case that actually breaks something: a PC older
+          // than this app, and a certificate already past its date. Being newer, being
+          // unreadable, or being a month from expiry all still work everywhere, and
+          // belong in the identity dialog rather than banded across every screen.
+          for (final caveat in _caveats(contract, expiry))
             Notice(
-              contract.message!,
+              caveat.message,
               tone: NoticeTone.warning,
-              icon: Icons.warning_amber,
-              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-            ),
-          // Only once it has actually lapsed. Inside the 30-day window everything still
-          // works everywhere, so that belongs in the identity dialog rather than across
-          // every screen for a month.
-          if (expiry != null && expiry.isWarning)
-            Notice(
-              expiry.message!,
-              tone: NoticeTone.warning,
-              icon: Icons.event_busy,
+              icon: caveat.icon,
               margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             ),
           Expanded(
@@ -192,13 +195,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   client: widget.client,
                   visible: _tab == 0,
                   onFailure: _onFailure,
-                  invalidatedBy: _stale['requests'],
+                  invalidatedBy: _stale[requestsSubject],
                 ),
                 UsageScreen(
                   client: widget.client,
                   visible: _tab == 1,
                   onFailure: _onFailure,
-                  invalidatedBy: _stale['usage'],
+                  invalidatedBy: _stale[usageSubject],
                 ),
                 ScreenshotScreen(
                   client: widget.client,

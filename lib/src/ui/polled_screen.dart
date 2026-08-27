@@ -13,8 +13,6 @@
 /// only [loadOnce], which is the part that actually has to agree.
 library;
 
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
@@ -95,14 +93,15 @@ mixin PolledScreenState<W extends PolledScreen, T> on State<W> {
 
   /// That PC says this screen is stale.
   ///
-  /// Gated on visibility for the same reason the poller is: an off-screen tab that
-  /// refetches is a real request to that PC for something nobody is reading, and with
-  /// four tabs alive at once one event would become four. A tab coming back on screen
-  /// already fires immediately — [Poller] does that on the transition into running — so
-  /// nothing is lost by waiting.
+  /// Handed to the poller rather than acted on here. [Poller.nudge] already knows whether
+  /// anybody is looking — an off-screen tab that refetches is a real request to that PC
+  /// for something nobody is reading, and with four tabs alive one event would become
+  /// four — and it already refuses to overlap a poll that is still in flight. Re-deriving
+  /// either of those here was the shape the poller was refactored to stop.
   void _invalidated() {
-    if (!widget.visible || !mounted) return;
-    unawaited(load());
+    if (mounted) {
+      poller.nudge();
+    }
   }
 
   Future<void> load() async {
@@ -129,7 +128,9 @@ mixin PolledScreenState<W extends PolledScreen, T> on State<W> {
   /// number with a message beside it beats a blank screen.
   Widget waitingPane() {
     final message = error;
-    if (message == null) return const Center(child: CircularProgressIndicator());
+    if (message == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),

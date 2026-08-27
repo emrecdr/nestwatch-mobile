@@ -21,6 +21,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
+import 'package:nestwatch_mobile/src/api/server_events.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'dev_server.dart';
@@ -44,9 +45,12 @@ Future<void> main(List<String> argv) async {
   // ------------------------------------------------- 1. it opens and stays open
   stdout.writeln('1. The stream opens and stays open');
   final heard = <String>[];
-  final sub = listener.events().listen(heard.add, onError: (Object e) {
-    stdout.writeln('   stream error: $e');
-  });
+  final sub = listener.events().listen(
+    heard.add,
+    onError: (Object e) {
+      stdout.writeln('   stream error: $e');
+    },
+  );
   // Long enough to cross axum's 15-second keep-alive, which is the frame that would
   // wrongly register as news if the parser treated comments as events.
   await Future<void>.delayed(const Duration(seconds: 17));
@@ -58,22 +62,32 @@ Future<void> main(List<String> argv) async {
 
   // ------------------------------------------------- 2/3. an action is announced
   stdout.writeln('2. A change on one connection reaches another');
+  // Make the change rather than wait for one. `submitAsChild` posts to the child's own
+  // unauthenticated `/time-request`, which is how a request gets into the queue in real
+  // life — so the two checks below run on every invocation instead of skipping whenever
+  // nobody happens to have asked for minutes. An earlier version skipped them, which
+  // meant the interesting half of this harness was the half that usually did not run.
+  heard.clear();
+  await submitAsChild(authority, 5, 'prove_events');
+  await Future<void>.delayed(const Duration(seconds: 3));
+  check(
+    heard.contains('requests'),
+    'a request arriving is announced to a listener that did not make it',
+    'heard: $heard',
+  );
+
   final pending = await actor.timeRequests();
   if (pending.isEmpty) {
-    skip(
-      'a change is announced',
-      'no pending request to resolve — have the child ask for minutes on the ask '
-          'page, then run this again',
-    );
-    skip('approving announces both subjects', 'same reason');
+    // The submission above should have produced one. If it did not, the announcement
+    // check above has already failed and saying it twice adds nothing.
+    skip('approving announces both subjects', 'nothing pending to approve');
   } else {
     heard.clear();
     await actor.approveTimeRequest(pending.first.id);
     await Future<void>.delayed(const Duration(seconds: 3));
 
-    check(heard.isNotEmpty, 'the approval was announced', 'heard: $heard');
     check(
-      heard.contains('requests') && heard.contains('usage'),
+      heard.contains(requestsSubject) && heard.contains(usageSubject),
       'approving announces both the queue and the minutes',
       'heard: $heard',
     );
@@ -88,7 +102,11 @@ Future<void> main(List<String> argv) async {
   final anonymous = NestwatchClient(authority);
   try {
     await anonymous.events().first.timeout(const Duration(seconds: 5));
-    check(false, 'an unauthenticated stream is refused', 'it delivered an event');
+    check(
+      false,
+      'an unauthenticated stream is refused',
+      'it delivered an event',
+    );
   } on NestwatchException catch (e) {
     check(
       e.failure == NestwatchFailure.sessionExpired,
@@ -98,7 +116,11 @@ Future<void> main(List<String> argv) async {
   } on TimeoutException {
     // Open but silent is not refused. nestwatch puts /api/events behind require_auth,
     // so this would mean the gate moved.
-    check(false, 'an unauthenticated stream is refused', 'it stayed open and silent');
+    check(
+      false,
+      'an unauthenticated stream is refused',
+      'it stayed open and silent',
+    );
   } finally {
     anonymous.close();
   }

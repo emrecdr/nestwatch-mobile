@@ -49,10 +49,10 @@ void main() {
       expect(opens, 4);
 
       // ...and it stops growing rather than drifting into hours.
-      async.elapse(const Duration(minutes: 5));
-      final afterFiveMinutes = opens;
-      async.elapse(const Duration(seconds: 30));
-      expect(opens, afterFiveMinutes + 1, reason: 'capped at 30s');
+      async.elapse(const Duration(minutes: 30));
+      final settled = opens;
+      async.elapse(const Duration(minutes: 2));
+      expect(opens, settled + 1, reason: 'capped at two minutes');
 
       events.stop();
     });
@@ -77,7 +77,11 @@ void main() {
       async.elapse(const Duration(seconds: 1));
       expect(opens, 2);
       async.elapse(const Duration(seconds: 1));
-      expect(opens, 2, reason: 'the wait grew, so one second is no longer enough');
+      expect(
+        opens,
+        2,
+        reason: 'the wait grew, so one second is no longer enough',
+      );
       async.elapse(const Duration(seconds: 1));
       expect(opens, 3);
 
@@ -102,7 +106,11 @@ void main() {
 
       controller.close();
       async.flushMicrotasks();
-      expect(events.isReceiving, isFalse, reason: 'a closed stream delivers nothing');
+      expect(
+        events.isReceiving,
+        isFalse,
+        reason: 'a closed stream delivers nothing',
+      );
       events.stop();
     });
   });
@@ -133,6 +141,62 @@ void main() {
       // is the worst possible response to it.
       async.elapse(const Duration(minutes: 10));
       expect(opens, 1);
+    });
+  });
+
+  test('a PC too old to have the endpoint is not asked again', () {
+    fakeAsync((async) {
+      var opens = 0;
+      Object? fatal;
+      final events = ServerEvents(
+        open: () {
+          opens++;
+          // /api/events arrived in nestwatch 0.4.0. An older PC answers 404 forever, and
+          // will not grow the route while this app is running — so retrying it is a
+          // request every couple of minutes for the life of the app, against a server
+          // that has already given its final answer.
+          return Stream<String>.error(
+            const NestwatchException(
+              NestwatchFailure.unexpectedResponse,
+              'That PC answered 404.',
+            ),
+          );
+        },
+        onChanged: (_) {},
+        onFatal: (e) => fatal = e,
+      );
+      events.start();
+      async.flushMicrotasks();
+      expect(opens, 1);
+      expect(fatal, isA<NestwatchException>());
+      async.elapse(const Duration(hours: 2));
+      expect(opens, 1, reason: 'asked once, told no, stopped');
+    });
+  });
+
+  test('the backoff cap stays above the poll it sits beside', () {
+    // At 30s a switched-off PC was asked twice a minute — more traffic than the 60s poll
+    // this was meant to relieve.
+    fakeAsync((async) {
+      var opens = 0;
+      final events = ServerEvents(
+        open: () {
+          opens++;
+          return Stream<String>.error(const SocketFailure());
+        },
+        onChanged: (_) {},
+      );
+      events.start();
+      async.flushMicrotasks();
+      async.elapse(const Duration(minutes: 30));
+      final settled = opens;
+      async.elapse(const Duration(seconds: 61));
+      expect(
+        opens - settled,
+        lessThanOrEqualTo(1),
+        reason: 'at most one reconnect per poll interval once backed off',
+      );
+      events.stop();
     });
   });
 

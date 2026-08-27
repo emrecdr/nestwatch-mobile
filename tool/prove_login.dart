@@ -43,7 +43,6 @@ import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 import 'dev_server.dart';
 
-
 /// Coverage this run did not achieve, said out loud.
 ///
 /// A harness that quietly drops a check reads afterwards as though it covered
@@ -281,6 +280,6 @@ Future<void> main(List<String> argv) async {
 
   finish(
     'All run checks passed. A spent token degrades to the password prompt, and '
-              'the session survives a restart without one.',
+    'the session survives a restart without one.',
   );
 }

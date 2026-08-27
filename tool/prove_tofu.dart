@@ -31,7 +31,6 @@ import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 import 'dev_server.dart';
 
-
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'impostor', 'pin', 'real'});
   final realPort = int.parse(args['real'] ?? '8443');
@@ -182,6 +181,6 @@ Future<void> main(List<String> argv) async {
 
   finish(
     'All checks passed. Both pairing routes end pinned to the right certificate, '
-              'and the wrong one is refused rather than downgraded.',
+    'and the wrong one is refused rather than downgraded.',
   );
 }

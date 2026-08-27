@@ -17,7 +17,11 @@ void main() {
 
   group('the monitoring declaration', () {
     test('the manifest is where it lives, and it is readable', () {
-      expect(File(manifest).existsSync(), isTrue, reason: 'nothing below was checked');
+      expect(
+        File(manifest).existsSync(),
+        isTrue,
+        reason: 'nothing below was checked',
+      );
     });
 
     test('isMonitoringTool is declared, with the value for a parental tool', () {
@@ -36,7 +40,11 @@ void main() {
       final close = source.indexOf('</application>');
       expect(app, greaterThan(-1));
       expect(flag, greaterThan(app));
-      expect(flag, lessThan(close), reason: 'outside <application> it is not read');
+      expect(
+        flag,
+        lessThan(close),
+        reason: 'outside <application> it is not read',
+      );
     });
   });
 

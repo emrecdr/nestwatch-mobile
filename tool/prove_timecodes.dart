@@ -25,7 +25,6 @@ import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 import 'dev_server.dart';
 
-
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'audit', 'password', 'pin', 'real'});
   final port = int.parse(args['real'] ?? '8443');
@@ -72,7 +71,9 @@ Future<void> main(List<String> argv) async {
   // already owned by test/time_code_test.dart, but here reachable only when somebody has
   // a server up and runs this by hand. A property that can be checked on every commit
   // should not be checked once a fortnight.
-  stdout.writeln('\n2. The app refuses locally exactly what the server refuses');
+  stdout.writeln(
+    '\n2. The app refuses locally exactly what the server refuses',
+  );
   for (final bad in [0, TimeCodeLimits.maxMinutes + 1]) {
     final appRefuses = !TimeCodeLimits.isValidMinutes(bad);
     bool serverRefuses;
@@ -128,6 +129,6 @@ Future<void> main(List<String> argv) async {
   client.close();
   finish(
     'All checks passed. Codes mint, list, grant nothing until redeemed, and stay '
-              'out of the audit log.',
+    'out of the audit log.',
   );
 }

@@ -20,6 +20,19 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
+/// Whether an app in this lifecycle state is in front of somebody.
+///
+/// `inactive` counts: it is a transient state — the app switcher opening, a permission
+/// dialog, a phone call arriving — and treating it as gone makes a poller stop and
+/// restart every time a notification shade is pulled down.
+///
+/// Top-level because [Poller] is no longer the only thing that needs to answer this. The
+/// event stream stops when the app leaves the foreground too, and the two were written
+/// out separately and byte-identically — which is one predicate to change and two places
+/// to remember, and a divergence nothing would catch.
+bool isForeground(AppLifecycleState state) =>
+    state == AppLifecycleState.resumed || state == AppLifecycleState.inactive;
+
 /// Mirrors `_pollMs` in nestwatch `assets/app.js`.
 const Duration dataCadence = Duration(seconds: 60);
 
@@ -62,9 +75,7 @@ class Poller {
   Poller({required this.interval, required this.tick}) {
     _lifecycle = AppLifecycleListener(
       onStateChange: (state) {
-        _foreground =
-            state == AppLifecycleState.resumed ||
-            state == AppLifecycleState.inactive;
+        _foreground = isForeground(state);
         _sync();
       },
     );
@@ -89,6 +100,20 @@ class Poller {
 
   bool get isRunning => _timer != null;
 
+  /// Fire now, because something says the data is stale.
+  ///
+  /// Routed through here rather than by calling `tick` directly, and the difference is
+  /// not cosmetic. This gate already knows whether anybody is looking, so a caller does
+  /// not re-derive it; [_fire] already refuses to overlap, so an event landing during a
+  /// slow poll cannot stack a second request on that PC; and restarting the timer means
+  /// the next scheduled poll is a full interval after the fresh data rather than however
+  /// long was left on a clock that no longer has anything to catch up on.
+  void nudge() {
+    if (_timer == null) return;
+    _restartTimer();
+    unawaited(_fire());
+  }
+
   void dispose() {
     _wanted = false;
     _timer?.cancel();
@@ -100,7 +125,7 @@ class Poller {
   void _sync() {
     final shouldRun = _wanted && _visible && _foreground;
     if (shouldRun && _timer == null) {
-      _timer = Timer.periodic(interval, (_) => unawaited(_fire()));
+      _restartTimer();
       // Fire on the transition into running, not on whoever set the last flag. A screen
       // that waits a full minute for its first paint looks broken, and which of the three
       // reasons arrived last is not something a caller should have to think about.
@@ -109,6 +134,11 @@ class Poller {
       _timer!.cancel();
       _timer = null;
     }
+  }
+
+  void _restartTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(interval, (_) => unawaited(_fire()));
   }
 
   Future<void> _fire() async {

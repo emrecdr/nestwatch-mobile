@@ -314,10 +314,8 @@ mutate "expiry: an expired certificate reads as merely expiring" \
 # loop. The second is the framing space, whose loss would make every tag unrecognisable.
 mutate "events: a keep-alive counts as news" \
   lib/src/api/server_events.dart \
-  "      final dispatched = hasData
-          ? [name.isEmpty ? 'message' : name]
-          : const <String>[];" \
-  "      final dispatched = [name.isEmpty ? 'message' : name];"
+  "      if (hasData) yield name.isEmpty ? 'message' : name;" \
+  "      yield name.isEmpty ? 'message' : name;"
 
 mutate "events: the framing space is kept as part of the tag" \
   lib/src/api/server_events.dart \

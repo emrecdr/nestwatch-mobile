@@ -4,8 +4,10 @@ Android client for [nestwatch](https://github.com/emrecdr/nestwatch) — a LAN-o
 dashboard served by a Rust binary on the monitored PC. Nothing leaves the house, so this app
 talks to that PC directly over HTTPS with a **pinned certificate** and no cloud in between.
 
-The implementation plan is [`docs/PLAN.md`](docs/PLAN.md). It is validated, and it is the
-source of truth for the server contract — read it before changing anything here.
+The implementation plan is [`docs/PLAN.md`](docs/PLAN.md), what is still open is
+[`docs/OPEN-FINDINGS.md`](docs/OPEN-FINDINGS.md), and the hardening review that fed it is
+[`docs/HARDENING.md`](docs/HARDENING.md). The plan is validated, and it is the source of
+truth for the server contract — read it before changing anything here.
 
 ## Status
 
@@ -290,8 +292,15 @@ tag is the whole message and the answer is to refetch through the ordinary endpo
 
 PLAN §7 deferred long-polling because "it changes server behaviour for a client that does
 not exist yet. Revisit once the app is real." The app is real, and the behaviour changed
-anyway — for nestwatch's own dashboard. One held connection replaces about sixty requests
-an hour and takes worst-case latency from a minute to about a second.
+anyway — for nestwatch's own dashboard.
+
+**What it buys is latency, not fewer requests**, and an earlier draft of this section
+claimed both. Worst-case wait for a new request drops from 60 s to about one. The poll
+underneath is unchanged, so nothing was subtracted — a review pass caught the arithmetic:
+one held connection *plus* the same sixty polls an hour is more traffic than before, not
+less. Lengthening the cadence while the stream is healthy would realise the saving and is
+not done here, because the backstop stops being a backstop the moment it is tuned by the
+thing it is backing up.
 
 **The 60 s poll stays underneath it.** A poller that stops is silent for one interval; a
 stream that stops is silent forever and looks exactly like a house where nothing is

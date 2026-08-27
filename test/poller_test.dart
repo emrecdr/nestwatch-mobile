@@ -11,6 +11,7 @@
 /// reason the move was worth making.
 library;
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/ui/poller.dart';
 
@@ -43,7 +44,8 @@ void main() {
     expect(
       poller.isRunning,
       isFalse,
-      reason: 'an IndexedStack keeps an off-screen tab alive; it must not keep polling',
+      reason:
+          'an IndexedStack keeps an off-screen tab alive; it must not keep polling',
     );
     expect(ticks, isEmpty);
   });
@@ -56,7 +58,8 @@ void main() {
     expect(
       ticks,
       hasLength(1),
-      reason: 'a screen that waits a full minute for its first paint looks broken',
+      reason:
+          'a screen that waits a full minute for its first paint looks broken',
     );
   });
 
@@ -97,5 +100,99 @@ void main() {
     poller.wanted = true;
     expect(poller.isRunning, isTrue);
     expect(ticks, hasLength(1));
+  });
+  group('nudge — fire now, through the gate that already exists', () {
+    test('does nothing while the poller is not running', () {
+      fakeAsync((async) {
+        var ticks = 0;
+        final poller = Poller(
+          interval: const Duration(seconds: 60),
+          tick: () async => ticks++,
+        );
+        poller.wanted = true; // but never visible
+        poller.nudge();
+        async.flushMicrotasks();
+        expect(ticks, 0, reason: 'nobody is looking at this tab');
+        poller.dispose();
+      });
+    });
+
+    test('fires immediately while running', () {
+      fakeAsync((async) {
+        var ticks = 0;
+        final poller = Poller(
+          interval: const Duration(seconds: 60),
+          tick: () async => ticks++,
+        );
+        poller
+          ..wanted = true
+          ..visible = true;
+        async.flushMicrotasks();
+        expect(ticks, 1, reason: 'the transition into running fires once');
+        poller.nudge();
+        async.flushMicrotasks();
+        expect(ticks, 2);
+        poller.dispose();
+      });
+    });
+
+    test('restarts the interval, so the next poll is a full one', () {
+      fakeAsync((async) {
+        var ticks = 0;
+        final poller = Poller(
+          interval: const Duration(seconds: 60),
+          tick: () async => ticks++,
+        );
+        poller
+          ..wanted = true
+          ..visible = true;
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 50));
+        expect(ticks, 1);
+
+        poller.nudge();
+        async.flushMicrotasks();
+        expect(ticks, 2);
+
+        // The old clock had 10s left on it. Fresh data should not be refetched then.
+        async.elapse(const Duration(seconds: 11));
+        expect(ticks, 2, reason: 'the interval restarted with the nudge');
+        async.elapse(const Duration(seconds: 50));
+        expect(ticks, 3);
+        poller.dispose();
+      });
+    });
+
+    test('will not stack a second request on a slow tick', () {
+      fakeAsync((async) {
+        var started = 0;
+        final poller = Poller(
+          interval: const Duration(seconds: 60),
+          tick: () async {
+            started++;
+            await Future<void>.delayed(const Duration(seconds: 10));
+          },
+        );
+        poller
+          ..wanted = true
+          ..visible = true;
+        async.flushMicrotasks();
+        expect(started, 1);
+
+        // A burst of events while the first request is still out.
+        poller
+          ..nudge()
+          ..nudge()
+          ..nudge();
+        async.flushMicrotasks();
+        expect(started, 1, reason: 'the overlap guard holds for nudges too');
+
+        async.elapse(const Duration(seconds: 10));
+        poller.nudge();
+        async.flushMicrotasks();
+        expect(started, 2);
+        poller.dispose();
+      });
+    });
   });
 }

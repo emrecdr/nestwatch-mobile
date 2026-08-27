@@ -30,7 +30,6 @@ import 'dev_server.dart';
 /// sink's log while the wrong certificate is pinned, the pin let a request body out.
 const _marker = 'THIS-BODY-MUST-NEVER-REACH-AN-IMPOSTOR';
 
-
 Future<void> main(List<String> argv) async {
   final args = parseArgs(argv, known: {'impostor', 'pin', 'real', 'sink'});
 

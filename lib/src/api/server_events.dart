@@ -46,33 +46,38 @@ import 'nestwatch_api.dart';
 /// Line splitting is [LineSplitter]'s job, and the buffering that goes with it: a tag can
 /// arrive split across two TCP reads, and `event: requ` / `ests` must not become two
 /// events. Same for [Utf8Decoder] and a multi-byte character split down the middle.
-Stream<String> serverSentEventNames(Stream<List<int>> body) {
-  return body
-      .transform(utf8.decoder)
-      .transform(const LineSplitter())
-      .transform(_dispatchTransformer);
-}
+Stream<String> serverSentEventNames(Stream<List<int>> body) async* {
+  final lines = body.transform(utf8.decoder).transform(const LineSplitter());
 
-final StreamTransformer<String, String>
-_dispatchTransformer = StreamTransformer<String, String>.fromBind((lines) {
+  // Per-event accumulation. Local to this generator, so two connections cannot see each
+  // other's half-built event — which a transformer holding state outside its bind callback
+  // would allow, and which nothing here would have made obvious.
   var name = '';
   var hasData = false;
 
-  return lines.expand((line) {
+  await for (final line in lines) {
     // A blank line dispatches whatever has accumulated.
     if (line.isEmpty) {
-      final dispatched = hasData
-          ? [name.isEmpty ? 'message' : name]
-          : const <String>[];
+      if (hasData) yield name.isEmpty ? 'message' : name;
       name = '';
       hasData = false;
-      return dispatched;
+      continue;
     }
 
-    // `:` opens a comment. This is what a keep-alive looks like — axum sends one on
-    // an idle stream so the OS does not drop a connection that is working correctly.
-    // Treating it as an event would turn "nothing has happened" into a refetch loop.
-    if (line.startsWith(':')) return const <String>[];
+    // `:` opens a comment — a keep-alive, which axum sends on an idle stream so the OS
+    // does not drop a connection that is working correctly.
+    //
+    // **This branch is redundant, and is kept for the reader rather than for the
+    // parser.** Measured rather than assumed: deleting it leaves every test in
+    // `server_events_test.dart` passing. A line starting with `:` has its colon at index
+    // 0, so the field name is the empty string and matches neither `event` nor `data` —
+    // and dispatch is gated on `hasData` either way.
+    //
+    // It stays because somebody scanning for "what stops a keep-alive counting as news"
+    // should find something here. It says outright that it is not that thing, so nobody
+    // removes the gate above believing this covers them. The mutation audit holds the
+    // gate; nothing holds this line, and nothing needs to.
+    if (line.startsWith(':')) continue;
 
     final colon = line.indexOf(':');
     final field = colon == -1 ? line : line.substring(0, colon);
@@ -86,19 +91,20 @@ _dispatchTransformer = StreamTransformer<String, String>.fromBind((lines) {
       case 'data':
         hasData = true;
       // `id` and `retry` are spec fields nestwatch does not send. Ignored rather than
-      // rejected: an unknown field must not break the stream, which is the property
-      // that lets that side add one without this side shipping first.
+      // rejected: an unknown field must not break the stream, which is the property that
+      // lets that side add one without this side shipping first.
     }
-    return const <String>[];
-  });
-});
+  }
+}
 
 /// The tags this app knows how to act on.
 ///
 /// `all` is not in here because it is not a subject — it means *every* subject, and the
 /// caller expands it. Keeping it out of this set stops a screen subscribing to "all" as
 /// though it were a topic of its own.
-const Set<String> knownEventTags = {'requests', 'usage'};
+const String requestsSubject = 'requests';
+const String usageSubject = 'usage';
+const Set<String> knownEventTags = {requestsSubject, usageSubject};
 
 /// The subjects a tag invalidates.
 ///
@@ -140,7 +146,14 @@ class ServerEvents {
   final void Function(Object error)? onFatal;
 
   static const Duration _firstBackoff = Duration(seconds: 1);
-  static const Duration _maxBackoff = Duration(seconds: 30);
+
+  /// Longer than the poll it sits beside, deliberately.
+  ///
+  /// At 30 s a PC that is simply switched off was asked *twice a minute* — more traffic
+  /// than the 60 s poll this was meant to relieve, and the exact opposite of the point.
+  /// Freshness costs nothing here: the poll is the backstop, so a stream that takes two
+  /// minutes to notice the PC is back has lost nothing a parent can see.
+  static const Duration _maxBackoff = Duration(minutes: 2);
 
   StreamSubscription<String>? _sub;
   Timer? _retry;
@@ -186,8 +199,7 @@ class ServerEvents {
         // A lapsed session is not something another connection fixes. Handing it up
         // rather than retrying stops this quietly hammering a PC that is answering 401
         // perfectly correctly.
-        if (error is NestwatchException &&
-            error.failure == NestwatchFailure.sessionExpired) {
+        if (error is NestwatchException && _isPermanent(error.failure)) {
           stop();
           onFatal?.call(error);
           return;
@@ -202,6 +214,18 @@ class ServerEvents {
       cancelOnError: true,
     );
   }
+
+  /// Failures another connection cannot fix.
+  ///
+  /// A lapsed session is one: reconnecting hammers a PC that is answering 401 perfectly
+  /// correctly. **A missing endpoint is the other**, and it is the one that matters in
+  /// practice — `/api/events` arrived in nestwatch 0.4.0, so every older PC answers 404
+  /// forever. Retried, that is a request every couple of minutes for the life of the
+  /// app, against a server that will never grow the route while it is running. The
+  /// version check already tells the parent their PC is behind; this just stops asking.
+  static bool _isPermanent(NestwatchFailure failure) =>
+      failure == NestwatchFailure.sessionExpired ||
+      failure == NestwatchFailure.unexpectedResponse;
 
   void _scheduleRetry() {
     if (!_wanted || _retry != null) return;

@@ -50,10 +50,13 @@ enum CertificateLife {
 
 class CertificateExpiry {
   final CertificateLife life;
-  final DateTime notAfter;
+
+  /// Negative once the date has passed, which is what the expired sentence counts back
+  /// from. The end date itself is not kept: every sentence a parent reads is written in
+  /// days, and a field nothing reads is a field that goes quietly wrong.
   final int daysLeft;
 
-  const CertificateExpiry._(this.life, this.notAfter, this.daysLeft);
+  const CertificateExpiry._(this.life, this.daysLeft);
 
   /// `null` when no certificate has been seen yet — see the library note above.
   static CertificateExpiry? of(DateTime? notAfter, {DateTime? now}) {
@@ -65,7 +68,7 @@ class CertificateExpiry {
       <= renewWarnDays => CertificateLife.expiringSoon,
       _ => CertificateLife.healthy,
     };
-    return CertificateExpiry._(life, notAfter, left);
+    return CertificateExpiry._(life, left);
   }
 
   bool get isWarning => life == CertificateLife.expired;

@@ -52,13 +52,19 @@ void main() {
     await server.close(force: true);
   });
 
-  test('the fixture really is expired, or the rest of this file proves nothing', () {
-    final der = File('$dir/expired.cert.pem').readAsStringSync();
-    expect(der, contains('BEGIN CERTIFICATE'));
-    // Read through the same door the app uses, rather than an openssl call a machine
-    // might not have: the handshake below hands us the parsed certificate.
-    expect(expiredPin.toString(), matches(RegExp(r'^([0-9A-F]{2}:){31}[0-9A-F]{2}$')));
-  });
+  test(
+    'the fixture really is expired, or the rest of this file proves nothing',
+    () {
+      final der = File('$dir/expired.cert.pem').readAsStringSync();
+      expect(der, contains('BEGIN CERTIFICATE'));
+      // Read through the same door the app uses, rather than an openssl call a machine
+      // might not have: the handshake below hands us the parsed certificate.
+      expect(
+        expiredPin.toString(),
+        matches(RegExp(r'^([0-9A-F]{2}:){31}[0-9A-F]{2}$')),
+      );
+    },
+  );
 
   test('an expired certificate is ACCEPTED when the pin matches', () async {
     HttpOverrides.global = PinnedHttpOverrides(pin: expiredPin);
@@ -104,24 +110,27 @@ void main() {
     );
   });
 
-  test('the accepted end date is recorded, and is what the callback saw', () async {
-    final overrides = PinnedHttpOverrides(pin: expiredPin);
-    HttpOverrides.global = overrides;
-    expect(
-      overrides.acceptedNotAfter,
-      isNull,
-      reason: 'nothing has been accepted yet',
-    );
+  test(
+    'the accepted end date is recorded, and is what the callback saw',
+    () async {
+      final overrides = PinnedHttpOverrides(pin: expiredPin);
+      HttpOverrides.global = overrides;
+      expect(
+        overrides.acceptedNotAfter,
+        isNull,
+        reason: 'nothing has been accepted yet',
+      );
 
-    final client = HttpClient();
-    await (await (await client.getUrl(
-      Uri.parse('https://127.0.0.1:${server.port}/session'),
-    )).close()).drain<void>();
-    client.close();
+      final client = HttpClient();
+      await (await (await client.getUrl(
+        Uri.parse('https://127.0.0.1:${server.port}/session'),
+      )).close()).drain<void>();
+      client.close();
 
-    expect(overrides.acceptedNotAfter, isNotNull);
-    expect(overrides.acceptedNotAfter!.isBefore(DateTime.now()), isTrue);
-  });
+      expect(overrides.acceptedNotAfter, isNotNull);
+      expect(overrides.acceptedNotAfter!.isBefore(DateTime.now()), isTrue);
+    },
+  );
 
   test('re-pairing forgets the old certificate\'s end date', () async {
     // Otherwise the next handshake would carry a warning about a certificate that is no
@@ -139,18 +148,21 @@ void main() {
     expect(overrides.acceptedNotAfter, isNull);
   });
 
-  test('a wrong pin still refuses it — expiry does not weaken the check', () async {
-    HttpOverrides.global = PinnedHttpOverrides(
-      pin: fingerprintOf('$dir/server.cert.pem'),
-    );
-    final client = HttpClient();
-    await expectLater(
-      client
-          .getUrl(Uri.parse('https://127.0.0.1:${server.port}/session'))
-          .then((r) => r.close()),
-      throwsA(isA<HandshakeException>()),
-    );
-    expect(handlerRan, isFalse);
-    client.close();
-  });
+  test(
+    'a wrong pin still refuses it — expiry does not weaken the check',
+    () async {
+      HttpOverrides.global = PinnedHttpOverrides(
+        pin: fingerprintOf('$dir/server.cert.pem'),
+      );
+      final client = HttpClient();
+      await expectLater(
+        client
+            .getUrl(Uri.parse('https://127.0.0.1:${server.port}/session'))
+            .then((r) => r.close()),
+        throwsA(isA<HandshakeException>()),
+      );
+      expect(handlerRan, isFalse);
+      client.close();
+    },
+  );
 }

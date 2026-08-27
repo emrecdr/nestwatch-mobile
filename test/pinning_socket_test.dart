@@ -22,7 +22,6 @@ import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'support/certs.dart';
 
-
 void main() {
   const dir = fixtureDir;
   late HttpServer server;

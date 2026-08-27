@@ -30,7 +30,6 @@ import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'harness.dart';
 import 'dev_server.dart';
 
-
 /// Runs in a spawned isolate and reports whether it inherited the pin.
 void _reportOverrides(SendPort send) {
   send.send(HttpOverrides.current == null);
@@ -188,6 +187,6 @@ Future<void> main(List<String> argv) async {
 
   finish(
     'All checks passed. The background isolate is pinned deliberately, and a '
-              'request is announced once.',
+    'request is announced once.',
   );
 }

@@ -38,6 +38,32 @@ fi
 echo "Comparing $MINE against $SRC/tests/golden ($(cd "$SRC" && git rev-parse --short HEAD))"
 echo
 
+
+# Compare one value read from each side, with the third outcome spelled out.
+#
+# Two of these existed written out, and a third would have been a third copy of the same
+# three branches — which is how the shapes drift apart and one of them quietly loses its
+# unreadable case. The argument order is (label, theirs, mine, advice).
+#
+# Empty on either side is UNREADABLE, never agreement: a reader that found nothing has
+# compared nothing, and that is the failure this whole script exists to make loud.
+compare() {
+  local label="$1" theirs="$2" mine="$3" advice="$4"
+  if [ -z "$theirs" ] || [ -z "$mine" ]; then
+    echo "  UNREADABLE    $label: nestwatch=[${theirs:-?}] here=[${mine:-?}]"
+    echo "                One of the two readers found nothing. Nothing was compared --"
+    echo "                fix the reader, do not assume they agree."
+    drift=$((drift + 1))
+  elif [ "$theirs" != "$mine" ]; then
+    echo "  DRIFTED       $label: nestwatch=$theirs, here=$mine"
+    echo "                $advice"
+    drift=$((drift + 1))
+  else
+    echo "  same          $label ($mine)"
+    checked=$((checked + 1))
+  fi
+}
+
 drift=0
 checked=0
 
@@ -81,51 +107,23 @@ mine_version=$(sed -n "s/.*testedAgainst = '\([^']*\)'.*/\1/p" \
   lib/src/api/server_contract.dart | head -1)
 
 echo
-if [ -z "$theirs_version" ] || [ -z "$mine_version" ]; then
-  echo "  UNREADABLE    version: nestwatch=[${theirs_version:-?}] here=[${mine_version:-?}]"
-  echo "                One of the two readers found nothing. Nothing was compared --"
-  echo "                fix the reader, do not assume they agree."
-  drift=$((drift + 1))
-elif [ "${theirs_version%.*}" != "${mine_version%.*}" ]; then
-  # major.minor only, matching ContractCheck's own rule -- a patch bump on that side
-  # cannot move the wire format, and failing here would be noise.
-  echo "  VERSION       nestwatch is $theirs_version, ContractCheck.testedAgainst is $mine_version"
-  echo "                The app will tell a parent the two disagree. If these golden"
-  echo "                files are current, bump testedAgainst with them."
-  drift=$((drift + 1))
-else
-  echo "  same          version ($mine_version tested against nestwatch $theirs_version)"
-  checked=$((checked + 1))
-fi
+# major.minor only, matching ContractCheck's own rule -- a patch bump on that side cannot
+# move the wire format, and failing here would be noise.
+compare "version" "${theirs_version%.*}" "${mine_version%.*}" \
+  "The app will tell a parent the two disagree. If these golden files are current, bump testedAgainst with them."
 
 # The renewal threshold the phone warns at, which must be the one nestwatch warns at.
 #
 # nestwatch's own comment says RENEW_WARN_DAYS is `pub` so that `doctor` "nags at the same
-# threshold as the service log", because two different answers to "is this cert about to
-# lapse?" would have the parent reading a diagnostic that contradicts their log. A phone
-# disagreeing with both would be a third answer.
-#
-# This is a named, `pub` constant rather than the inline literal whose refactor killed the
-# last reader of this kind -- but the UNREADABLE branch is here anyway, because that is
-# exactly what the last one thought too.
+# threshold as the service log". A phone disagreeing with both would be a third answer.
 theirs_warn=$(sed -n 's/^pub const RENEW_WARN_DAYS: u64 = \([0-9]*\);.*/\1/p' \
   "$SRC/src/cert.rs" 2>/dev/null | head -1)
 mine_warn=$(sed -n 's/^const int renewWarnDays = \([0-9]*\);.*/\1/p' \
   lib/src/pinning/certificate_expiry.dart | head -1)
 
 echo
-if [ -z "$theirs_warn" ] || [ -z "$mine_warn" ]; then
-  echo "  UNREADABLE    renew warning: nestwatch=[${theirs_warn:-?}] here=[${mine_warn:-?}]"
-  echo "                One of the two readers found nothing. Nothing was compared."
-  drift=$((drift + 1))
-elif [ "$theirs_warn" != "$mine_warn" ]; then
-  echo "  DRIFTED       renew warning: nestwatch warns at $theirs_warn days, this app at $mine_warn"
-  echo "                A parent would get two answers to the same question."
-  drift=$((drift + 1))
-else
-  echo "  same          renew warning ($mine_warn days, both sides)"
-  checked=$((checked + 1))
-fi
+compare "renew warning (days)" "$theirs_warn" "$mine_warn" \
+  "A parent would get two answers to the same question."
 
 echo
 if [ "$drift" -eq 0 ]; then

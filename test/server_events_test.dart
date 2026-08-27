@@ -67,27 +67,26 @@ void main() {
     });
 
     test('a frame split mid-field survives', () async {
-      expect(
-        await _names(['event: usage\nda', 'ta: 1\n', '\n']),
-        ['usage'],
-      );
+      expect(await _names(['event: usage\nda', 'ta: 1\n', '\n']), ['usage']);
     });
 
-    test('a multi-byte character split down the middle does not corrupt the stream',
-        () async {
-      // The é is two bytes; hand them over one per chunk. A naive per-chunk utf8.decode
-      // throws here, which on a live stream would look like the server hanging up.
-      final bytes = utf8.encode('event: usage\ndata: é\n\n');
-      final split = bytes.indexOf(0xC3) + 1;
-      // Typed as the stream an HttpClientResponse actually is. `Uint8List.sublist`
-      // returns a Uint8List, and a Stream<Uint8List> will not accept utf8.decoder —
-      // which is a property of the test's literals, not of the response type.
-      final Stream<List<int>> stream = Stream.fromIterable(<List<int>>[
-        bytes.sublist(0, split),
-        bytes.sublist(split),
-      ]);
-      expect(await serverSentEventNames(stream).toList(), ['usage']);
-    });
+    test(
+      'a multi-byte character split down the middle does not corrupt the stream',
+      () async {
+        // The é is two bytes; hand them over one per chunk. A naive per-chunk utf8.decode
+        // throws here, which on a live stream would look like the server hanging up.
+        final bytes = utf8.encode('event: usage\ndata: é\n\n');
+        final split = bytes.indexOf(0xC3) + 1;
+        // Typed as the stream an HttpClientResponse actually is. `Uint8List.sublist`
+        // returns a Uint8List, and a Stream<Uint8List> will not accept utf8.decoder —
+        // which is a property of the test's literals, not of the response type.
+        final Stream<List<int>> stream = Stream.fromIterable(<List<int>>[
+          bytes.sublist(0, split),
+          bytes.sublist(split),
+        ]);
+        expect(await serverSentEventNames(stream).toList(), ['usage']);
+      },
+    );
 
     test('CRLF line endings parse the same as LF', () async {
       expect(await _names(['event: usage\r\ndata: 1\r\n\r\n']), ['usage']);
@@ -98,7 +97,9 @@ void main() {
     test('an unknown field is ignored rather than fatal', () async {
       // This is what lets nestwatch add a field before this app ships support for it.
       expect(
-        await _names(['event: usage\nid: 7\nretry: 5000\nwhat: ?\ndata: 1\n\n']),
+        await _names([
+          'event: usage\nid: 7\nretry: 5000\nwhat: ?\ndata: 1\n\n',
+        ]),
         ['usage'],
       );
     });
