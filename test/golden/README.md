@@ -1,7 +1,7 @@
 # Golden files, copied from nestwatch
 
-Eight files produced by nestwatch's own serde types (`tests/golden.rs`), covering every
-JSON shape this app parses. They are the contract between the two repos, and until now
+Nine files produced by nestwatch's own serde types (`tests/golden.rs`) — eight covering
+every JSON shape this app parses, plus `limits.json`. They are the contract between the two repos, and until now
 that contract had only ever been read as prose — twice, by two different sessions, which
 is also how two people misread it the same way.
 

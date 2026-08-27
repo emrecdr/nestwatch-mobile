@@ -15,6 +15,7 @@
 library;
 
 import '../api/nestwatch_api.dart';
+import '../api/server_contract.dart';
 import '../api/session_cookie.dart';
 import '../pinning/fingerprint.dart';
 import '../pinning/pin_mismatch_message.dart';
@@ -70,7 +71,21 @@ class PairingNeedsPassword extends PairingState {
   final String authority;
   final PasswordPrompt reason;
   final String message;
-  const PairingNeedsPassword(this.authority, this.reason, this.message);
+
+  /// What the last `GET /session` said about version agreement, or null before any probe.
+  ///
+  /// It rides on *this* state rather than only on [PairingConnected] because §5 asks for
+  /// the compatibility check "before anything secret is sent", and this is the screen
+  /// with the password field on it. A parent about to type a password into a PC running
+  /// something older than this app was built against should be told first, not after.
+  final ContractCheck? contract;
+
+  const PairingNeedsPassword(
+    this.authority,
+    this.reason,
+    this.message, {
+    this.contract,
+  });
 }
 
 /// Pinned *and* signed in.
@@ -108,6 +123,10 @@ class PairingController {
   final DateTime Function() _now;
 
   PairingState _state = const PairingIdle();
+
+  /// The verdict from the most recent `/session`, kept so a password prompt reached by
+  /// any route can show it. Null until one probe has answered.
+  ContractCheck? _contract;
   ServerIdentity? _current;
   NestwatchClient? _client;
 
@@ -138,6 +157,17 @@ class PairingController {
   PairingState get state => _state;
   ServerIdentity? get current => _current;
   NestwatchClient? get client => _client;
+
+  /// `GET /session`, and the version comparison PLAN §5 asks for alongside it.
+  ///
+  /// Every probe in this file goes through here. Written inline at each call site it was
+  /// five places to remember, and the one that forgot would leave a parent looking at a
+  /// screen that had quietly skipped the check.
+  Future<SessionInfo> _probe(NestwatchClient client) async {
+    final session = await client.session();
+    _contract = ContractCheck.of(session.version);
+    return session;
+  }
 
   void _emit(PairingState next) {
     _state = next;
@@ -202,6 +232,7 @@ class PairingController {
           stored.authority,
           PasswordPrompt.sessionLapsed,
           'Sign in to ${stored.authority}.',
+          contract: _contract,
         ),
       );
       return;
@@ -225,7 +256,7 @@ class PairingController {
     if (_state is! PairingBusy) return;
 
     try {
-      final session = await client.session();
+      final session = await _probe(client);
       if (session.authenticated) {
         _emit(PairingConnected(stored, session));
       } else {
@@ -238,6 +269,7 @@ class PairingController {
             PasswordPrompt.sessionLapsed,
             'That sign-in expired. Enter the control password again — the PC itself is '
             'still trusted, so there is no need to re-scan anything.',
+            contract: _contract,
           ),
         );
       }
@@ -310,7 +342,7 @@ class PairingController {
     _overrides.distrust();
 
     try {
-      await _clientFor(invite.authority).session();
+      await _probe(_clientFor(invite.authority));
       // Unreachable in practice: with no pin, every certificate is refused.
       _emit(
         const PairingFailed(
@@ -387,12 +419,12 @@ class PairingController {
 
     // Probe first: unauthenticated, LAN-gated, and it settles the pin before a token is
     // spent on a server that might not be the right one.
-    var session = await client.session();
+    var session = await _probe(client);
 
     final token = invite.token;
     if (token != null && !session.authenticated) {
       await client.redeemPairingToken(token);
-      session = await client.session();
+      session = await _probe(client);
     }
 
     final identity = await _persistIdentity(invite, fingerprint, provenance);
@@ -413,6 +445,7 @@ class PairingController {
             : 'That pairing code had already been used — most likely by opening the QR '
                   'with your phone\'s camera, which signs in the browser instead. Enter '
                   'the control password instead; the PC itself is now trusted either way.',
+        contract: _contract,
       ),
     );
   }
@@ -427,7 +460,7 @@ class PairingController {
 
     try {
       await client.login(password);
-      final session = await client.session();
+      final session = await _probe(client);
       final identity = _current;
       if (identity == null) {
         _emit(const PairingFailed('Signed in, but no paired PC is on record.'));
@@ -444,7 +477,14 @@ class PairingController {
         _emit(PairingFailed(e.message));
         return;
       }
-      _emit(PairingNeedsPassword(pending.authority, reason, e.message));
+      _emit(
+        PairingNeedsPassword(
+          pending.authority,
+          reason,
+          e.message,
+          contract: _contract,
+        ),
+      );
     }
   }
 
@@ -464,6 +504,7 @@ class PairingController {
         identity.authority,
         PasswordPrompt.sessionLapsed,
         'Sign in to ${identity.authority}.',
+        contract: _contract,
       ),
     );
   }

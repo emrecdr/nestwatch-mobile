@@ -123,6 +123,7 @@ class _RootState extends State<_Root> {
         controller: widget.controller,
         client: client,
         identity: state.identity,
+        session: state.session,
       );
     }
     return PairingScreen(controller: widget.controller);

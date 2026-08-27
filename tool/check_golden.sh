@@ -67,6 +67,37 @@ for mine in "$MINE"/*.json; do
   fi
 done
 
+# The version those files were captured from, which the app renders a warning against.
+#
+# This is a second reader of nestwatch's source, and the last one had to be deleted -- it
+# looked for inline numeric literals that were later given names, and went quiet rather
+# than wrong. The distinction that makes this one survivable is that `version` under
+# `[package]` is not a name anybody chose: cargo requires that exact key, and renaming it
+# breaks the build on that side long before it can mislead this one. It still shouts if it
+# cannot read, because "the reader broke" and "the versions agree" must never look alike.
+theirs_version=$(sed -n '/^\[package\]/,/^\[/p' "$SRC/Cargo.toml" 2>/dev/null |
+  sed -n 's/^version = "\([^"]*\)".*/\1/p' | head -1)
+mine_version=$(sed -n "s/.*testedAgainst = '\([^']*\)'.*/\1/p" \
+  lib/src/api/server_contract.dart | head -1)
+
+echo
+if [ -z "$theirs_version" ] || [ -z "$mine_version" ]; then
+  echo "  UNREADABLE    version: nestwatch=[${theirs_version:-?}] here=[${mine_version:-?}]"
+  echo "                One of the two readers found nothing. Nothing was compared --"
+  echo "                fix the reader, do not assume they agree."
+  drift=$((drift + 1))
+elif [ "${theirs_version%.*}" != "${mine_version%.*}" ]; then
+  # major.minor only, matching ContractCheck's own rule -- a patch bump on that side
+  # cannot move the wire format, and failing here would be noise.
+  echo "  VERSION       nestwatch is $theirs_version, ContractCheck.testedAgainst is $mine_version"
+  echo "                The app will tell a parent the two disagree. If these golden"
+  echo "                files are current, bump testedAgainst with them."
+  drift=$((drift + 1))
+else
+  echo "  same          version ($mine_version tested against nestwatch $theirs_version)"
+  checked=$((checked + 1))
+fi
+
 echo
 if [ "$drift" -eq 0 ]; then
   echo "$checked checks, nothing drifted."

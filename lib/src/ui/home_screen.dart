@@ -20,8 +20,10 @@ library;
 import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
+import '../api/server_contract.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
+import 'notice.dart';
 import 'notifications_sheet.dart';
 import 'screenshot_screen.dart';
 import 'time_codes_screen.dart';
@@ -33,11 +35,20 @@ class HomeScreen extends StatefulWidget {
   final NestwatchClient client;
   final ServerIdentity identity;
 
+  /// What `GET /session` answered, kept for its `version`.
+  ///
+  /// The pairing screen shows the version verdict before a password is typed; this side
+  /// keeps showing it, for the same reason `PinProvenance` is not a one-time banner. A
+  /// caveat that appears once and is then forgotten leaves every later screen looking
+  /// exactly as authoritative as one with nothing wrong.
+  final SessionInfo session;
+
   const HomeScreen({
     super.key,
     required this.controller,
     required this.client,
     required this.identity,
+    required this.session,
   });
 
   @override
@@ -60,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final verified = widget.identity.provenance.isVerified;
+    final contract = ContractCheck.of(widget.session.version);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.identity.authority),
@@ -92,28 +104,44 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _tab,
+      body: Column(
         children: [
-          TimeRequestsScreen(
-            client: widget.client,
-            visible: _tab == 0,
-            onFailure: _onFailure,
-          ),
-          UsageScreen(
-            client: widget.client,
-            visible: _tab == 1,
-            onFailure: _onFailure,
-          ),
-          ScreenshotScreen(
-            client: widget.client,
-            visible: _tab == 2,
-            onFailure: _onFailure,
-          ),
-          TimeCodesScreen(
-            client: widget.client,
-            visible: _tab == 3,
-            onFailure: _onFailure,
+          // Only the case where a screen is actually going to break gets a permanent
+          // strip. Being newer than this app, or unreadable, is worth saying in the
+          // identity dialog and not worth a band across every screen forever.
+          if (contract.isWarning)
+            Notice(
+              contract.message!,
+              tone: NoticeTone.warning,
+              icon: Icons.warning_amber,
+              margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            ),
+          Expanded(
+            child: IndexedStack(
+              index: _tab,
+              children: [
+                TimeRequestsScreen(
+                  client: widget.client,
+                  visible: _tab == 0,
+                  onFailure: _onFailure,
+                ),
+                UsageScreen(
+                  client: widget.client,
+                  visible: _tab == 1,
+                  onFailure: _onFailure,
+                ),
+                ScreenshotScreen(
+                  client: widget.client,
+                  visible: _tab == 2,
+                  onFailure: _onFailure,
+                ),
+                TimeCodesScreen(
+                  client: widget.client,
+                  visible: _tab == 3,
+                  onFailure: _onFailure,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -138,6 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showIdentity(BuildContext context) {
     final identity = widget.identity;
     final verified = identity.provenance.isVerified;
+    final contract = ContractCheck.of(widget.session.version);
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -158,6 +187,15 @@ class _HomeScreenState extends State<HomeScreen> {
             SelectableText(
               identity.fingerprint.toString(),
               style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+            const Divider(height: 28),
+            // Stated in every outcome, including agreement — a version line that appears
+            // only when something is wrong cannot be distinguished, on the screen where
+            // nothing is wrong, from a check that was never made.
+            Text(
+              contract.message ??
+                  'That PC is running nestwatch ${contract.reported}, which is what '
+                      'this app was built and tested against.',
             ),
           ],
         ),

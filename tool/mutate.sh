@@ -274,6 +274,27 @@ mutate "reuse: close() leaves the pool alive across a pin change" \
   }" \
   "  void close() {}"
 
+# PLAN §5's version check. Both mutations invert a decision rather than delete a line: the
+# first folds "could not tell" into agreement, which is the exact failure this three-valued
+# verdict exists to prevent, and the second stops the comparison distinguishing direction.
+mutate "version: unreadable folded into agreement" \
+  lib/src/api/server_contract.dart \
+  "    if (theirs == null || ours == null) {
+      return ContractCheck._(ContractAgreement.unreadable, reported);
+    }" \
+  "    if (theirs == null || ours == null) {
+      return ContractCheck._(ContractAgreement.agreed, reported);
+    }"
+
+mutate "version: an older PC reported as a newer one" \
+  lib/src/api/server_contract.dart \
+  "      theirRank < ourRank
+          ? ContractAgreement.serverOlder
+          : ContractAgreement.serverNewer," \
+  "      theirRank > ourRank
+          ? ContractAgreement.serverOlder
+          : ContractAgreement.serverNewer,"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 

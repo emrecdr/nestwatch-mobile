@@ -52,17 +52,41 @@ from the stronger one forever after.
 ## The one dependency rule
 
 No package may bypass `dart:io`'s `HttpClient`. `HttpOverrides.global` is what pins every
-request in the process; `cupertino_http`, `cronet_http`, or anything opening a raw
-`SecureSocket` hands its traffic to a stack this override never sees. **Audit on every
-`pub add`, not once at the start:**
+request in the process; `cupertino_http`, `cronet_http`, or anything opening a raw socket
+hands its traffic to a stack this override never sees. **Audit on every `pub add`, not
+once at the start:**
 
 ```bash
-grep -rln 'cupertino_http\|cronet_http\|SecureSocket\|HttpOverrides.runZoned' \
-  ~/.pub-cache/hosted/pub.dev/<each-resolved-package>/lib
+tool/audit_deps.sh     # 0 clean · 1 something bypasses · 2 the audit could not read
 ```
 
-`http.runWithClient` is a false positive — it swaps `package:http`'s `Client`, and `IOClient`
-still bottoms out at the `HttpClient()` factory that consults the override.
+This replaced a one-line `grep` that had **never worked**. It looked for `SecureSocket`,
+which matches nothing in this pub-cache and nothing in this repo — so it had never once
+produced a hit, and a clean result was indistinguishable from a broken pattern. It was
+written from a guess about what an offending package would contain and never confirmed
+against a known positive.
+
+So the script refuses to report a clean tree until it has proved it can read one: a
+control pattern that every Dart package contains must match, and a zero there exits **2**
+rather than 0. All three outcomes were watched to happen — a planted package that opens a
+`SecureSocket` is reported and exits 1, an unreadable tree exits 2, and the real tree
+exits 0. `PUB_CACHE_LIB` and `PUBSPEC_LOCK` exist so that stays re-runnable.
+
+Two packages match today and both are listed with the reason they do not count — `dbus`
+(Unix sockets for Linux D-Bus, reached only by `flutter_secure_storage`'s Linux
+implementation, never compiled into an Android build) and `vm_service` (dev-time
+transitive of `flutter_test`, not shipped). An allowlist that stops matching is reported
+as `STALE` rather than carried, because an entry nobody re-justifies is how an audit
+quietly narrows to nothing.
+
+**This app has no HTTP package at all.** PLAN §5 specifies "`package:http` over an
+explicit `dart:io` `HttpClient`" and §9 lists `http` among the dependencies; neither is
+here. `NestwatchClient` calls `HttpClient` directly. That is a deviation from the plan and
+a stricter reading of its own rule — the rule says nothing may bypass `HttpClient`, and
+the surest way to satisfy it is to have nothing in between. `http.runWithClient` would
+have been a false positive in the audit above (it swaps `package:http`'s `Client`, and
+`IOClient` still bottoms out at the `HttpClient()` factory that consults the override) —
+noted because the plan expects that package, and a future reader will wonder where it went.
 
 ## Proving the pin
 
@@ -397,6 +421,39 @@ is the only reason either session noticed. The grep is gone; `limits.json` repla
 `MISSING HERE` fired for real too: it is what reported that nestwatch had begun producing
 `limits.json` before this app consumed it.
 
+### And the version those files came from
+
+`GET /session` returns `{authenticated, version}`, and PLAN §5 probes it partly so the two
+sides can be compared "before anything secret is sent". The probe was built; the
+comparison was not — `version` was parsed into `SessionInfo` and used nowhere, so a PC
+running an older nestwatch than this app expects surfaced as a parse failure on some
+screen with no sentence anywhere saying the two had disagreed.
+
+`ContractCheck` compares it against `testedAgainst`, which is the nestwatch release
+`test/golden/` was captured from — a narrow claim, and a true one: *these* shapes were
+checked against *that* nestwatch. Major and minor only; nestwatch is pre-1.0, where minor
+carries the breaking changes, and warning on a patch bump would put a notice in front of a
+parent for a release that cannot have moved anything this app reads.
+
+Three outcomes again, and again the third is the point:
+
+| | shown as |
+|---|---|
+| same major.minor | nothing, except a line in the identity dialog |
+| that PC is **older** | a warning strip on every screen — a screen is going to break, and the parent holds the fix |
+| that PC is **newer** | said once, without alarm: this app is the one that is behind |
+| no version to read | *"could not check whether the two agree"* — never rendered as silence |
+
+The warning appears **above the password field**, not after it, which is the whole of what
+§5 meant by "before anything secret is sent".
+
+`check_golden.sh` keeps `testedAgainst` honest by comparing it to the sibling checkout's
+`Cargo.toml`. That is a second reader of nestwatch's source and the first one had to be
+deleted, so the difference matters: `version` under `[package]` is not a name anyone chose
+— cargo requires that exact key, and renaming it breaks the build over there long before
+it can mislead over here. It still shouts `UNREADABLE` if either side goes quiet, and both
+halves of that were watched to fire.
+
 ## Mutation audit
 
 ```bash
@@ -519,11 +576,21 @@ one, as do `signOut`, `unpair` and `dispose`.
 
 ## Layout
 
+Directories, not files. This used to be a list of six filenames, one of which described
+`main.dart` as the "step-2 probe screen" it had long since stopped being — a hand-written
+map goes stale faster than the thing it maps, and directories are what this repo adds
+files to rather than what it adds.
+
 ```
-lib/src/pinning/fingerprint.dart            AB:CD: parsing, constant-time compare
-lib/src/pinning/pinned_http_overrides.dart  the pin, and why withTrustedRoots: false
-lib/src/pinning/pin_mismatch_message.dart   explaining a refusal to a parent
-lib/main.dart                               step-2 probe screen
-tool/prove_pin.dart                         the proof-by-failure harness
-tool/wire_sink.py                           TLS listener that counts application bytes
+lib/src/pinning/     the pin itself: fingerprints, the HttpOverrides, and the
+                     sentence a parent reads when a certificate is refused
+lib/src/pairing/     what to trust and how sign-in is reached — deliberately free
+                     of Flutter imports, so it runs under plain `dart run`
+lib/src/api/         the wire: request building, failure mapping, the parsed
+                     shapes, and the version comparison against that PC
+lib/src/ui/          four screens and the pieces they share (polling, notices)
+lib/src/background/  both notification tiers, and the isolate that must re-pin
+tool/prove_*.dart    harnesses that run against a live server, never a mock
+tool/*.sh            the audits: mutations, the cross-repo contract, dependencies
+test/golden/         nestwatch's own serde output, vendored
 ```

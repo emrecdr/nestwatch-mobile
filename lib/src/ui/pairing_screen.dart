@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../api/server_contract.dart';
 import '../pairing/pair_invite.dart';
 import '../pairing/pairing_controller.dart';
 import '../pairing/server_identity.dart';
@@ -87,8 +88,13 @@ class _PairingScreenState extends State<PairingScreen> {
     // Handled by the root widget, which swaps this screen for HomeScreen. The arm
     // exists so the switch stays exhaustive if that ever changes.
     PairingConnected() => const Center(child: CircularProgressIndicator()),
-    PairingNeedsPassword(:final authority, :final reason, :final message) =>
-      _needsPassword(context, authority, reason, message),
+    PairingNeedsPassword(
+      :final authority,
+      :final reason,
+      :final message,
+      :final contract,
+    ) =>
+      _needsPassword(context, authority, reason, message, contract),
     PairingRefused(:final rejection, :final explanation) => _refused(
       context,
       explanation,
@@ -245,6 +251,7 @@ class _PairingScreenState extends State<PairingScreen> {
     String authority,
     PasswordPrompt reason,
     String message,
+    ContractCheck? contract,
   ) {
     final isError =
         reason == PasswordPrompt.wrongPassword ||
@@ -257,10 +264,20 @@ class _PairingScreenState extends State<PairingScreen> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         const SizedBox(height: 14),
-        Notice(
-          message,
-          tone: isError ? NoticeTone.warning : NoticeTone.plain,
-        ),
+        Notice(message, tone: isError ? NoticeTone.warning : NoticeTone.plain),
+        // Above the field, not below it. §5 asks for the version comparison "before
+        // anything secret is sent", and a password typed into a PC this app cannot
+        // speak to properly is a secret spent for nothing.
+        if (contract?.message case final warning?) ...[
+          const SizedBox(height: 10),
+          Notice(
+            warning,
+            tone: contract!.isWarning
+                ? NoticeTone.warning
+                : NoticeTone.advisory,
+            icon: contract.isWarning ? Icons.warning_amber : null,
+          ),
+        ],
         const SizedBox(height: 20),
         TextField(
           controller: _password,
