@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and lower, where there is no cloud-versus-transfer split and
+  `android:allowBackup="false"` is already complete on its own.
+
+  Kept anyway, for two reasons worth stating rather than leaving as habit: Android's
+  documentation tells apps targeting 12+ to provide both files so the whole device range
+  is covered, and a manifest that names the rules in both places says what it intends on
+  every version instead of relying on a reader knowing which attribute applies where.
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+</full-backup-content>

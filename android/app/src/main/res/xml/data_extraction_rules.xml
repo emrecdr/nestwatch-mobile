@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 and higher. Nothing this app stores may leave the device.
+
+  `android:allowBackup="false"` in the manifest already stops cloud backup — but it does
+  NOT reliably stop device-to-device transfer on Android 12+, and on some manufacturers'
+  devices it stops neither. Android's own Auto Backup documentation is explicit that the
+  D2D path needs its own rules: "If the <device-transfer> attribute is not set, all the
+  application data will be transferred during a D2D migration."
+
+  So both sections are spelled out rather than one being trusted to imply the other.
+
+  What is being kept off the wire is small but load-bearing: the pinned certificate
+  fingerprint and the session cookie. Both are encrypted under a non-exportable Keystore
+  key that does not transfer, so a copy is ciphertext nobody can read — this is defence in
+  depth, not a hole being closed. The correctness half is the better argument: restoring
+  a blob whose key stayed behind produces an install that looks configured and is not.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

@@ -26,10 +26,20 @@
          rejected for omitting it. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
+    <!-- Nothing this app stores survives leaving this phone. The pin and the session
+         cookie are encrypted under a Keystore key that cannot be exported, so a restored
+         copy is unreadable anyway — but a restored install that looks paired and is not
+         is a worse first impression than one that plainly asks to pair.
+
+         allowBackup alone is not enough on Android 12+, where cloud backup and
+         device-to-device transfer are configured separately. See res/xml/. -->
     <application
         android:label="Nestwatch"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
