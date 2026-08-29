@@ -223,38 +223,46 @@ the wrong row.
 and less irritating than a confirmation dialog, and it stops being optional if `M10` moves
 approval to a lock screen.
 
-### M15 · The iOS target is scaffolded and has never been built
+### M15 · iOS builds and the pin holds; local-network privacy is still unproven
 
-`ios/` exists, the bundle identifier matches Android's `com.nestwatch.mobile`, the display
-name is set, and `Info.plist` carries `NSLocalNetworkUsageDescription` and
-`NSCameraUsageDescription` — with **no ATS exception, deliberately**, because the claim
-under test is that `dart:io` never consults ATS.
+**The ATS question is answered.** Measured 2026-08-29 on an iOS 26.5 simulator,
+`integration_test/pinning_on_ios_test.dart`: a self-signed certificate on a bare IP — which
+ATS would refuse outright — connects through `badCertificateCallback`, a wrong pin is
+refused before anything reaches the server, and no pin refuses everything. `Info.plist`
+carries no ATS exception, so `dart:io` demonstrably does not consult it. PLAN §7's
+reservation, that the inference was "sound but still not documented", is retired.
 
-Nothing has compiled. Measured 2026-08-27: Xcode 26.5 lists the iOS 26.5 SDK, but the iOS
-**platform** component is not installed, so both `flutter build ios --no-codesign` and a
-simulator run fail with *"iOS 26.5 is not installed. Please download and install the
-platform from Xcode > Settings > Components."* The only simulator runtime present is 18.2,
-left over from an older Xcode.
+`flutter build ios --no-codesign --simulator` succeeds. Deployment target is 14.0, raised
+from Flutter's default 13.0 because `workmanager-apple` requires it.
 
-**Unblock with** `xcodebuild -downloadPlatform iOS` (several GB), or Xcode → Settings →
-Components.
+**What is still owed, and it is the half a simulator cannot give.** PLAN §7 is explicit
+that the Simulator does not implement local-network privacy at all. The proof above uses
+loopback, which never leaves the process, so the permission is never consulted. On a real
+iPhone, reaching a LAN address raises a prompt, and a call made in the background while
+that permission is undetermined "is denied silently without even recording the denial".
+That is the notification path failing invisibly, and only hardware can show it.
 
-Then, in order:
+**Also unproven on iOS:** pairing by QR (needs a camera), the background poll actually
+firing, and whether `NSLocalNetworkUsageDescription` reads well in the real prompt.
 
-1. `flutter build ios --no-codesign` — does it even compile.
-2. `flutter test integration_test/pinning_on_ios_test.dart -d <simulator>` — **the ATS
-   question**. Written, analyser-clean, never run. If ATS were in `dart:io`'s path, a
-   self-signed certificate on a bare IP could not connect and these fail.
-3. On **real hardware**, not the Simulator: local-network privacy. PLAN §7 is explicit that
-   the Simulator does not implement it, and that a local-network call attempted in the
-   background while the permission is undetermined "is denied silently without even
-   recording the denial" — which is the notification path failing invisibly.
+**Two things are different rather than untested**, and the app now says so rather than
+pretending otherwise — see `lib/src/ui/background_promise.dart`. `workmanager_apple` uses
+BGTaskScheduler, whose interval is advisory: iOS decides from usage and battery, it can be
+far longer than fifteen minutes, and **a force-quit stops scheduling entirely**. Apple's own
+remedy is a push with `content-available`, which this design forbids — the monitored PC
+makes no outbound connection, which PLAN §7 calls "not deferred, it is impossible". And the
+"watch now" tier is hidden on iOS: it is a `dataSync` foreground service and iOS has no
+equivalent, so a switch that silently did nothing was the wrong answer.
 
-**Two things that are not merely untested but different on iOS.** `workmanager_apple` uses
-BGTaskScheduler, which the OS schedules at its own discretion — the honest Android promise
-of "within about fifteen minutes" is not true there and the copy would have to change. And
-the opt-in "watch now" tier has no iOS equivalent at all; `dataSync` foreground services do
-not exist.
+### M16 · The old iOS 18.2 simulator runtime is dead weight
+
+Xcode 26.5 cannot build against it — it was left by an earlier Xcode, and the 26.5 runtime
+had to be downloaded beside it. Disk is at 2.4 GB free after that download (measured
+2026-08-29), and this repo's own `build/` reached 3.4 GB before `flutter clean`.
+
+Removing the 18.2 runtime would reclaim several GB. Left alone because deleting a simulator
+runtime is a system change with a re-download cost, and it is the user's call, not this
+repo's.
 
 ### M7 · Store paperwork that only a Play Console can finish
 

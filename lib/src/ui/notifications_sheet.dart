@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../background/background_poll.dart';
 import '../background/notifications.dart';
 import '../background/watch_now.dart';
+import 'background_promise.dart';
 
 class NotificationsSheet extends StatefulWidget {
   final String authority;
@@ -132,37 +133,38 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
             value: _enabled ?? false,
             onChanged: _busy || _enabled == null ? null : _toggle,
             title: const Text('Tell me about time requests'),
-            subtitle: Text(
-              'Checked about every ${pollInterval.inMinutes} minutes.',
-            ),
+            subtitle: Text(backgroundCadenceLine(pollInterval.inMinutes)),
           ),
           const SizedBox(height: 12),
           Text(
-            'Android will not check more often than every ${pollInterval.inMinutes} '
-            'minutes for an app that is not running, so this is a heads-up rather than '
-            'an alert. If you are waiting for an answer, open this app — the Requests '
-            'screen checks every minute while it is on screen.',
+            backgroundCaveat(pollInterval.inMinutes),
             style: theme.textTheme.bodySmall,
           ),
-          const Divider(height: 36),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _watching,
-            onChanged: _busy ? null : _toggleWatch,
-            title: const Text('Watch now'),
-            subtitle: Text(
-              'Check every ${watchPollInterval.inSeconds} seconds for the next '
-              '${watchSessionLimit.inMinutes} minutes.',
+          // No "watch now" on iOS. It is a dataSync foreground service, and iOS has no
+          // equivalent — an app cannot poll for half an hour from the background because
+          // the parent asked it to. A switch that silently does nothing is worse than an
+          // absent one, and is the failure this codebase keeps finding elsewhere.
+          if (watchNowIsPossible) ...[
+            const Divider(height: 36),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _watching,
+              onChanged: _busy ? null : _toggleWatch,
+              title: const Text('Watch now'),
+              subtitle: Text(
+                'Check every ${watchPollInterval.inSeconds} seconds for the next '
+                '${watchSessionLimit.inMinutes} minutes.',
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'For when you are waiting on an answer. It shows a notification while it '
-            'runs and stops on its own — Android allows this kind of check a total of '
-            'six hours a day, so leaving it on would use up the allowance and leave '
-            'none for later.',
-            style: theme.textTheme.bodySmall,
-          ),
+            const SizedBox(height: 8),
+            Text(
+              'For when you are waiting on an answer. It shows a notification while it '
+              'runs and stops on its own — Android allows this kind of check a total of '
+              'six hours a day, so leaving it on would use up the allowance and leave '
+              'none for later.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 16),
           Text(
             'Nothing about your child leaves your home network. The check runs on this '
