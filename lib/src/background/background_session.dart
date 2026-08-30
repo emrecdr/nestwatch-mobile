@@ -45,7 +45,20 @@ Future<BackgroundSession?> openBackgroundSession({
   if (identity == null) return null;
 
   // Before any request in this isolate. Not once at startup — there was no startup.
-  HttpOverrides.global = PinnedHttpOverrides(pin: identity.fingerprint);
+  //
+  // **Unless one is already installed, which means this is not a fresh isolate.** A
+  // notification action handled while the app is alive runs in the UI isolate, where
+  // `PairingController` holds the very instance `main` installed — so replacing the
+  // global here would leave `trust()` and `distrust()` acting on an object nothing
+  // consults, and a parent pressing "Forget this PC" would not drop the pin from the
+  // client actually making requests.
+  //
+  // Reusing what is there is also the more conservative read: in the UI isolate the
+  // app's own overrides are the authority on what is trusted, and this function's job
+  // is to make sure *something* pins, not to be the one that does.
+  if (HttpOverrides.current is! PinnedHttpOverrides) {
+    HttpOverrides.global = PinnedHttpOverrides(pin: identity.fingerprint);
+  }
 
   final sessionStore = sessions ?? const SecureSessionStore();
   final cookie = await sessionStore.load();

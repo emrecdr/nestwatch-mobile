@@ -342,6 +342,24 @@ mutate "whereabouts: no network reads as a different network" \
   "  if (usable.isEmpty) return Whereabouts.offline;" \
   "  if (usable.isEmpty) return Whereabouts.looksElsewhere;"
 
+# The two defects deep validation found in this feature, held so they cannot return.
+mutate "notification: a body tap counts as an answer" \
+  lib/src/background/notification_actions.dart \
+  "    type == NotificationResponseType.selectedNotificationAction;" \
+  "    type != NotificationResponseType.notificationDismissed;"
+
+mutate "background session: a live app's overrides are replaced" \
+  lib/src/background/background_session.dart \
+  "  if (HttpOverrides.current is! PinnedHttpOverrides) {
+    HttpOverrides.global = PinnedHttpOverrides(pin: identity.fingerprint);
+  }" \
+  "  HttpOverrides.global = PinnedHttpOverrides(pin: identity.fingerprint);"
+
+mutate "notification: a failed answer is never re-asked" \
+  lib/src/background/notification_actions.dart \
+  "    await forgetSeen(requestId, seen);" \
+  "    // not forgotten"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 

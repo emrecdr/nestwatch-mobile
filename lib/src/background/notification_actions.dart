@@ -31,6 +31,8 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/nestwatch_api.dart';
 import 'background_session.dart';
+import '../pairing/secure_identity_store.dart';
+import 'seen_requests.dart';
 import 'notifications.dart';
 
 /// Action ids, which travel to Android and back as strings.
@@ -58,6 +60,7 @@ Future<ActionOutcome> performAction({
   required String? actionId,
   required String? requestId,
   Future<BackgroundSession?> Function() open = openBackgroundSession,
+  SeenRequestStore seen = const SecureSeenRequestStore(),
 }) async {
   if (requestId == null || requestId.isEmpty) return ActionOutcome.failed;
   if (actionId != approveActionId && actionId != denyActionId) {
@@ -86,6 +89,15 @@ Future<ActionOutcome> performAction({
         : ActionOutcome.denied;
   } on NestwatchException {
     // Unreachable, lapsed, refused — anything that means the change was not made.
+    //
+    // Forget that this request was ever announced, so the next poll offers it again.
+    // Without this the parent is told once that their answer failed and then never
+    // prompted about that request again: `pollOnce` announces only ids missing from the
+    // seen set, and a request that is still pending stays in it. The notification saying
+    // "open the app and answer there" would become the only trace of a child still
+    // waiting — which is a worse silence than the one this whole feature was built to
+    // remove.
+    await forgetSeen(requestId, seen);
     return ActionOutcome.failed;
   } finally {
     session.client.close();
@@ -99,10 +111,29 @@ Future<ActionOutcome> performAction({
 /// handle to — and the failure would be a button that does nothing, silently.
 @pragma('vm:entry-point')
 void onNotificationAction(NotificationResponse response) {
+  // **Only an action tap does anything.**
+  //
+  // The same callback receives all three kinds, and the first version of this file
+  // handled them alike — so tapping the notification *body* to open the app, or simply
+  // swiping it away, fell through to "unknown action" and posted a notification saying
+  // the answer had not gone through. For an answer the parent never gave.
+  //
+  // That is worse than the problem this feature exists to solve: it manufactures alarm
+  // out of the two most ordinary gestures there are. Found by reading the response type
+  // rather than by any test, because every test here supplied an actionId.
+  if (response.notificationResponseType !=
+      NotificationResponseType.selectedNotificationAction) {
+    return;
+  }
   unawaited(
     _handleAndReport(actionId: response.actionId, requestId: response.payload),
   );
 }
+
+/// Whether a response should be acted on at all. Separated so the rule is testable
+/// without a plugin — the bug above was in this decision, not in the work that follows.
+bool isActionTap(NotificationResponseType type) =>
+    type == NotificationResponseType.selectedNotificationAction;
 
 Future<void> _handleAndReport({
   required String? actionId,
@@ -131,3 +162,18 @@ String? actionFailureMessage(ActionOutcome outcome) => switch (outcome) {
         'from home Nestwatch cannot reach it — open the app while on your home Wi-Fi '
         'and answer there.',
 };
+
+/// Drop one id from the seen set, so the next poll announces it again.
+///
+/// Best-effort on purpose: this runs while something has already gone wrong, and a
+/// failure to read the Keystore here must not replace the parent's "that did not go
+/// through" notification with nothing at all.
+Future<void> forgetSeen(String requestId, SeenRequestStore store) async {
+  try {
+    final held = await store.load();
+    if (!held.contains(requestId)) return;
+    await store.save(held.difference({requestId}));
+  } on Object {
+    // Swallowed deliberately. The complaint notification is the load-bearing part.
+  }
+}

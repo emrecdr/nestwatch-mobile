@@ -5,9 +5,11 @@
 /// branch below exists to decide whether they get told.
 library;
 
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/background/notification_actions.dart';
+import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 
@@ -80,6 +82,56 @@ void main() {
       expect(outcome, ActionOutcome.denied);
       expect(client.denied, ['req-2']);
       expect(actionFailureMessage(outcome), isNull);
+    });
+  });
+
+  group('a failed answer leaves the request askable again', () {
+    // pollOnce announces only ids missing from the seen set, and a still-pending request
+    // stays in it — so without this the parent is told once that their answer failed and
+    // then never prompted about that child again.
+    test('a failure forgets the id, so the next poll offers it', () async {
+      final seen = InMemorySeenRequestStore()..save({'req-a', 'req-b'});
+      await performAction(
+        actionId: approveActionId,
+        requestId: 'req-a',
+        open: () async => (
+          identity: _identity,
+          client: _FakeClient(
+            throws: const NestwatchException(
+              NestwatchFailure.unreachable,
+              'away',
+            ),
+          ),
+        ),
+        seen: seen,
+      );
+      expect(await seen.load(), {'req-b'});
+    });
+
+    test('a success leaves the seen set alone', () async {
+      // The poll prunes it when the request leaves the queue; nothing to do here.
+      final seen = InMemorySeenRequestStore()..save({'req-a'});
+      await performAction(
+        actionId: approveActionId,
+        requestId: 'req-a',
+        open: () async => (identity: _identity, client: _FakeClient()),
+        seen: seen,
+      );
+      expect(await seen.load(), {'req-a'});
+    });
+
+    test('an already-resolved race leaves it alone too', () async {
+      final seen = InMemorySeenRequestStore()..save({'req-a'});
+      await performAction(
+        actionId: approveActionId,
+        requestId: 'req-a',
+        open: () async => (
+          identity: _identity,
+          client: _FakeClient(resolves: false),
+        ),
+        seen: seen,
+      );
+      expect(await seen.load(), {'req-a'}, reason: 'it is resolved; do not re-ask');
     });
   });
 
@@ -168,6 +220,37 @@ void main() {
         },
       );
       expect(opened, 0, reason: 'a bad action id is rejected before opening anything');
+    });
+  });
+
+  group('only an action tap does anything', () {
+    // The defect this group exists for: the first version acted on all three response
+    // kinds, so tapping the body to open the app — or swiping the notification away —
+    // posted "that did not go through" about an answer the parent never gave.
+    test('an action tap is acted on', () {
+      expect(
+        isActionTap(NotificationResponseType.selectedNotificationAction),
+        isTrue,
+      );
+    });
+
+    test('tapping the body is not an answer', () {
+      expect(isActionTap(NotificationResponseType.selectedNotification), isFalse);
+    });
+
+    test('swiping it away is not an answer', () {
+      expect(isActionTap(NotificationResponseType.notificationDismissed), isFalse);
+    });
+
+    test('every response kind is decided about', () {
+      // So a fourth kind added by the plugin cannot quietly start meaning "approve".
+      for (final type in NotificationResponseType.values) {
+        expect(
+          isActionTap(type),
+          type == NotificationResponseType.selectedNotificationAction,
+          reason: '$type',
+        );
+      }
     });
   });
 

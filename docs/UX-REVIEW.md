@@ -25,6 +25,18 @@ wrong. One assumption died on contact: `approveTimeRequest` returns **false** fo
 already-resolved request rather than throwing, so the first draft would have reported every
 ordinary race as a hard failure.
 
+**A validation pass then found two more, neither of which any test would have caught** —
+both were in decisions no test exercised, because every test supplied an action id and a
+fresh isolate. The handler acted on *all three* response kinds, so tapping the notification
+body to open the app, or swiping it away, posted "that did not go through" about an answer
+the parent never gave. And a tap handled while the app was running replaced
+`HttpOverrides.global` with a new instance, leaving `PairingController` holding one nothing
+consulted — so "Forget this PC" would have appeared to work while the client kept the pin.
+
+A third was a gap rather than a defect: `pollOnce` announces only ids missing from the seen
+set, so a request whose answer failed would never be offered again. A failure now forgets
+the id, and the next poll asks once more.
+
 **Measured.** `notifications.dart` sets no `actions:` and registers no tap handler —
 `onDidReceiveNotificationResponse` appears nowhere. So the loop this whole app exists for
 runs: child asks → phone buzzes → parent unlocks → finds the app → finds the right tab →
