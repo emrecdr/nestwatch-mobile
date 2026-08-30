@@ -31,7 +31,11 @@ class PrivacyScreen extends StatelessWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Privacy')),
-      body: ListView(
+      // See pairing_screen.dart: no bottom chrome, so nothing else pads for the gesture
+      // bar. This is also the screen a reviewer reaches without pairing.
+      body: SafeArea(
+        top: false,
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         children: [
           _p(
@@ -92,6 +96,7 @@ class PrivacyScreen extends StatelessWidget {
             'minute is visible to you rather than hidden.',
           ),
         ],
+        ),
       ),
     );
   }

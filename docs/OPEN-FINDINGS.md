@@ -89,16 +89,22 @@ backstop is long *and* the stream is dead. A safer shape is a slower backstop th
 consults the stream at all — say 5 minutes always, on the grounds that events carry the
 urgency — but that is a real behaviour change and wants deciding, not sliding in.
 
-### M2 · Five files stand up a TLS server, not three
+### M2 · Two host tests still build their own TLS server
 
-Counted 2026-08-31: `pinning_socket_test`, `api_wire_test`, `poll_logic_test`,
-`expiry_test`, and `integration_test/pinning_on_ios_test`. Each builds a `SecurityContext`,
-binds `HttpServer.bindSecure` on loopback, and records whether its handler ran. The entry
-said three when it was written and has been quietly overtaken twice since.
+**Mostly done.** `test/support/tls_server.dart` holds the rig — context, key, bind on port
+0, and the `handlerRan` flag that is what most of these tests actually assert.
+`pinning_socket_test` and `expiry_test` use it, losing 61 lines between them and keeping
+every assertion, including the load-bearing one: a refused handshake means the handler
+never ran.
 
-**Fix.** A rig in `test/support/`, taking a certificate name and returning the server plus
-a did-it-run flag. The iOS one cannot share it — an integration test runs in the app
-sandbox and reads its certificates from `inlined_fixtures.dart` — so the target is four.
+Two remain, and both for reasons rather than inertia. `api_wire_test` needs a routing stub
+rather than a fixed responder — the rig deliberately answers one body, because a file that
+needs routes should own them. `poll_logic_test` is close enough to convert and was left
+until somebody has a reason to open it.
+
+`integration_test/pinning_on_ios_test.dart` cannot share this at all: it runs inside the
+app sandbox where `test/fixtures/` does not exist, and reads its certificates from
+`inlined_fixtures.dart`. Recorded here so that is not rediscovered as an oversight.
 
 ### M3 · The source-reading rule is shared; four data loads still read directly
 
@@ -112,14 +118,6 @@ What remains reads files as **data** rather than as source — `certs.dart` deco
 reading fixtures. A missing file there already throws where it is used, and routing them
 through a helper whose whole purpose is a nicer failure message would be ceremony. Left
 deliberately, and recorded so the count is not re-raised as duplication.
-
-### M4 · `api_wire_test.dart` steers an eight-branch path chain with three mutable flags
-
-Carried over from the previous review pass, still true. The stub server decides its response
-by walking a chain of `if (path == ...)` with booleans set by the test above it, so reading
-any one case means simulating the whole file.
-
-**Fix.** A `Map<String, Handler>` keyed by method and path.
 
 ### M5 · `prove_events.dart` has never been run
 
@@ -164,18 +162,19 @@ screen actually *sounds*, and every claim in the first version of this entry tha
 written from the code rather than from the widget turned out to be wrong. This wants
 TalkBack and VoiceOver on real hardware, not another read of the source.
 
-### M13 · No `SafeArea`, and edge-to-edge is no longer optional at API 36
+### M13 · The bottom inset is handled; the rest was not the problem
 
-`SafeArea`, `viewPadding` and `viewInsets` appear zero times in `lib/`. Flutter has
-defaulted to edge-to-edge since 3.27, and Android removed the opt-out for apps targeting
-API 36 — which this app does.
+**Done, and the entry was half wrong.** Running the app on a simulator and looking at it
+settled what reading could not: the **top** is handled — `Scaffold` and `AppBar` place the
+title below the notch correctly, so that half of the worry was unfounded.
 
-`Scaffold` covers the tabs via the app bar and `NavigationBar`. The exposed screen is
-`pairing_screen.dart`: a `SingleChildScrollView` with flat `EdgeInsets.all(20)` whose last
-element is the privacy link, which is the one element Play requires to be reachable.
+The bottom is real and is now fixed on the two screens it applies to. `pairing_screen` and
+`privacy_screen` own a `Scaffold` with no bottom chrome, so nothing pads for the gesture
+bar; both now wrap their scroll view in `SafeArea(top: false)`. The four tab screens never
+needed it — they sit above a Material 3 `NavigationBar`, which pads itself.
 
-**Reasoned, not observed.** Confirm on a device before changing anything — this is the kind
-of claim that is obvious in theory and wrong on hardware.
+Verified by running: no `RenderFlex` overflow, no layout error, and the pairing screen
+renders as before.
 
 ### M15 · iOS builds and the pin holds; local-network privacy is still unproven
 

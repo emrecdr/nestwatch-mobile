@@ -21,48 +21,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'support/certs.dart';
+import 'support/tls_server.dart';
 
 void main() {
-  const dir = fixtureDir;
-  late HttpServer server;
+  late TestTlsServer server;
   late Fingerprint servedPin;
   late Fingerprint otherPin;
 
-  /// Set by the request handler. Stays false when the handshake is refused, which is the
-  /// assertion that matters: no request reached the server at all.
-  var handlerRan = false;
-
   setUp(() async {
-    handlerRan = false;
-    final context = SecurityContext()
-      ..useCertificateChain('$dir/server.cert.pem')
-      ..usePrivateKey('$dir/server.key.pem');
-
-    server = await HttpServer.bindSecure(
-      InternetAddress.loopbackIPv4,
-      0, // any free port
-      context,
-    );
-    server.listen((request) async {
-      handlerRan = true;
-      request.response
-        ..statusCode = 200
-        ..write('{"authenticated":false,"version":"test"}');
-      await request.response.close();
-    });
-
-    servedPin = fingerprintOf('$dir/server.cert.pem');
-    otherPin = fingerprintOf('$dir/impostor.cert.pem');
+    server = await TestTlsServer.start();
+    servedPin = server.pin;
+    otherPin = fingerprintOf('$fixtureDir/impostor.cert.pem');
   });
 
   tearDown(() async {
     HttpOverrides.global = null;
-    await server.close(force: true);
+    await server.close();
   });
 
   Future<String> get_(HttpClient client) async {
     final request = await client.getUrl(
-      Uri.parse('https://127.0.0.1:${server.port}/session'),
+      server.url('/session'),
     );
     final response = await request.close();
     return response.transform(utf8.decoder).join();
@@ -76,7 +55,7 @@ void main() {
   test('the right certificate is admitted', () async {
     HttpOverrides.global = PinnedHttpOverrides(pin: servedPin);
     expect(await get_(HttpClient()), contains('"version":"test"'));
-    expect(handlerRan, isTrue);
+    expect(server.handlerRan, isTrue);
   });
 
   test(
@@ -87,7 +66,7 @@ void main() {
       // The property `prove_pin.dart` measures on the wire, asserted from the far end:
       // the request handler never ran, so no request was ever delivered.
       expect(
-        handlerRan,
+        server.handlerRan,
         isFalse,
         reason:
             'the refusal must happen during the handshake, before any request',
@@ -98,7 +77,7 @@ void main() {
   test('NO pin refuses everything', () async {
     HttpOverrides.global = PinnedHttpOverrides();
     await expectLater(get_(HttpClient()), throwsA(isA<HandshakeException>()));
-    expect(handlerRan, isFalse);
+    expect(server.handlerRan, isFalse);
   });
 
   // A limit of this file, found by mutation rather than by reading it:
@@ -139,7 +118,7 @@ void main() {
         .observed;
     overrides.trust(observed);
     expect(await get_(HttpClient()), contains('"version":"test"'));
-    expect(handlerRan, isTrue);
+    expect(server.handlerRan, isTrue);
     // A pin change clears the record; a stale rejection must not outlive it.
     expect(overrides.rejectionFor('127.0.0.1:${server.port}'), isNull);
   });
@@ -148,6 +127,6 @@ void main() {
     final nearMiss = Fingerprint.fromBytes([...servedPin.bytes]..[31] ^= 0x01);
     HttpOverrides.global = PinnedHttpOverrides(pin: nearMiss);
     await expectLater(get_(HttpClient()), throwsA(isA<HandshakeException>()));
-    expect(handlerRan, isFalse);
+    expect(server.handlerRan, isFalse);
   });
 }

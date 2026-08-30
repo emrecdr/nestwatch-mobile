@@ -18,38 +18,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
 import 'support/certs.dart';
+import 'support/tls_server.dart';
 
 void main() {
   const dir = fixtureDir;
-  late HttpServer server;
+  late TestTlsServer server;
   late Fingerprint expiredPin;
-  var handlerRan = false;
 
   setUp(() async {
-    handlerRan = false;
-    final context = SecurityContext()
-      ..useCertificateChain('$dir/expired.cert.pem')
-      ..usePrivateKey('$dir/expired.key.pem');
-
-    server = await HttpServer.bindSecure(
-      InternetAddress.loopbackIPv4,
-      0,
-      context,
-    );
-    server.listen((request) async {
-      handlerRan = true;
-      request.response
-        ..statusCode = 200
-        ..write('{"authenticated":false,"version":"test"}');
-      await request.response.close();
-    });
-
-    expiredPin = fingerprintOf('$dir/expired.cert.pem');
+    server = await TestTlsServer.start(fixture: 'expired');
+    expiredPin = server.pin;
   });
 
   tearDown(() async {
     HttpOverrides.global = null;
-    await server.close(force: true);
+    await server.close();
   });
 
   test(
@@ -70,13 +53,13 @@ void main() {
     HttpOverrides.global = PinnedHttpOverrides(pin: expiredPin);
     final client = HttpClient();
     final request = await client.getUrl(
-      Uri.parse('https://127.0.0.1:${server.port}/session'),
+      server.url('/session'),
     );
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
 
     expect(
-      handlerRan,
+      server.handlerRan,
       isTrue,
       reason:
           'the pin is the sole authority — withTrustedRoots: false means the callback '
@@ -97,7 +80,7 @@ void main() {
       return true;
     };
     final request = await probe.getUrl(
-      Uri.parse('https://127.0.0.1:${server.port}/session'),
+      server.url('/session'),
     );
     await (await request.close()).drain<void>();
     probe.close();
@@ -123,7 +106,7 @@ void main() {
 
       final client = HttpClient();
       await (await (await client.getUrl(
-        Uri.parse('https://127.0.0.1:${server.port}/session'),
+        server.url('/session'),
       )).close()).drain<void>();
       client.close();
 
@@ -139,7 +122,7 @@ void main() {
     HttpOverrides.global = overrides;
     final client = HttpClient();
     await (await (await client.getUrl(
-      Uri.parse('https://127.0.0.1:${server.port}/session'),
+      server.url('/session'),
     )).close()).drain<void>();
     client.close();
     expect(overrides.acceptedNotAfter, isNotNull);
@@ -157,11 +140,11 @@ void main() {
       final client = HttpClient();
       await expectLater(
         client
-            .getUrl(Uri.parse('https://127.0.0.1:${server.port}/session'))
+            .getUrl(server.url('/session'))
             .then((r) => r.close()),
         throwsA(isA<HandshakeException>()),
       );
-      expect(handlerRan, isFalse);
+      expect(server.handlerRan, isFalse);
       client.close();
     },
   );

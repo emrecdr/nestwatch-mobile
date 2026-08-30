@@ -75,9 +75,18 @@ class _PairingScreenState extends State<PairingScreen> {
           ),
       ],
     ),
-    body: SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
+    // Edge-to-edge is not optional at API 36 — Android removed the opt-out — and Flutter
+    // has defaulted to it since 3.27, so a scroll view runs under the gesture bar unless
+    // something says otherwise. `top: false` because the AppBar already handles that end.
+    //
+    // The four tab screens do not need this: they sit above a NavigationBar, which pads
+    // itself. This screen and the privacy one own a Scaffold with no bottom chrome, and
+    // the last thing on this one is the privacy link Play requires to be reachable.
+    body: SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _body(context),
@@ -92,7 +101,8 @@ class _PairingScreenState extends State<PairingScreen> {
               child: const Text('How this app handles your data'),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     ),
   );

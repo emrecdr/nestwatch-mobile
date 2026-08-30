@@ -78,44 +78,52 @@ void main() {
         await response.close();
         return;
       }
-      if (request.uri.path.startsWith('/p/')) {
-        // Trap 2: nestwatch answers 302 to `/` identically on success and failure.
-        // The stub has to actually redirect, or a test asserting "we do not follow it"
-        // passes for want of anything to follow.
-        response.statusCode = HttpStatus.found;
-        response.headers.set(HttpHeaders.locationHeader, '/');
-      } else if (request.uri.path == '/api/unauthorized') {
-        response.statusCode = HttpStatus.unauthorized;
-      } else if (request.uri.path == '/api/other-cookie') {
-        response
+      // One entry per path, rather than a chain of eight `else if`s.
+      //
+      // The chain was not merely long: reading any single case meant simulating every
+      // branch above it to know it had not already answered. Two of these still depend on
+      // a flag the test sets, and a map makes that visible — `captureFails` and
+      // `servedTier` are named where they are used, not carried in from the top.
+      //
+      // `/p/` stays outside the map on purpose: it is a prefix match, and trap 2 is that
+      // nestwatch answers 302 to `/` identically on success and failure, so the stub has
+      // to actually redirect or a test asserting "we do not follow it" passes for want of
+      // anything to follow.
+      final routes = <String, void Function()>{
+        '/api/unauthorized': () =>
+            response.statusCode = HttpStatus.unauthorized,
+
+        '/api/other-cookie': () => response
           ..statusCode = 200
           ..cookies.add(Cookie('some_other_cookie', 'not-the-session'))
-          ..write('{"authenticated":false,"version":"test"}');
-      } else if (request.uri.path == '/api/capture-broken') {
+          ..write('{"authenticated":false,"version":"test"}'),
+
         // What AppError::Control answers: 500, with the OS detail logged on the server
         // and deliberately not in the body.
-        response
+        '/api/capture-broken': () => response
           ..statusCode = HttpStatus.internalServerError
-          ..write('{"error":"operation failed"}');
-      } else if (request.uri.path == '/api/logged-out') {
+          ..write('{"error":"operation failed"}'),
+
         // What a server sends when it ends a session: the same cookie, emptied and
         // expired immediately.
-        response
+        '/api/logged-out': () => response
           ..statusCode = 200
           ..cookies.add(Cookie('hh_session', '')..maxAge = 0)
-          ..write('{"authenticated":false,"version":"test"}');
-      } else if (request.uri.path == '/api/time-requests') {
-        response
+          ..write('{"authenticated":false,"version":"test"}'),
+
+        '/api/time-requests': () => response
           ..statusCode = 200
           ..write(
             '[{"id":"r1","ts":"2026-08-26T10:00:00Z","minutes":5,"reason":"x"}]',
-          );
-      } else if (request.uri.path == '/api/screenshot') {
-        if (captureFails) {
-          response
-            ..statusCode = HttpStatus.internalServerError
-            ..write('{"error":"operation failed"}');
-        } else {
+          ),
+
+        '/api/screenshot': () {
+          if (captureFails) {
+            response
+              ..statusCode = HttpStatus.internalServerError
+              ..write('{"error":"operation failed"}');
+            return;
+          }
           response
             ..statusCode = 200
             ..headers.contentType = ContentType('image', 'jpeg');
@@ -123,16 +131,23 @@ void main() {
             response.headers.set('x-shot-tier', servedTier!);
           }
           response.add(jpeg);
-        }
-      } else if (request.uri.path == '/login') {
-        response
+        },
+
+        '/login': () => response
           ..statusCode = 200
           ..cookies.add(Cookie('hh_session', 'issued-by-test'))
-          ..write('{"ok":true}');
+          ..write('{"ok":true}'),
+      };
+
+      if (request.uri.path.startsWith('/p/')) {
+        response.statusCode = HttpStatus.found;
+        response.headers.set(HttpHeaders.locationHeader, '/');
       } else {
-        response
-          ..statusCode = 200
-          ..write('{"authenticated":true,"version":"test"}');
+        // Anything unrouted is a signed-in session, which is what most tests want.
+        (routes[request.uri.path] ??
+            () => response
+              ..statusCode = 200
+              ..write('{"authenticated":true,"version":"test"}'))();
       }
       await response.close();
     });
