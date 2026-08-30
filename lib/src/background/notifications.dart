@@ -22,14 +22,45 @@ final FlutterLocalNotificationsPlugin _plugin =
 /// Prepare the plugin. Safe to call in either isolate, and cheap enough to call again.
 Future<void> initNotifications() async {
   const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  // **Darwin settings are not optional.** Without them `initialize` throws "iOS settings
+  // must be set when targeting iOS" — before `runApp`, out of `main`, so the app is a
+  // blank white screen with the failure only in the device log. It built, the pin proof
+  // passed, and the app was dead on arrival; the integration test never calls `main`, so
+  // nothing here noticed. Found by running it and looking at the screen.
+  //
+  // Permissions are NOT requested at startup. iOS shows the prompt the moment they are,
+  // and a parent who has just opened an app they have not paired yet is being asked about
+  // something that cannot happen. `requestNotificationPermission` asks later, when the
+  // parent turns notifications on — which is also what the Android tier does.
+  final darwin = DarwinInitializationSettings(
+    requestAlertPermission: false,
+    requestSoundPermission: false,
+    requestBadgePermission: false,
+    // iOS attaches buttons to a *category* declared up front, not to each notification
+    // the way Android does. The identifier here is what `notifyTimeRequests` names.
+    notificationCategories: <DarwinNotificationCategory>[
+      DarwinNotificationCategory(
+        timeRequestCategoryId,
+        actions: <DarwinNotificationAction>[
+          DarwinNotificationAction.plain(approveActionId, 'Approve'),
+          DarwinNotificationAction.plain(denyActionId, 'Deny'),
+        ],
+      ),
+    ],
+  );
+
   // 22.x takes `settings:` by name; the old positional form no longer compiles.
   await _plugin.initialize(
-    settings: const InitializationSettings(android: android),
+    settings: InitializationSettings(android: android, iOS: darwin),
     // Both isolates: a tap while the app is dead lands in the background one.
     onDidReceiveNotificationResponse: onNotificationAction,
     onDidReceiveBackgroundNotificationResponse: onNotificationAction,
   );
 }
+
+/// The iOS category that carries Approve and Deny. Declared once at initialize time.
+const String timeRequestCategoryId = 'nestwatch.time_request';
 
 /// Ask for POST_NOTIFICATIONS (Android 13+).
 ///
@@ -59,6 +90,7 @@ Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
   await initNotifications();
 
   const details = NotificationDetails(
+    iOS: DarwinNotificationDetails(categoryIdentifier: timeRequestCategoryId),
     android: AndroidNotificationDetails(
       _channelId,
       _channelName,

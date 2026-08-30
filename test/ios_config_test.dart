@@ -15,11 +15,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source.dart';
+
 void main() {
   const plistPath = 'ios/Runner/Info.plist';
   const dartPath = 'lib/src/background/background_poll.dart';
 
-  String plist() => File(plistPath).readAsStringSync();
+  String plist() => readSourceOrFail(plistPath, why: 'Info.plist carries the iOS keys that fail silently.');
 
   test('the iOS target exists and its Info.plist is readable', () {
     expect(
@@ -41,7 +43,7 @@ void main() {
 
     final registered = RegExp(
       r"periodicTaskUniqueName = '([^']+)'",
-    ).firstMatch(File(dartPath).readAsStringSync())?.group(1);
+    ).firstMatch(readSourceOrFail(dartPath, why: 'it registers the identifier iOS must be told about.'))?.group(1);
     expect(registered, isNotNull, reason: 'could not read the Dart identifier');
 
     expect(
@@ -87,7 +89,7 @@ void main() {
   });
 
   test('the bundle identifier matches Android, and is not the scaffold default', () {
-    final project = File('ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final project = readSourceOrFail('ios/Runner.xcodeproj/project.pbxproj', why: 'it carries the bundle identifier, which cannot change after a first upload.');
     expect(
       project,
       contains('PRODUCT_BUNDLE_IDENTIFIER = com.nestwatch.mobile;'),

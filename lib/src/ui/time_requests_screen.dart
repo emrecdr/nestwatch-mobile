@@ -141,20 +141,33 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
             Row(
               children: [
                 Expanded(
-                  child: FilledButton(
-                    onPressed: busy
-                        ? null
-                        : () => _decide(request, approve: true),
-                    child: Text(busy ? '…' : 'Approve'),
+                  // Labelled with the request it answers. Read in order a screen reader
+                  // already gives the context — the minutes and the reason are announced
+                  // above these buttons — but jumping control to control is how people
+                  // actually move through a list, and there "Approve, Approve, Approve"
+                  // names nothing. The visible text stays short; only the spoken one grows.
+                  child: Semantics(
+                    label: 'Approve ${request.minutes} more minutes',
+                    button: true,
+                    child: FilledButton(
+                      onPressed: busy
+                          ? null
+                          : () => _decide(request, approve: true),
+                      child: Text(busy ? '…' : 'Approve'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: busy
-                        ? null
-                        : () => _decide(request, approve: false),
-                    child: const Text('Deny'),
+                  child: Semantics(
+                    label: 'Deny ${request.minutes} more minutes',
+                    button: true,
+                    child: OutlinedButton(
+                      onPressed: busy
+                          ? null
+                          : () => _decide(request, approve: false),
+                      child: const Text('Deny'),
+                    ),
                   ),
                 ),
               ],

@@ -89,31 +89,29 @@ backstop is long *and* the stream is dead. A safer shape is a slower backstop th
 consults the stream at all — say 5 minutes always, on the grounds that events carry the
 urgency — but that is a real behaviour change and wants deciding, not sliding in.
 
-### M2 · Three test files stand up a TLS server, and the fourth copy is where the idiom will drift
+### M2 · Five files stand up a TLS server, not three
 
-`pinning_socket_test.dart`, `api_wire_test.dart` and `expiry_test.dart` each build a
-`SecurityContext`, bind an `HttpServer.bindSecure` on loopback, and register a handler that
-records whether it ran. `test/support/certs.dart` exists precisely because a helper had
-nowhere else to live and one test file was importing another.
+Counted 2026-08-31: `pinning_socket_test`, `api_wire_test`, `poll_logic_test`,
+`expiry_test`, and `integration_test/pinning_on_ios_test`. Each builds a `SecurityContext`,
+binds `HttpServer.bindSecure` on loopback, and records whether its handler ran. The entry
+said three when it was written and has been quietly overtaken twice since.
 
-**Fix.** Move the rig into `test/support/` — a function taking a certificate basename and
-returning the server plus a "did the handler run" flag.
+**Fix.** A rig in `test/support/`, taking a certificate name and returning the server plus
+a did-it-run flag. The iOS one cannot share it — an integration test runs in the app
+sandbox and reads its certificates from `inlined_fixtures.dart` — so the target is four.
 
-**Not done here.** Two review passes have now flagged it and it has stayed cheap to ignore,
-which is the honest reason. Worth doing the next time a fourth file needs one, and worth
-doing *before* rather than after.
+### M3 · The source-reading rule is shared; four data loads still read directly
 
-### M3 · Two tests scrape source text, and the discipline is written twice
+**Mostly done.** `test/support/source.dart` holds `readSourceOrFail`, and every test that
+*asserts on source text* now uses it — `flag_secure_test`, `ios_config_test` and
+`store_requirements_test`, six call sites between them. Watched to fail: hiding
+`MainActivity.kt` produces four failures naming what went unchecked.
 
-`flag_secure_test.dart` and `store_requirements_test.dart` both read a non-Dart file, assert
-on its contents, and — deliberately — fail rather than skip when the file cannot be found.
-That last part is the valuable bit and it is hand-rolled in both.
-
-Source-scraping is the right altitude here rather than a smell: a window flag and a manifest
-declaration have no runtime handle a headless test can reach, and both fail silently in
-production. But the "cannot read ⇒ fail" rule is one rule.
-
-**Fix.** A `readSourceOrFail(path)` in `test/support/`, used by both.
+What remains reads files as **data** rather than as source — `certs.dart` decoding a PEM,
+`models_golden_test` loading vendored JSON, `expiry_test` and `inlined_fixtures_test`
+reading fixtures. A missing file there already throws where it is used, and routing them
+through a helper whose whole purpose is a nicer failure message would be ceremony. Left
+deliberately, and recorded so the count is not re-raised as duplication.
 
 ### M4 · `api_wire_test.dart` steers an eight-branch path chain with three mutable flags
 
@@ -148,19 +146,23 @@ Nothing here needs doing until then — and the way this repo finds out that day
 `tool/check_findings.sh` reporting that reference dangling, because a fixed entry is a
 deleted entry on both sides.
 
-### M12 · Nothing in the app has a semantic label
+### M12 · The screen reader still has no map of a screen
 
-`Semantics`, `semanticLabel`, `MergeSemantics` and `excludeSemantics` appear zero times in
-`lib/` (measured 2026-08-27). Five `tooltip:` strings are the whole accessibility surface.
+**Two of this entry's three original examples were wrong and are gone.** The screenshot
+now carries a `semanticLabel` and the decision buttons name the request they answer. The
+fingerprint example was withdrawn — `FingerprintView` already renders grouped rows, so a
+screen reader was never reading 95 characters as one run.
 
-Worst three: the screenshot is an `Image.memory` with no label, so the screen whose entire
-content is an image announces nothing; the fingerprint is 95 characters of hex read aloud
-one character at a time; and Approve/Deny repeat per row with nothing naming which request.
+What is genuinely left is structural rather than per-widget, and needs a device to judge:
+no headings, so a screen reader user cannot jump between sections; the four tabs announce
+as bare labels; and `Notice` — which carries every warning in the app — has no role, so a
+caveat reads exactly like body text. `Semantics(header: true)` and a `liveRegion` on the
+warning strip are the likely shapes.
 
-Touch targets are fine — all interactive elements are Material widgets, which enforce 48dp
-themselves. Labelling is the part nothing gives you for free.
-
-Full reasoning in `docs/UX-REVIEW.md` §3.
+**Not done because it cannot be judged from here.** The remaining work is about how a
+screen actually *sounds*, and every claim in the first version of this entry that was
+written from the code rather than from the widget turned out to be wrong. This wants
+TalkBack and VoiceOver on real hardware, not another read of the source.
 
 ### M13 · No `SafeArea`, and edge-to-edge is no longer optional at API 36
 

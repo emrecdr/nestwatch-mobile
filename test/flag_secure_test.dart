@@ -14,6 +14,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/source.dart';
+
 void main() {
   const path =
       'android/app/src/main/kotlin/com/nestwatch/mobile/MainActivity.kt';
@@ -29,7 +31,7 @@ void main() {
   });
 
   test('the activity sets FLAG_SECURE', () {
-    final source = File(path).readAsStringSync();
+    final source = readSourceOrFail(path, why: 'MainActivity is where FLAG_SECURE lives.');
     expect(
       source,
       contains('WindowManager.LayoutParams.FLAG_SECURE'),
@@ -43,7 +45,7 @@ void main() {
     // `setFlags(flags, mask)` only touches the bits named in the mask. Passing the flag
     // as the value with an empty mask compiles, runs, and does nothing — so the mistake
     // this asserts against is a silent one.
-    final source = File(path).readAsStringSync();
+    final source = readSourceOrFail(path, why: 'MainActivity is where FLAG_SECURE lives.');
     final calls = RegExp(
       r'setFlags\(\s*WindowManager\.LayoutParams\.FLAG_SECURE\s*,\s*WindowManager\.LayoutParams\.FLAG_SECURE\s*,?\s*\)',
     );
@@ -55,7 +57,7 @@ void main() {
   });
 
   test('it is set in onCreate, before the first frame can be composited', () {
-    final source = File(path).readAsStringSync();
+    final source = readSourceOrFail(path, why: 'MainActivity is where FLAG_SECURE lives.');
     final onCreate = source.indexOf('onCreate');
     final setFlags = source.indexOf('setFlags');
     expect(onCreate, greaterThan(-1), reason: 'no onCreate to set it in');

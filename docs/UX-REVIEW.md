@@ -90,6 +90,12 @@ the PC is genuinely unreachable. Only the third is a problem with the PC.
 
 ## 3. Nothing in this app has a semantic label
 
+**Partly shipped, and two of the three examples did not survive validation.** The count
+was right — zero semantic annotations — but a count is not a finding. Checking each place
+against the widget rather than against the idea killed one outright and shrank another,
+which is the whole reason to validate before implementing: the fix for the fingerprint
+would have duplicated grouping the widget already did.
+
 **Measured.** `Semantics`, `semanticLabel`, `MergeSemantics` and `excludeSemantics` appear
 **zero** times across `lib/`. Five `tooltip:` strings are the entire accessibility surface.
 
@@ -97,11 +103,17 @@ Three places where that is not a formality:
 
 - **The screenshot.** `Image.memory` with no `semanticLabel`. A screen reader announces
   nothing at all for the one screen whose entire content is an image.
-- **The fingerprint.** 95 characters of colon-separated hex in a `SelectableText`. Read
-  aloud character by character, which is the least useful possible rendering of a value a
-  parent is being asked to compare.
-- **Approve and Deny.** Repeated once per row in a list. Out of visual context, a screen
-  reader user hears "Approve, Approve, Approve" with nothing naming which request.
+- ~~**The fingerprint.**~~ **Withdrawn — this was wrong.** `FingerprintView` already
+  renders it as grouped fixed-width rows, four of them for SHA-256, each its own
+  `SelectableText`. A screen reader reads four short groups, not one 95-character run. The
+  claim was written from the *value* rather than from the widget, and building the
+  grouping helper it implied would have duplicated work already done.
+- **Approve and Deny.** Overstated as first written, and true in the case that matters.
+  The buttons sit in a Card beneath the minutes and the reason, so *sequential* traversal
+  does give context — a screen reader announces the request before its buttons. What has
+  no context is jumping control to control, which is how people actually move through a
+  list, and there it really is "Approve, Approve, Approve". **Fixed** with a `Semantics`
+  label carrying the minutes; the visible text stays short and only the spoken one grows.
 
 Flutter's Material buttons already meet the 48dp target automatically, so sizing is fine —
 the gap here is labelling, which nothing gives you for free.

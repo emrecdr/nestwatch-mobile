@@ -26,6 +26,7 @@ import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
 import 'poller.dart';
+import 'relative_time.dart';
 import 'screen_load.dart';
 
 class ScreenshotScreen extends StatefulWidget {
@@ -179,6 +180,10 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
                 maxScale: 5,
                 child: Center(
                   child: Image.memory(
+                    semanticLabel: _frameAt == null
+                        ? 'A picture of the screen on that PC.'
+                        : 'A picture of the screen on that PC, '
+                              '${ago(_frameAt!)}.',
                     bytes,
                     fit: BoxFit.contain,
                     // Without this every new frame fades in from blank, which at 5s
