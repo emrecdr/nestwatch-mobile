@@ -8,9 +8,22 @@ target sizes, and Material 3.
 
 Ordered by what it costs a parent, not by effort.
 
+**Status: §1, §2 and §6 are implemented** (2026-08-30), and their entries were deleted from
+`docs/OPEN-FINDINGS.md` per that file's own first rule. They are kept below as written,
+with what shipped marked, because this is the record of what was decided — not a list that
+edits itself to match the code.
+
 ---
 
 ## 1. The notification is a dead end, and it sits on the product's only loop
+
+**Shipped.** Approve and Deny actions, handled in a background isolate that installs the
+pin for itself. Every path that does not end in the change being made posts a second
+notification saying so — the notification is dismissed the instant an action is tapped,
+before any network call, so a parent could otherwise tap Approve, watch it vanish, and be
+wrong. One assumption died on contact: `approveTimeRequest` returns **false** for an
+already-resolved request rather than throwing, so the first draft would have reported every
+ordinary race as a hard failure.
 
 **Measured.** `notifications.dart` sets no `actions:` and registers no tap handler —
 `onDidReceiveNotificationResponse` appears nowhere. So the loop this whole app exists for
@@ -33,6 +46,13 @@ action should be *Approve* and *Deny* rather than a single ambiguous one, and it
 cancel the notification on success. See §6 on undo.
 
 ## 2. "You are away from home" reads exactly like "that PC is off"
+
+**Shipped.** `whereAmI` asks this phone where it is before blaming that PC, from
+`NetworkInterface.list()` — no package, no permission, and no second request to a PC that
+has already failed to answer one. `NetworkInterface` does not expose a netmask, so the
+subnet cannot be computed and this does not pretend otherwise: the wide case is the hedged
+one, because telling a parent at home that they are away sends them to the wrong place. The
+OS detail moved to `NestwatchException.detail`, where the harnesses still print it.
 
 **Measured.** `nestwatch_api.dart` builds one message for every transport failure:
 
@@ -101,6 +121,11 @@ stops. Keep the detail for the harnesses, which is where it is useful; give the 
 sentence.
 
 ## 6. Approve grants minutes with no way back
+
+**Superseded by §1 rather than fixed as written.** The undo was argued for the in-app
+button; what shipped puts the same grant on a lock screen, where the risk is not a mis-tap
+but a *silent* one. The effort went into telling the parent when an answer did not land. An
+in-app undo is still worth having and is no longer urgent.
 
 **Measured.** `time_requests_screen.dart` debounces via `_deciding` (PLAN §5 asks for that),
 shows a `SnackBar` on completion, and offers no undo and no confirmation.

@@ -9,6 +9,7 @@ library;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/models.dart';
+import 'notification_actions.dart';
 
 const _channelId = 'nestwatch.time_requests';
 const _channelName = 'Time requests';
@@ -24,6 +25,9 @@ Future<void> initNotifications() async {
   // 22.x takes `settings:` by name; the old positional form no longer compiles.
   await _plugin.initialize(
     settings: const InitializationSettings(android: android),
+    // Both isolates: a tap while the app is dead lands in the background one.
+    onDidReceiveNotificationResponse: onNotificationAction,
+    onDidReceiveBackgroundNotificationResponse: onNotificationAction,
   );
 }
 
@@ -63,6 +67,13 @@ Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
       priority: Priority.high,
       // The parent acts in the app; the notification is the prompt, not the record.
       autoCancel: true,
+      // Answer without opening anything. The work happens in a background isolate that
+      // installs the pin for itself — see notification_actions.dart, including why every
+      // path that does not end in the change being made says so out loud.
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(approveActionId, 'Approve'),
+        AndroidNotificationAction(denyActionId, 'Deny'),
+      ],
     ),
   );
 
@@ -70,6 +81,9 @@ Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
     await _plugin.show(
       // Stable per request, so a re-post replaces rather than stacks.
       id: request.id.hashCode,
+      // The id travels to the action handler and back; it is how an isolate with no
+      // memory of this loop knows which request a button belonged to.
+      payload: request.id,
       title: '${request.minutes} more minutes?',
       body: request.reason.isEmpty
           ? 'Your child asked for more screen time.'
@@ -82,3 +96,26 @@ Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
 /// Clear a notification once its request is no longer pending — resolved here, in the
 /// browser dashboard, or on another phone.
 Future<void> cancelForRequest(String id) => _plugin.cancel(id: id.hashCode);
+
+/// Tell the parent an answer they gave from the notification did not land.
+///
+/// Deliberately a separate id from the request's own, so it cannot replace a still-live
+/// prompt for a different request — and deliberately not `autoCancel: false`, because a
+/// parent who reads it and swipes it away has understood it.
+Future<void> notifyActionFailed(String requestId, String message) async {
+  const details = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: _channelDescription,
+      importance: Importance.high,
+      priority: Priority.high,
+    ),
+  );
+  await _plugin.show(
+    id: 'failed:$requestId'.hashCode,
+    title: 'That did not go through',
+    body: message,
+    notificationDetails: details,
+  );
+}

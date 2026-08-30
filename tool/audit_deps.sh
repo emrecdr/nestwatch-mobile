@@ -29,29 +29,72 @@ SUSPECT='cupertino_http|cronet_http|SecureSocket|RawSocket|RawSecureSocket|Socke
 # Packages that match and are known not to matter, each with the reason it does not.
 # Listed rather than filtered out by pattern, because a silent allowlist is how an audit
 # stops auditing. An entry that stops matching is reported too -- see STALE below.
-declare -a ALLOW_NAME=(dbus vm_service)
+declare -a ALLOW_NAME=(dbus)
 declare -a ALLOW_WHY=(
-  "Unix domain sockets for Linux D-Bus, reached only by flutter_secure_storage's Linux implementation; not compiled into an Android build"
-  "the VM service protocol, a dev-time transitive of flutter_test; not shipped"
+  "Unix domain sockets for Linux D-Bus, reached only by flutter_secure_storage's Linux implementation; not compiled into an Android or iOS build"
 )
 
-# macOS ships bash 3.2, which has no `mapfile` -- a plain read loop over a temp file
-# works everywhere, and the other scripts here already assume nothing newer.
+# The packages that actually SHIP, computed rather than assumed.
+#
+# `pubspec.lock` records every resolved package and cannot say which of them reach a
+# release build: a transitive of a dev dependency is marked `transitive`, exactly like a
+# transitive of a real one. Auditing the lock therefore flags things that are never
+# compiled into the app — `integration_test` pulls in `webdriver`, which pulls in
+# `sync_http`, which opens raw sockets and is a test driver.
+#
+# The first answer to that was going to be another allowlist entry, which is how an audit
+# quietly narrows until it checks nothing. `pub deps --json` carries the actual edges, so
+# the shipped set is a closure over root dependencies MINUS root devDependencies. Dev-only
+# packages then fall out by construction, and the allowlist is left holding only things
+# that genuinely ship.
+#
+# PUB_DEPS_JSON exists so the failure modes below can be driven from a planted graph —
+# the same code path, not a parallel one.
 resolved=$(mktemp)
 trap 'rm -f "$resolved"' EXIT
-python3 - > "$resolved" <<'LOCK'
-import re
-import os
-s = open(os.environ.get('PUBSPEC_LOCK', 'pubspec.lock')).read()
-for m in re.finditer(r'^  ([a-z_0-9]+):\n(?:.*\n)*?    source: hosted\n    version: "([^"]+)"', s, re.M):
-    print(f"{m.group(1)}\t{m.group(1)}-{m.group(2)}")
-LOCK
+
+if [ -n "${PUB_DEPS_JSON:-}" ]; then
+  deps_json=$(cat "$PUB_DEPS_JSON")
+else
+  deps_json=$(flutter pub deps --json 2>/dev/null)
+fi
+
+if [ -z "$deps_json" ]; then
+  echo "Could not read the dependency graph (flutter pub deps --json)."
+  echo
+  echo "  Nothing was scanned. That is not the same as nothing being wrong."
+  exit 2
+fi
+
+printf '%s' "$deps_json" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+pkgs = {p["name"]: p for p in d["packages"]}
+root = pkgs.get(d.get("root"), {})
+shipped, queue = set(), [
+    n for n in root.get("dependencies", [])
+    if n not in set(root.get("devDependencies", []))
+]
+while queue:
+    name = queue.pop()
+    if name in shipped:
+        continue
+    shipped.add(name)
+    queue.extend(pkgs.get(name, {}).get("dependencies", []))
+for name in sorted(shipped):
+    p = pkgs.get(name, {})
+    if p.get("source") == "hosted":
+        sys.stdout.write("%s\t%s-%s\n" % (name, name, p["version"]))
+' > "$resolved"
 
 scanned=0
 missing=0
 control=0
-declare -a hits_name=()
-declare -a hits_file=()
+# A file rather than arrays: bash 3.2 under `set -u` errors on an empty array reference,
+# and an empty hit list is the ordinary case. check_findings.sh reaches the same shape for
+# the same reason.
+hits=$(mktemp)
+trap 'rm -f "$resolved" "$hits"' EXIT
 
 while IFS=$'\t' read -r name slug; do
   [ -n "$name" ] || continue
@@ -66,8 +109,7 @@ while IFS=$'\t' read -r name slug; do
   grep -rqE 'import|class|void|final' "$lib" 2>/dev/null && control=$((control + 1))
   found=$(grep -rlE "$SUSPECT" "$lib" 2>/dev/null | head -3)
   if [ -n "$found" ]; then
-    hits_name+=("$name")
-    hits_file+=("$(echo "$found" | sed "s|$CACHE/||" | tr '\n' ' ')")
+    printf '%s\t%s\n' "$name" "$(echo "$found" | sed "s|$CACHE/||" | tr '\n' ' ')" >> "$hits"
   fi
 done < "$resolved"
 
@@ -83,8 +125,8 @@ echo "Control: a must-match pattern hit $control of $scanned, so the grep can se
 echo
 
 status=0
-for i in "${!hits_name[@]}"; do
-  name="${hits_name[$i]}"
+while IFS=$'\t' read -r name files; do
+  [ -n "$name" ] || continue
   why=""
   for j in "${!ALLOW_NAME[@]}"; do
     [ "${ALLOW_NAME[$j]}" = "$name" ] && why="${ALLOW_WHY[$j]}"
@@ -92,19 +134,18 @@ for i in "${!hits_name[@]}"; do
   if [ -n "$why" ]; then
     echo "  known    $name — $why"
   else
-    echo "  BYPASS   $name — ${hits_file[$i]}"
+    echo "  BYPASS   $name — $files"
     echo "           This package can reach the network without HttpOverrides. Either"
     echo "           show it cannot, or drop it: an unpinned request is the whole risk."
     status=1
   fi
-done
+done < "$hits"
 
 # An allowlist entry that no longer matches is an entry nobody has re-justified. Say so
 # rather than carrying it forever.
 for j in "${!ALLOW_NAME[@]}"; do
-  hit=0
-  for n in "${hits_name[@]}"; do [ "$n" = "${ALLOW_NAME[$j]}" ] && hit=1; done
-  [ "$hit" -eq 0 ] && echo "  STALE    ${ALLOW_NAME[$j]} is allowlisted but no longer matches — remove the entry."
+  grep -q "^${ALLOW_NAME[$j]}	" "$hits" 2>/dev/null ||
+    echo "  STALE    ${ALLOW_NAME[$j]} is allowlisted but no longer matches — remove the entry."
 done
 
 echo

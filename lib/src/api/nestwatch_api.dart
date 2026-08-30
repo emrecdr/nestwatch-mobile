@@ -10,6 +10,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'models.dart';
+import 'reachability.dart';
 import 'server_events.dart';
 import 'session_cookie.dart';
 
@@ -92,7 +93,15 @@ enum NestwatchFailure {
 class NestwatchException implements Exception {
   final NestwatchFailure failure;
   final String message;
-  const NestwatchException(this.failure, this.message);
+
+  /// The operating system's own words, when there were any.
+  ///
+  /// Kept off [message] on purpose: "No route to host" appended to a sentence written
+  /// for a parent is noise they cannot act on. The harnesses print it, because there it
+  /// is the most useful part.
+  final String? detail;
+
+  const NestwatchException(this.failure, this.message, {this.detail});
 
   @override
   String toString() => message;
@@ -533,9 +542,17 @@ class NestwatchClient {
         'The certificate did not match.',
       );
     } on SocketException catch (e) {
+      // Ask this phone where it is before blaming that PC. For a LAN-only app the
+      // commonest cause by far is a parent who left the house — which is not a fault,
+      // and should not be reported as one, least of all in the OS's words.
+      final where = whereAmI(
+        serverHost: authority.split(':').first,
+        localAddresses: await localAddresses(),
+      );
       throw NestwatchException(
         NestwatchFailure.unreachable,
-        'Could not reach $authority. ${e.osError?.message ?? e.message}',
+        explainUnreachable(where, authority),
+        detail: e.osError?.message ?? e.message,
       );
     }
   }

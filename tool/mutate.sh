@@ -322,6 +322,26 @@ mutate "events: the framing space is kept as part of the tag" \
   "    if (value.startsWith(' ')) value = value.substring(1);" \
   "    // framing space kept"
 
+# Answering from the notification. Both invert a decision rather than delete a line: the
+# first makes a failed answer look like a granted one, which is the exact silence that
+# makes a lock-screen button risky; the second turns an ordinary race into a complaint.
+mutate "notification: a failed answer says nothing" \
+  lib/src/background/notification_actions.dart \
+  "  ActionOutcome.failed =>" \
+  "  ActionOutcome.failed => null, // silenced\n  ActionOutcome.values =>"
+
+mutate "notification: away-from-home reads as unreachable to nobody" \
+  lib/src/background/notification_actions.dart \
+  "    if (!resolved) return ActionOutcome.alreadyResolved;" \
+  "    if (resolved) return ActionOutcome.alreadyResolved;"
+
+# Whereabouts. Collapsing the offline case into the elsewhere case would tell a parent
+# with no network at all that they are on the wrong one.
+mutate "whereabouts: no network reads as a different network" \
+  lib/src/api/reachability.dart \
+  "  if (usable.isEmpty) return Whereabouts.offline;" \
+  "  if (usable.isEmpty) return Whereabouts.looksElsewhere;"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 
