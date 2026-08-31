@@ -362,10 +362,17 @@ mutate "expiry: the day after lapsing reads as expiring again" \
   "    final life = remaining.isNegative" \
   "    final life = remaining.inDays < 0"
 
+# Anchored on the inner comparison rather than the whole clause, because the whole clause
+# is what `dart format` split across two lines -- a needle spanning a syntactic boundary,
+# defeated by the formatter, which is nestwatch#O79's class exactly. This one asserts its
+# needle is PRESENT, so it failed closed and said ANCHOR MISSING instead of quietly
+# counting as a pass. The shorter needle cannot be broken by reflow: it has no line break
+# to be moved to. Mutating it to `false` disables the same decision -- the expiring-soon
+# branch stops producing a warning -- with less text to go stale.
 mutate "expiry: the last week loses its strip again" \
   lib/src/pinning/certificate_expiry.dart \
-  "      (life == CertificateLife.expiringSoon && remaining.inDays <= strippedWithinDays);" \
-  "      false;"
+  "remaining.inDays <= strippedWithinDays" \
+  "false"
 
 mutate "unpair: the announced-request identifiers survive" \
   lib/src/pairing/pairing_controller.dart \
