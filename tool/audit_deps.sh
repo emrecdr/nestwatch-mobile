@@ -24,7 +24,9 @@ CACHE="${PUB_CACHE_LIB:-$HOME/.pub-cache/hosted/pub.dev}"
 LOCKFILE="${PUBSPEC_LOCK:-pubspec.lock}"
 
 # Anything that reaches the network without going through the HttpClient factory.
-SUSPECT='cupertino_http|cronet_http|SecureSocket|RawSocket|RawSecureSocket|Socket\.connect|HttpOverrides'
+# Overridable for the same reason CACHE and LOCKFILE are: so the detector check below can
+# be handed a broken pattern and watched to fire.
+SUSPECT="${SUSPECT_PATTERN:-cupertino_http|cronet_http|SecureSocket|RawSocket|RawSecureSocket|Socket\.connect|HttpOverrides}"
 
 # Packages that match and are known not to matter, each with the reason it does not.
 # Listed rather than filtered out by pattern, because a silent allowlist is how an audit
@@ -94,7 +96,55 @@ control=0
 # and an empty hit list is the ordinary case. check_findings.sh reaches the same shape for
 # the same reason.
 hits=$(mktemp)
-trap 'rm -f "$resolved" "$hits"' EXIT
+fixture=$(mktemp -d)
+trap 'rm -f "$resolved" "$hits"; rm -rf "$fixture"' EXIT
+
+# The detector check, which is a different question from the control below.
+#
+# The control proves the grep can READ a tree. It cannot prove `$SUSPECT` can MATCH one:
+# the two are different patterns, and only the second is the claim this audit makes. A
+# malformed `$SUSPECT` -- one stray `[` while adding a term -- makes grep exit 2 and write
+# to the stderr this script discards, so `found` is empty and every package reads as
+# clean, while the control still passes and the run still prints "so the grep can see".
+# Demonstrated on 2026-08-31 against a fixture holding a known positive: the well-formed
+# pattern found it, the malformed one returned nothing, and the control passed for both.
+#
+# So each alternative in `$SUSPECT` is asserted against a planted positive before the
+# pub-cache is read at all. Non-vacuity then rests on this fixture rather than on whatever
+# the cache happens to contain today -- a guard whose non-vacuity depends on the tree it
+# guards is one `pub upgrade` away from testing nothing. (The lesson is nestwatch#O79's,
+# reached there on the same class of defect; this is that lesson applied here.)
+#
+# The literal is the alternative with its backslashes stripped, so `Socket\.connect`
+# plants `Socket.connect`. An alternative with richer regex syntax would not round-trip
+# and would fail this check -- loudly, which is the direction to fail in.
+#
+# What this does NOT prove, stated because "all 7 terms" reads stronger than it is: that a
+# term names a real bypass API. A term is checked against a positive built from itself, so
+# a plausible-looking typo passes -- `SocketsButTypoed$$` was tried on 2026-08-31 and did.
+# This closes the pattern going blind, not the list being wrong. Nothing here can close
+# the second; only knowing the platform can.
+detector_ok=1
+i=0
+while IFS= read -r alt; do
+  [ -n "$alt" ] || continue
+  i=$((i + 1))
+  printf 'planted %s\n' "$(printf '%s' "$alt" | tr -d '\\')" > "$fixture/f$i.dart"
+  if ! grep -rlE "$SUSPECT" "$fixture/f$i.dart" >/dev/null 2>&1; then
+    echo "  DETECTOR FAILED — SUSPECT does not match a planted \`$alt\`."
+    detector_ok=0
+  fi
+done <<EOF
+$(printf '%s' "$SUSPECT" | tr '|' '\n')
+EOF
+rm -f "$fixture"/*.dart
+if [ "$detector_ok" -eq 0 ]; then
+  echo
+  echo "  The pattern cannot find what it is looking for, so a clean tree below would"
+  echo "  mean nothing. Fix SUSPECT before trusting any result from this run."
+  exit 2
+fi
+echo "Detector: SUSPECT matched a planted positive for all $i of its terms."
 
 while IFS=$'\t' read -r name slug; do
   [ -n "$name" ] || continue

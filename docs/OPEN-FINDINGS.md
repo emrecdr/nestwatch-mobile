@@ -68,6 +68,89 @@ Last audited against the tree on **2026-08-27**.
 
 ## Open
 
+### M19 · The suite had 253 tests and rendered nothing
+
+**Measured 2026-08-31:** zero occurrences of `testWidgets(` or `pumpWidget` anywhere under
+`test/` or `integration_test/`. `lib/src/ui/` is 2,574 lines and every one of them was
+checked by reading only. The one file that mentions `testWidgets` —
+`test/screen_load_test.dart` — says so in its own header and answers it by lifting one
+shared rule out of four screens into pure logic. That closed the rule. It did not render
+anything.
+
+This is also visible in the mutation audit: of 39 files under `lib/src/`, 19 carry no
+mutation at all, and 13 of those 19 are `lib/src/ui/`. The suite tests logic thoroughly and
+draws nothing.
+
+**Partly fixed.** `test/screen_render_test.dart` pumps `PrivacyScreen`, `FingerprintView`,
+`Notice` in all three tones, and `PairingScreen` — the largest UI file at 439 lines and the
+first screen a parent sees — at 320x568 and 430x932, the iPhone SE floor implied by the iOS
+14 deployment target and a large modern phone. Each case asserts **both** directions: that
+nothing was thrown or overflowed, *and* that a specific string reached the screen. The
+absence half alone would pass for a screen that renders an empty box, which is the exact
+failure the file exists to notice.
+
+**The rig was shown to fail before it was trusted**, twice over. A planted throwing widget
+and a column 1,600px tall on a 568px screen are both caught by `takeException()`; and
+pointing one case at a string the screen does not contain failed with *"built without
+throwing, but put ... on screen nowhere"*. The uncovered list caught its own first
+omission unprompted — `poller.dart` was missing from both lists and the guard failed until
+it was classified.
+
+**What is still not rendered, and why it is a list rather than a sentence.** Nine files
+need either a live `NestwatchClient` (`home_screen`, `screenshot_screen`, `polled_screen`
+and the three screens it drives) or a platform channel (`notifications_sheet`,
+`scan_screen`, `background_promise`). A comment saying so would be true today and silently
+wrong the day someone adds a screen, so the test reads `lib/src/ui/` and fails on any file
+in neither list — and on any listed name that no longer exists.
+
+**What this does not close, stated plainly because the temptation is to claim it.** It
+would *not* have caught the blank white screen on iOS. That was `initNotifications()`
+throwing out of `main()` before any screen was built, and pumping a screen never calls
+`main()`. A screenshot found that one, and a screenshot is still what finds the next of its
+kind. Rendering coverage and running-app coverage are different things, and 268 green tests
+say nothing about the second.
+
+### M18 · The dependency audit proved it could read, never that its needle could match
+
+> **Cross-repo** · lesson from `nestwatch#O79`, applied here
+
+`tool/audit_deps.sh` is this repo's only **absence-asserting** source scan: it claims no
+shipped package reaches the network outside `HttpOverrides`. On nestwatch#O79's taxonomy
+that is the direction that fails *open* — break it and it reports success.
+
+It already carried a control, added after the previous version of this audit spent months
+grepping for `SecureSocket` and matching nothing. But the control asks a weaker question
+than the audit answers:
+
+```sh
+grep -rqE 'import|class|void|final' "$lib"   # can the grep READ a tree?
+grep -rlE "$SUSPECT"               "$lib"   # can $SUSPECT MATCH one?
+```
+
+Those are different patterns, and only the second is the claim. **Measured 2026-08-31**
+against a fixture holding a real positive: the well-formed pattern found it; a `$SUSPECT`
+with one stray `[` returned nothing — grep exits 2 and writes to the stderr this script
+discards, so every package reads as clean — while the control passed for both runs and the
+script still printed *"so the grep can see."* One mistyped character while adding a term
+and the audit goes silent, in the direction that looks like good news.
+
+**Fixed.** Each alternative in `$SUSPECT` is now asserted against a planted positive
+before the pub-cache is opened, so non-vacuity rests on a fixture rather than on whatever
+the cache happens to hold. `SUSPECT_PATTERN` is overridable for the same reason `CACHE`
+and `LOCKFILE` are — the broken pattern above was watched to fire (`DETECTOR FAILED`,
+exit 2) rather than assumed to.
+
+**What it still does not cover**, recorded because *"all 7 terms"* reads stronger than it
+is: a term is checked against a positive built from itself, so a plausible typo naming no
+real API passes — `SocketsButTypoed$$` was tried and did. This closes the pattern going
+blind. It cannot close the list being wrong, and nothing mechanical can.
+
+**Why this was worth doing on their finding rather than waiting for ours to fail.** The
+audit is exactly the shape nestwatch#O79 describes, and this repo's recurring defect is
+the same one: a check that stops checking while still reporting success. It had already
+happened here twice — the original `SecureSocket` grep, and mutation anchors going stale
+three times. The lesson generalised across repositories before it had to be relearned.
+
 ### M17 · The architecture report said "one file move"; it was not
 
 `docs/UX-REVIEW.md` and the published standing review both described the
@@ -140,6 +223,20 @@ deliberately, and recorded so the count is not re-raised as duplication.
 
 ### M5 · Every harness has now been run live; two skips are the platform, not the rig
 
+**Re-run against nestwatch 0.5.1 on 2026-08-31**, after that release landed. All eight
+pass unchanged, including `prove_pin`'s 0-bytes/255-bytes control pair. The audit-log skip
+below is now closed too — `prove_timecodes --audit` pointed at the live data directory
+runs its two assertions and both pass, so what remains skipping is only the screenshot and
+pairing-token pair, and both are the platform.
+
+Recorded separately from `ContractCheck.testedAgainst`, which stays at `0.5.0` **on
+purpose**. That constant states where `test/golden/` was captured from, and its own doc
+says to bump it *with* the files and never alone. The files did not change — nine compared
+byte-identical against the sibling checkout at `837c03f` — so `0.5.0` is still exactly
+true, and "verified against 0.5.1" is a different claim that belongs here rather than
+folded into a string that means something else. Bumping it because nothing appeared to
+change is how the next bump becomes because nothing probably changed.
+
 **Closed.** All eight ran on 2026-08-31 against dev instances built from the sibling
 checkout — three nestwatch instances (real, impostor, rotated), the byte-counting sink and
 the LAN-gate stub. `prove_pin`, `prove_tofu`, `prove_events`, `prove_login`,
@@ -153,8 +250,7 @@ keep-alive window and then heard `requests` and `usage` from a change made on an
 connection.
 
 **What still skips, and why it is not the rig:** screenshots are `cfg(not(windows))` in
-nestwatch, so a macOS host cannot serve one; the audit-log assertions want `--audit`
-pointed at the data directory; and `prove_login`'s token checks need a freshly minted
+nestwatch, so a macOS host cannot serve one; and `prove_login`'s token checks need a freshly minted
 pairing token, which is single-use with a 15-minute TTL. Each says so aloud.
 
 Two harnesses had to be fixed to get here, and both faults were in the harness rather than
