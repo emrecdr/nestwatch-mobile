@@ -112,7 +112,12 @@ say nothing about the second.
 
 ### M18 · The dependency audit proved it could read, never that its needle could match
 
-> **Cross-repo** · lesson from `nestwatch#O79`, applied here
+> **Cross-repo** · pairs with `nestwatch#O79`
+
+The mobile half below is done; their half is not, so this stays paired rather than
+closed — `nestwatch#O79`'s own open remainder is that `KNOWN_SAFE` excuses a *file* rather
+than a *needle*. Two different ways one absence-scan's non-vacuity check can be too weak,
+found independently on the same day.
 
 `tool/audit_deps.sh` is this repo's only **absence-asserting** source scan: it claims no
 shipped package reaches the network outside `HttpOverrides`. On nestwatch#O79's taxonomy
