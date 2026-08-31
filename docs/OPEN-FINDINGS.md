@@ -119,15 +119,26 @@ reading fixtures. A missing file there already throws where it is used, and rout
 through a helper whose whole purpose is a nicer failure message would be ceremony. Left
 deliberately, and recorded so the count is not re-raised as duplication.
 
-### M5 · `prove_events.dart` has never been run
+### M5 · The event harness has run; the pin harnesses still need two more servers
 
-Written this pass, analysed clean, and never executed against anything — no nestwatch 0.4.0
-was listening while it was built. It exits 2 with `requireListening` when the port is dead,
-so it fails honestly rather than falsely, and that path *was* exercised.
+**Closed for `prove_events`.** Run 2026-08-31 against a real nestwatch 0.4.0 built from the
+sibling checkout, and all four checks pass: a quiet house produces no events across the
+17-second keep-alive window, a request made on one connection is announced to another
+within seconds, approving announces both `requests` and `usage`, and an unauthenticated
+reader is refused with 401. The parser was written against bytes this repo produced and
+framing read out of axum's source; now it has met the real thing.
 
-**Trigger.** The next time a dev nestwatch is up (`docs/PLAN.md` §0), run it. Until then
-this repo's event-stream evidence is entirely headless: the parser is tested against bytes
-this side wrote, and the framing was read out of axum's source rather than off a wire.
+It also found a defect in itself. `await sub.cancel()` never returns while an SSE stream is
+healthy — the server has no reason to close it — so the harness hung with every check
+already passed. Cancelling *then* closing is worse: the close destroys the socket and the
+detached subscription lets `HttpException` reach the zone unhandled. Close first, let the
+subscription's own `onError` take it, then cancel without waiting.
+
+**Still owed:** `prove_pin` and `prove_tofu` need an impostor instance and the byte-counting
+sink alongside the real server, and `prove_rotation` needs a third. `prove_screens` and
+`prove_timecodes` were re-run green at the same time, each skipping aloud what a macOS host
+cannot do — screenshots are `cfg(not(windows))`, and the audit-log checks want `--audit`
+pointed at the data directory.
 
 ### M6 · The `sed` over nestwatch's `src/cert.rs` should be deleted, not maintained
 

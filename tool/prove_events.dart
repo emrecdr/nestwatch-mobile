@@ -93,9 +93,30 @@ Future<void> main(List<String> argv) async {
     );
   }
 
-  await sub.cancel();
+  // Order matters here, and both orders were measured against a live 0.4.0 rather than
+  // guessed at.
+  //
+  // `await sub.cancel()` never returns while the stream is healthy: the server has no
+  // reason to close an SSE connection, so the cancel waits on a socket the other end is
+  // deliberately holding open. This harness hung there for ten minutes with every check
+  // already passed.
+  //
+  // Cancelling first and then closing is worse than hanging. Closing the client destroys
+  // the socket, the live stream raises `HttpException: Connection closed while receiving
+  // data` — and the cancel has already detached the handler that would have caught it, so
+  // it surfaces as an unhandled exception.
+  //
+  // So: close first, let the subscription's own onError take the closure, then cancel
+  // without waiting.
+  //
+  // The app does not have this problem, and that was checked rather than assumed:
+  // `ServerEvents` never cancels-then-closes. Its subscription keeps an `onError` for its
+  // whole life, so a client closed underneath it — which is what `signOut` does — arrives
+  // as an ordinary stream error and feeds the backoff, not the zone.
   listener.close();
   actor.close();
+  await Future<void>.delayed(const Duration(milliseconds: 300));
+  unawaited(sub.cancel());
 
   // ------------------------------------------------- 4. it is behind require_auth
   stdout.writeln('3. The stream is not readable without a session');
