@@ -51,7 +51,7 @@ void main() {
       overrides: overrides,
       identities: identities,
       sessions: sessions,
-      seen: InMemorySeenRequestStore(),
+      forgetAnnounced: InMemorySeenRequestStore().clear,
     );
   }
 
@@ -170,7 +170,7 @@ void main() {
         overrides: PinnedHttpOverrides(),
         identities: identities,
         sessions: sessions,
-        seen: seen,
+        forgetAnnounced: seen.clear,
       );
       await controller.unpair();
 

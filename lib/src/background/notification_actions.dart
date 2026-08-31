@@ -31,7 +31,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../api/nestwatch_api.dart';
 import 'background_session.dart';
-import '../pairing/secure_identity_store.dart';
+import 'secure_seen_requests.dart';
 import 'seen_requests.dart';
 import 'notifications.dart';
 

@@ -68,6 +68,25 @@ Last audited against the tree on **2026-08-27**.
 
 ## Open
 
+### M17 · The architecture report said "one file move"; it was not
+
+`docs/UX-REVIEW.md` and the published standing review both described the
+`pairing ↔ background` cycle as fixable by moving one class. Moving
+`SecureSeenRequestStore` out of `pairing/` removed one edge *source* and left the cycle
+standing, because the real cause was `pairing_controller` importing the
+`SeenRequestStore` **interface** — and its two sibling interfaces live in `pairing/`,
+so no single move made the graph acyclic.
+
+What actually fixed it was not a move at all: the controller now takes a
+`Future<void> Function()` named for the capability it needs rather than the collaborator
+that provides it. Measured 2026-08-31 — `pairing` no longer reaches `background`, and the
+graph has no cycles.
+
+**Kept as an entry because the estimate was the finding's weakest part.** "One file move"
+was written from a dependency graph without checking what the edge carried, which is the
+same error as every other claim this repo has had to withdraw: right about the direction,
+wrong about the specifics.
+
 ### M1 · The event stream is additive, so it costs traffic rather than saving it
 
 `ServerEvents` holds one connection and nudges the screens early; `PolledScreenState.cadence`

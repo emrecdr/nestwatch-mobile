@@ -69,7 +69,7 @@ Future<void> main(List<String> argv) async {
     identities: identities,
     sessions: sessions,
   
-    seen: InMemorySeenRequestStore(),
+    forgetAnnounced: InMemorySeenRequestStore().clear,
   );
 
   // ------------------------------------------------------------- preflight

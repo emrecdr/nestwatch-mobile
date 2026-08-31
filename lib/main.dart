@@ -17,6 +17,7 @@ import 'package:workmanager/workmanager.dart';
 import 'src/background/background_poll.dart';
 import 'src/background/notifications.dart';
 import 'src/pairing/pairing_controller.dart';
+import 'src/background/secure_seen_requests.dart';
 import 'src/pairing/secure_identity_store.dart';
 import 'src/pinning/pinned_http_overrides.dart';
 import 'src/ui/home_screen.dart';
@@ -47,7 +48,7 @@ Future<void> main() async {
     overrides: pinnedOverrides,
     identities: const SecureServerIdentityStore(),
     sessions: const SecureSessionStore(),
-    seen: const SecureSeenRequestStore(),
+    forgetAnnounced: const SecureSeenRequestStore().clear,
   );
   // Re-apply the stored pin before the first frame, so the process is never briefly
   // unpinned while a previously-paired server is reachable. Keystore reads only.

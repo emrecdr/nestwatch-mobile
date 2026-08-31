@@ -21,6 +21,7 @@ import 'dart:io';
 
 import '../api/nestwatch_api.dart';
 import '../pairing/secure_identity_store.dart';
+import 'secure_seen_requests.dart';
 import '../pairing/server_identity.dart';
 import '../pairing/session_store.dart';
 import '../pinning/pinned_http_overrides.dart';

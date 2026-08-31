@@ -15,7 +15,6 @@
 library;
 
 import '../api/nestwatch_api.dart';
-import '../background/seen_requests.dart';
 import '../api/server_contract.dart';
 import '../api/session_cookie.dart';
 import '../pinning/fingerprint.dart';
@@ -122,15 +121,20 @@ class PairingController {
   final ServerIdentityStore _identities;
   final SessionStore _sessions;
 
-  /// The identifiers of requests already announced. Held here only so unpairing can
-  /// forget them; the polling tiers own it otherwise.
+  /// Forget the identifiers of requests already announced.
   ///
-  /// **Required, with no default.** Defaulting it to `SecureSeenRequestStore` would mean
-  /// importing `secure_identity_store.dart` here, and that file reaches
-  /// `flutter_secure_storage` — which would put Flutter inside the one part of this app
-  /// that must run under a plain `dart run` against a live server. Four harnesses stopped
-  /// compiling the moment that import was added, which is exactly what they are for.
-  final SeenRequestStore _seen;
+  /// A function rather than a `SeenRequestStore`, and the difference is the whole point:
+  /// what unpairing needs is *a way to forget*, not a store. Taking the interface meant
+  /// importing it from `background/`, which closed a dependency cycle — `background`
+  /// already depends on `pairing` for the identity and session stores, four edges to this
+  /// one coming back. Naming the capability instead of the collaborator removes the edge
+  /// without moving anybody's files.
+  ///
+  /// **Required, with no default.** A default would have to name a concrete store, and
+  /// the Keystore one reaches `flutter_secure_storage` — which would put Flutter inside
+  /// the part of this app that must run under a plain `dart run`. Four harnesses stopped
+  /// compiling the moment that import appeared, which is what they are for.
+  final Future<void> Function() _forgetAnnounced;
   final DateTime Function() _now;
 
   PairingState _state = const PairingIdle();
@@ -147,9 +151,9 @@ class PairingController {
     required this._overrides,
     required this._identities,
     required this._sessions,
-    required SeenRequestStore seen,
+    required Future<void> Function() forgetAnnounced,
     DateTime Function()? now,
-  }) : _seen = seen, // ignore: prefer_initializing_formals
+  }) : _forgetAnnounced = forgetAnnounced, // ignore: prefer_initializing_formals
        _now = now ?? DateTime.now;
 
   void addListener(void Function() listener) => _listeners.add(listener);
@@ -539,7 +543,7 @@ class PairingController {
     // It also leaves a real trace: those identifiers are what suppress a second
     // notification, so a re-paired phone would stay silent about requests it "already
     // announced" to a pairing that no longer exists.
-    await _seen.clear();
+    await _forgetAnnounced();
     _current = null;
     _client?.close();
     _client = null;

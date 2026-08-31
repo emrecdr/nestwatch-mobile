@@ -369,8 +369,8 @@ mutate "expiry: the last week loses its strip again" \
 
 mutate "unpair: the announced-request identifiers survive" \
   lib/src/pairing/pairing_controller.dart \
-  "    await _seen.clear();" \
-  "    // not cleared"
+  "    await _forgetAnnounced();" \
+  "    // not forgotten"
 
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"

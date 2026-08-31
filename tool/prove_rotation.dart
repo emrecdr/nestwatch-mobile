@@ -66,7 +66,7 @@ Future<void> main(List<String> argv) async {
     identities: identities,
     sessions: sessions,
   
-    seen: InMemorySeenRequestStore(),
+    forgetAnnounced: InMemorySeenRequestStore().clear,
   );
 
   // ------------------------------ 1. the old pin is refused, not trusted

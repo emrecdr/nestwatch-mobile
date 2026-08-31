@@ -49,7 +49,7 @@ Future<void> main(List<String> argv) async {
     identities: InMemoryServerIdentityStore(),
     sessions: InMemorySessionStore(),
   
-    seen: InMemorySeenRequestStore(),
+    forgetAnnounced: InMemorySeenRequestStore().clear,
   );
 
   // ---------------------------------------------- 1. today's QR, no fragment
