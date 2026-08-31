@@ -119,26 +119,35 @@ reading fixtures. A missing file there already throws where it is used, and rout
 through a helper whose whole purpose is a nicer failure message would be ceremony. Left
 deliberately, and recorded so the count is not re-raised as duplication.
 
-### M5 · The event harness has run; the pin harnesses still need two more servers
+### M5 · Every harness has now been run live; two skips are the platform, not the rig
 
-**Closed for `prove_events`.** Run 2026-08-31 against a real nestwatch 0.4.0 built from the
-sibling checkout, and all four checks pass: a quiet house produces no events across the
-17-second keep-alive window, a request made on one connection is announced to another
-within seconds, approving announces both `requests` and `usage`, and an unauthenticated
-reader is refused with 401. The parser was written against bytes this repo produced and
-framing read out of axum's source; now it has met the real thing.
+**Closed.** All eight ran on 2026-08-31 against dev instances built from the sibling
+checkout — three nestwatch instances (real, impostor, rotated), the byte-counting sink and
+the LAN-gate stub. `prove_pin`, `prove_tofu`, `prove_events`, `prove_login`,
+`prove_background`, `prove_screens`, `prove_timecodes` and `prove_rotation`, all passing.
 
-It also found a defect in itself. `await sub.cancel()` never returns while an SSE stream is
-healthy — the server has no reason to close it — so the harness hung with every check
-already passed. Cancelling *then* closing is worse: the close destroys the socket and the
-detached subscription lets `HttpException` reach the zone unhandled. Close first, let the
-subscription's own `onError` take it, then cancel without waiting.
+The two that matter most were observed rather than argued. `prove_pin` check 3 saw the
+sink accept a TCP connection, fail the handshake, and receive **0 application bytes** —
+and check 4, the control, saw **255 bytes with the marker** through the same rig once the
+sink's own certificate was pinned. `prove_events` heard nothing across a 17-second
+keep-alive window and then heard `requests` and `usage` from a change made on another
+connection.
 
-**Still owed:** `prove_pin` and `prove_tofu` need an impostor instance and the byte-counting
-sink alongside the real server, and `prove_rotation` needs a third. `prove_screens` and
-`prove_timecodes` were re-run green at the same time, each skipping aloud what a macOS host
-cannot do — screenshots are `cfg(not(windows))`, and the audit-log checks want `--audit`
-pointed at the data directory.
+**What still skips, and why it is not the rig:** screenshots are `cfg(not(windows))` in
+nestwatch, so a macOS host cannot serve one; the audit-log assertions want `--audit`
+pointed at the data directory; and `prove_login`'s token checks need a freshly minted
+pairing token, which is single-use with a 15-minute TTL. Each says so aloud.
+
+Two harnesses had to be fixed to get here, and both faults were in the harness rather than
+the app. `prove_pin` hardcoded `/tmp/nestwatch-impostor/cert.pem` for its control, so
+check 4 could not run against a server installed anywhere else — with checks 1 to 3 already
+passed, which is exactly the shape of a control that gets skipped rather than fixed. It
+takes `--sink-cert` now and stops rather than proceeding without it. `prove_events` hung on
+`await sub.cancel()`, which never returns while an SSE stream is healthy — the server has
+no reason to close it. Cancelling first and closing second is worse: the close destroys
+the socket and a detached subscription lets `HttpException` reach the zone. No entry was
+filed for the app, because it was checked: `ServerEvents` never cancels-then-closes, so
+its handler is attached for the stream's whole life.
 
 ### M6 · The `sed` over nestwatch's `src/cert.rs` should be deleted, not maintained
 

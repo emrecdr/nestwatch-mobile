@@ -119,6 +119,9 @@ python3 tool/wire_sink.py /tmp/nestwatch-impostor/cert.pem \
 dart run tool/prove_pin.dart \
   --pin "$(cd ../nestwatch && NESTWATCH_DATA_DIR=/tmp/nestwatch-dev cargo run -q -- fingerprint | tail -1)" \
   --real 8443 --impostor 8444 --sink 9443
+
+# and the control's certificate, when the data directory is not the default
+#   --sink-cert <data-dir>/cert.pem
 ```
 
 Four checks, and check 4 is the one that keeps it honest: it re-runs the same rig with the

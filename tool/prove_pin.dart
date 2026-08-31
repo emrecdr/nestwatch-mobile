@@ -31,7 +31,10 @@ import 'dev_server.dart';
 const _marker = 'THIS-BODY-MUST-NEVER-REACH-AN-IMPOSTOR';
 
 Future<void> main(List<String> argv) async {
-  final args = parseArgs(argv, known: {'impostor', 'pin', 'real', 'sink'});
+  final args = parseArgs(
+    argv,
+    known: {'impostor', 'pin', 'real', 'sink', 'sink-cert'},
+  );
 
   final pin = Fingerprint.parse(requireArg(args, 'pin'));
   final realPort = int.parse(args['real'] ?? '8443');
@@ -40,6 +43,7 @@ Future<void> main(List<String> argv) async {
 
   // Before any check, so a stopped server reads as "nothing was checked" rather than as
   // three failures that look like a broken pin.
+  sinkCertPath = args['sink-cert'] ?? sinkCertPath;
   await requireListening(realPort, 'nestwatch');
   await requireListening(impostorPort, 'the impostor server');
   await requireListening(sinkPort, 'tool/wire_sink.py');
@@ -201,8 +205,25 @@ Future<_SinkResult> _sinkAttempt(
   return _SinkResult(lines);
 }
 
+/// The certificate the sink presents, so check 4 can pin it deliberately.
+///
+/// Defaults to the path the README's setup uses, and is overridable because a data
+/// directory is a choice — this hardcoded `/tmp` path is what stopped check 4 running the
+/// first time these harnesses met a server installed anywhere else, with checks 1 to 3
+/// already passed. A control that only works in one directory layout is a control that
+/// will one day be skipped rather than fixed.
+String sinkCertPath = '/tmp/nestwatch-impostor/cert.pem';
+
 Future<Fingerprint> _sinkFingerprint(int port) async {
-  final pem = File('/tmp/nestwatch-impostor/cert.pem').readAsStringSync();
+  final file = File(sinkCertPath);
+  if (!file.existsSync()) {
+    stop(
+      'The sink certificate is not at $sinkCertPath.\n'
+      '         Check 4 pins it deliberately, and without it the "nothing crossed the\n'
+      '         wire" result above has no control. Pass --sink-cert <path>.',
+    );
+  }
+  final pem = file.readAsStringSync();
   // The sink presents the impostor cert; hash its DER exactly as cert::fingerprint does.
   final b64 = pem
       .split('\n')
