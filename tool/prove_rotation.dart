@@ -26,6 +26,7 @@ import 'dart:io';
 
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/pairing/pair_invite.dart';
+import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
@@ -64,6 +65,8 @@ Future<void> main(List<String> argv) async {
     overrides: o,
     identities: identities,
     sessions: sessions,
+  
+    seen: InMemorySeenRequestStore(),
   );
 
   // ------------------------------ 1. the old pin is refused, not trusted

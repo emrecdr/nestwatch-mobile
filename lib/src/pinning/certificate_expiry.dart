@@ -37,6 +37,10 @@ library;
 /// disagreed with both would be a third answer. `tool/check_golden.sh` compares them.
 const int renewWarnDays = 30;
 
+/// Inside this many days, the warning earns a strip on every screen rather than a line in
+/// a dialog. Deliberately not `renewWarnDays`: see [CertificateExpiry.isWarning].
+const int strippedWithinDays = 7;
+
 enum CertificateLife {
   /// More than [renewWarnDays] left. Nothing to say.
   healthy,
@@ -51,27 +55,68 @@ enum CertificateLife {
 class CertificateExpiry {
   final CertificateLife life;
 
-  /// Negative once the date has passed, which is what the expired sentence counts back
-  /// from. The end date itself is not kept: every sentence a parent reads is written in
-  /// days, and a field nothing reads is a field that goes quietly wrong.
-  final int daysLeft;
+  /// Time until expiry, negative once it has passed.
+  ///
+  /// Kept as a [Duration] rather than a day count, because the day count is what went
+  /// wrong: truncation put the first 24 hours after expiry on the wrong side of zero.
+  /// Sentences are still written in days — but the *decision* is made on the instant.
+  final Duration remaining;
 
-  const CertificateExpiry._(this.life, this.daysLeft);
+  const CertificateExpiry._(this.life, this.remaining);
+
+  /// Whole days left, negative once past. Rendering only; never a branch.
+  int get daysLeft => remaining.inDays;
 
   /// `null` when no certificate has been seen yet — see the library note above.
   static CertificateExpiry? of(DateTime? notAfter, {DateTime? now}) {
     if (notAfter == null) return null;
     final at = now ?? DateTime.now();
-    final left = notAfter.difference(at).inDays;
-    final life = switch (left) {
-      < 0 => CertificateLife.expired,
-      <= renewWarnDays => CertificateLife.expiringSoon,
-      _ => CertificateLife.healthy,
-    };
-    return CertificateExpiry._(life, left);
+    final remaining = notAfter.difference(at);
+
+    // Compare the instant, not the day count. `Duration.inDays` truncates toward zero, so
+    // a certificate that lapsed five hours ago gives `inDays == 0` — which is not less
+    // than zero, and the first version of this read that as *expiring* rather than
+    // *expired* for a full 24 hours. It said "expires in 0 days", and because only the
+    // expired verdict raises a strip, it said it silently.
+    //
+    // That day is the whole point of the feature: it is when the browser stops working
+    // and a parent starts looking for the reason.
+    final life = remaining.isNegative
+        ? CertificateLife.expired
+        : (remaining.inDays <= renewWarnDays
+              ? CertificateLife.expiringSoon
+              : CertificateLife.healthy);
+    return CertificateExpiry._(life, remaining);
   }
 
-  bool get isWarning => life == CertificateLife.expired;
+  /// How long ago it lapsed, in words a parent would use.
+  ///
+  /// "0 days ago" is what the arithmetic produces on the day it matters most, and it
+  /// reads as a bug rather than as information. Under a day says so plainly instead.
+  String get _agoInWords {
+    final past = -remaining.inDays;
+    if (past < 1) return 'today';
+    return '$past ${past == 1 ? 'day' : 'days'} ago';
+  }
+
+  /// Worth a permanent strip across every screen.
+  ///
+  /// Expired, obviously — a screen is already broken in the browser. And the last week
+  /// before it, which is a change of position rather than of opinion: the first version
+  /// showed the whole 30-day window in the identity dialog only, behind an app-bar icon
+  /// whose tooltip is about pairing provenance. A parent has no reason to tap it.
+  ///
+  /// That repeated, one level up, the exact failure this feature exists to fix. nestwatch
+  /// warns about expiry into a service log nobody reads; putting the phone's warning
+  /// behind an icon makes it a log with better typography.
+  ///
+  /// A month-long band would be its own mistake — a warning that is always there stops
+  /// being read, which is why `enforcerAgeSeconds` and the disabled-rules notice are
+  /// worded the way they are. Seven days is close enough that a parent can act on it and
+  /// short enough that it still reads as news. Days 8 to 30 stay in the dialog on purpose.
+  bool get isWarning =>
+      life == CertificateLife.expired ||
+      (life == CertificateLife.expiringSoon && remaining.inDays <= strippedWithinDays);
 
   /// `null` when there is nothing worth saying.
   ///
@@ -88,8 +133,7 @@ class CertificateExpiry {
           'this phone — and every other device — again, so it is worth picking the '
           'moment rather than being caught by it.',
     CertificateLife.expired =>
-      'That PC\'s certificate expired ${-daysLeft} '
-          '${daysLeft == -1 ? 'day' : 'days'} ago. This app still works, because it '
+      'That PC\'s certificate expired $_agoInWords. This app still works, because it '
           'checks the fingerprint rather than the date — but the browser dashboard '
           'will refuse to open, and that is why, not because the PC is broken. '
           'Renewing it re-pairs every device.',

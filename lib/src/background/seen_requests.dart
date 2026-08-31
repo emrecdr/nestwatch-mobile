@@ -16,6 +16,11 @@ library;
 abstract class SeenRequestStore {
   Future<Set<String>> load();
   Future<void> save(Set<String> ids);
+
+  /// Forget everything announced. Distinct from `save({})` at the call site even though
+  /// the effect is the same: unpairing is not a poll that found nothing pending, and a
+  /// reader should not have to work out which one an empty save meant.
+  Future<void> clear();
 }
 
 class InMemorySeenRequestStore implements SeenRequestStore {
@@ -28,6 +33,9 @@ class InMemorySeenRequestStore implements SeenRequestStore {
 
   @override
   Future<void> save(Set<String> ids) async => _held = ids;
+
+  @override
+  Future<void> clear() async => _held = const {};
 }
 
 /// Decide what is new, and what the store should hold next.

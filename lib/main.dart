@@ -47,6 +47,7 @@ Future<void> main() async {
     overrides: pinnedOverrides,
     identities: const SecureServerIdentityStore(),
     sessions: const SecureSessionStore(),
+    seen: const SecureSeenRequestStore(),
   );
   // Re-apply the stored pin before the first frame, so the process is never briefly
   // unpinned while a previously-paired server is reachable. Keystore reads only.

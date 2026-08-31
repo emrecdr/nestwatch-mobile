@@ -34,6 +34,12 @@ class _RecordingStore implements SeenRequestStore {
     log.add('save(${ids.length})');
     held = ids;
   }
+
+  @override
+  Future<void> clear() async {
+    log.add('clear');
+    held = const {};
+  }
 }
 
 void main() {

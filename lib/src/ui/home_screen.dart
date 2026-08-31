@@ -111,14 +111,28 @@ class _HomeScreenState extends State<HomeScreen> {
   /// The caveats worth a strip across every screen, in the order a parent should read
   /// them. Empty on the ordinary day, which is why the strip is a loop over nothing
   /// rather than a widget that renders blank.
-  List<({String message, IconData icon})> _caveats(
+  List<({String message, IconData icon, NoticeTone tone})> _caveats(
     ContractCheck contract,
     CertificateExpiry? expiry,
   ) => [
     if (contract.isWarning)
-      (message: contract.message!, icon: Icons.warning_amber),
+      (
+        message: contract.message!,
+        icon: Icons.warning_amber,
+        tone: NoticeTone.warning,
+      ),
     if (expiry != null && expiry.isWarning)
-      (message: expiry.message!, icon: Icons.event_busy),
+      (
+        message: expiry.message!,
+        icon: Icons.event_busy,
+        // A certificate that has lapsed is a broken dashboard now; one lapsing next week
+        // is a thing to schedule. Same strip, different weight — a week of red for
+        // something that still works everywhere would train the parent past it, which is
+        // how the enforcer warning below earns its own colour by being rarer.
+        tone: expiry.life == CertificateLife.expired
+            ? NoticeTone.warning
+            : NoticeTone.advisory,
+      ),
   ];
 
   /// A 401 from any `/api/*` path means the session lapsed.
@@ -183,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
           for (final caveat in _caveats(contract, expiry))
             Notice(
               caveat.message,
-              tone: NoticeTone.warning,
+              tone: caveat.tone,
               icon: caveat.icon,
               margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             ),

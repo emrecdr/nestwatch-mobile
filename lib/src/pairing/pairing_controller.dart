@@ -15,6 +15,7 @@
 library;
 
 import '../api/nestwatch_api.dart';
+import '../background/seen_requests.dart';
 import '../api/server_contract.dart';
 import '../api/session_cookie.dart';
 import '../pinning/fingerprint.dart';
@@ -120,6 +121,16 @@ class PairingController {
   final PinnedHttpOverrides _overrides;
   final ServerIdentityStore _identities;
   final SessionStore _sessions;
+
+  /// The identifiers of requests already announced. Held here only so unpairing can
+  /// forget them; the polling tiers own it otherwise.
+  ///
+  /// **Required, with no default.** Defaulting it to `SecureSeenRequestStore` would mean
+  /// importing `secure_identity_store.dart` here, and that file reaches
+  /// `flutter_secure_storage` — which would put Flutter inside the one part of this app
+  /// that must run under a plain `dart run` against a live server. Four harnesses stopped
+  /// compiling the moment that import was added, which is exactly what they are for.
+  final SeenRequestStore _seen;
   final DateTime Function() _now;
 
   PairingState _state = const PairingIdle();
@@ -136,8 +147,10 @@ class PairingController {
     required this._overrides,
     required this._identities,
     required this._sessions,
+    required SeenRequestStore seen,
     DateTime Function()? now,
-  }) : _now = now ?? DateTime.now;
+  }) : _seen = seen, // ignore: prefer_initializing_formals
+       _now = now ?? DateTime.now;
 
   void addListener(void Function() listener) => _listeners.add(listener);
   void removeListener(void Function() listener) => _listeners.remove(listener);
@@ -518,6 +531,15 @@ class PairingController {
   Future<void> unpair() async {
     await _sessions.clear();
     await _identities.clear();
+    // The third thing the privacy screen promises. It listed the pin, the cookie and the
+    // announced-request identifiers, then said "Forget this PC" deletes all of them — and
+    // this cleared two. An inaccuracy anywhere else is a bug; in a privacy policy it is a
+    // false statement about data handling, in the document Play requires to be truthful.
+    //
+    // It also leaves a real trace: those identifiers are what suppress a second
+    // notification, so a re-paired phone would stay silent about requests it "already
+    // announced" to a pairing that no longer exists.
+    await _seen.clear();
     _current = null;
     _client?.close();
     _client = null;

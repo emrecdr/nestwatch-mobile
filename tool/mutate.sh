@@ -303,11 +303,6 @@ mutate "expiry: the accepted end date is never recorded" \
   "      _acceptedNotAfter = cert.endValidity;" \
   "      _acceptedNotAfter = null;"
 
-mutate "expiry: an expired certificate reads as merely expiring" \
-  lib/src/pinning/certificate_expiry.dart \
-  "      < 0 => CertificateLife.expired," \
-  "      < -99999 => CertificateLife.expired,"
-
 # The event stream. Dispatch is gated on the data buffer rather than on having seen an
 # `event:` line, and that gate is what keeps axum's keep-alive — the literal bytes ":\n\n"
 # every 15 seconds — from registering as news and turning a quiet house into a refetch
@@ -359,6 +354,23 @@ mutate "notification: a failed answer is never re-asked" \
   lib/src/background/notification_actions.dart \
   "    await forgetSeen(requestId, seen);" \
   "    // not forgotten"
+
+# The three defects a reader from outside this repo found, and the tests here had agreed
+# with the code about. Each inverts the decision that was wrong.
+mutate "expiry: the day after lapsing reads as expiring again" \
+  lib/src/pinning/certificate_expiry.dart \
+  "    final life = remaining.isNegative" \
+  "    final life = remaining.inDays < 0"
+
+mutate "expiry: the last week loses its strip again" \
+  lib/src/pinning/certificate_expiry.dart \
+  "      (life == CertificateLife.expiringSoon && remaining.inDays <= strippedWithinDays);" \
+  "      false;"
+
+mutate "unpair: the announced-request identifiers survive" \
+  lib/src/pairing/pairing_controller.dart \
+  "    await _seen.clear();" \
+  "    // not cleared"
 
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"

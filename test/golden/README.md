@@ -5,7 +5,7 @@ every JSON shape this app parses, plus `limits.json`. They are the contract betw
 that contract had only ever been read as prose — twice, by two different sessions, which
 is also how two people misread it the same way.
 
-**Source:** `nestwatch` `tests/golden/`, at `18e3b49` (0.4.0).
+**Source:** `nestwatch` `tests/golden/`, at `0a6b5fc` (0.5.0).
 
 ## Why copied rather than read in place
 

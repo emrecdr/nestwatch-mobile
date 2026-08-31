@@ -17,6 +17,7 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/session_cookie.dart';
+import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
@@ -50,6 +51,7 @@ void main() {
       overrides: overrides,
       identities: identities,
       sessions: sessions,
+      seen: InMemorySeenRequestStore(),
     );
   }
 
@@ -137,6 +139,44 @@ void main() {
         isA<PairingNeedsPassword>(),
         reason: 'only a PairingBusy left by restorePin is its to resolve',
       );
+    });
+  });
+
+  group('unpair deletes what the privacy screen says it deletes', () {
+    // PrivacyScreen lists three stored items and says "Forget this PC" deletes all of
+    // them. It cleared two. An inaccuracy anywhere else is a bug; in a privacy policy it
+    // is a false statement about data handling, in the document Play requires to be true.
+    //
+    // It left a real trace too: those identifiers are what suppress a second
+    // notification, so a re-paired phone would stay quiet about requests it had
+    // "already announced" to a pairing that no longer exists.
+    test('the pin, the cookie, and the announced-request identifiers', () async {
+      final identities = InMemoryServerIdentityStore();
+      final sessions = InMemorySessionStore();
+      final seen = InMemorySeenRequestStore();
+      await identities.save(
+        ServerIdentity(
+          host: '192.168.1.42',
+          port: 8443,
+          fingerprint: Fingerprint.fromBytes(List<int>.filled(32, 9)),
+          provenance: PinProvenance.verifiedFromQrCode,
+          pairedAt: DateTime(2026, 8, 31),
+        ),
+      );
+      await sessions.save(const SessionCookie('cookie'));
+      await seen.save({'r1', 'r2'});
+
+      final controller = PairingController(
+        overrides: PinnedHttpOverrides(),
+        identities: identities,
+        sessions: sessions,
+        seen: seen,
+      );
+      await controller.unpair();
+
+      expect(await identities.load(), isNull, reason: 'the pin');
+      expect(await sessions.load(), isNull, reason: 'the cookie');
+      expect(await seen.load(), isEmpty, reason: 'the announced-request identifiers');
     });
   });
 }

@@ -114,4 +114,7 @@ class SecureSeenRequestStore implements SeenRequestStore {
   @override
   Future<void> save(Set<String> ids) =>
       _storage.write(key: _key, value: ids.join(_separator));
+
+  @override
+  Future<void> clear() => _storage.delete(key: _key);
 }
