@@ -29,7 +29,7 @@ jobs:
     name: analyze · format · test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -57,7 +57,7 @@ jobs:
     name: versions · dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # `git describe --exact-match` needs the tags, and checkout does not fetch them
           # by default -- without this every run reports "not tagged", including the
@@ -88,12 +88,12 @@ jobs:
     name: contract against nestwatch
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: nestwatch-mobile
 
       - name: Check out the server this app is a client of
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: emrecdr/nestwatch
           path: nestwatch
@@ -150,7 +150,7 @@ jobs:
     name: build · android
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -167,7 +167,7 @@ jobs:
     name: build · ios
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -188,7 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
