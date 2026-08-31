@@ -1,0 +1,201 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A superseded run tells you about code nobody is looking at any more.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned, not floating. `stable` moves, and a gate that changes underneath you reports on
+  # a toolchain nobody chose. Matches the version this repo is developed against.
+  FLUTTER_VERSION: 3.44.6
+
+jobs:
+  # ---------------------------------------------------------------------------------
+  # The fast gate. Everything here is a hard failure.
+  # ---------------------------------------------------------------------------------
+  check:
+    name: analyze · format · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Format
+        # `dart format` reads `page_width` from analysis_options.yaml if one is set; it is
+        # not, so this is the default 80. It does not rewrap comments, which is why the
+        # prose in this repo runs wider and stays untouched.
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Test
+        run: flutter test --reporter=expanded
+
+  # ---------------------------------------------------------------------------------
+  # Versions, and the dependency audit that has to prove it can see before it reports.
+  # ---------------------------------------------------------------------------------
+  audit:
+    name: versions · dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `git describe --exact-match` needs the tags, and checkout does not fetch them
+          # by default -- without this every run reports "not tagged", including the
+          # tagged ones, which is the failure mode this checker exists to avoid.
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Versions agree
+        run: bash tool/check_version.sh
+
+      - name: Nothing bypasses the pinned HttpClient
+        # Proves each term of its own pattern against a planted positive before it reads
+        # the pub cache, then refuses to report a clean tree if any term went blind.
+        run: bash tool/audit_deps.sh
+
+  # ---------------------------------------------------------------------------------
+  # The cross-repo contract. This is the job that only exists because both repos are
+  # public: before there was CI, `check_golden.sh` needed two checkouts on one machine
+  # and a person choosing to run it (see nestwatch#O72).
+  # ---------------------------------------------------------------------------------
+  contract:
+    name: contract against nestwatch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: nestwatch-mobile
+
+      - name: Check out the server this app is a client of
+        uses: actions/checkout@v4
+        with:
+          repository: emrecdr/nestwatch
+          path: nestwatch
+
+      - name: Golden files and the version they came from
+        working-directory: nestwatch-mobile
+        env:
+          NESTWATCH_REPO: ${{ github.workspace }}/nestwatch
+        # Exit 2 means "could not compare", which is neither a pass nor a drift. It is
+        # still a failure here on purpose: in CI the sibling checkout is a step above, so
+        # not having it means the step above is broken, not that the answer is unknowable.
+        run: bash tool/check_golden.sh
+
+      - name: Cross-repo findings references resolve
+        working-directory: nestwatch-mobile
+        env:
+          NESTWATCH_REPO: ${{ github.workspace }}/nestwatch
+        # Three outcomes, and only one of them is this repo's fault.
+        #
+        #   0  everything resolves
+        #   1  a same-file reference dangles -- an error in our own file, so fail
+        #   3  only cross-repo references dangle -- most likely the other repo fixed and
+        #      deleted the entry, which is good news; it can also mean a typo or that they
+        #      have not pushed yet. Not decidable here, so it is surfaced and not failed.
+        #
+        # Failing on 3 would make this job go red every time the server ships something,
+        # which is how a team learns to stop reading CI.
+        run: |
+          set +e
+          out=$(bash tool/check_findings.sh 2>&1); code=$?
+          echo "$out"
+          case $code in
+            0) exit 0 ;;
+            3)
+              {
+                echo "### Cross-repo references dangling"
+                echo
+                echo 'Not a failure. Either nestwatch fixed and deleted those entries, or'
+                echo 'an id is wrong, or it has not been pushed yet. Worth reading.'
+                echo
+                echo '```'
+                echo "$out"
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0 ;;
+            *) exit $code ;;
+          esac
+
+  # ---------------------------------------------------------------------------------
+  # Both platforms compile. Debug/unsigned -- release signing is M7, and needs a keystore
+  # that is deliberately not in this repository.
+  # ---------------------------------------------------------------------------------
+  build-android:
+    name: build · android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --debug
+
+  build-ios:
+    name: build · ios
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build without signing
+        # No certificate in CI, and none wanted: this proves the project compiles and its
+        # Info.plist is well-formed, not that it can be shipped.
+        run: flutter build ios --no-codesign --debug
+
+  # ---------------------------------------------------------------------------------
+  # Slow, and not on every push. It runs the whole suite once per mutation.
+  # ---------------------------------------------------------------------------------
+  mutation:
+    name: mutation audit
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Every mutation is caught, and every anchor still exists
+        # `anchors-missing` is a first-class outcome: a mutation whose target line has been
+        # renamed is not a mutation that passed. It has gone stale three times here.
+        run: bash tool/mutate.sh

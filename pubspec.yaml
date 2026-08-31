@@ -16,7 +16,10 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+# See docs/VERSIONING.md. `0.x` because this has never been released: M7 (Play Console)
+# and M15 (iOS local-network privacy, unproven on hardware) both stand between here and a
+# store. `1.0.0+1` was the template's default and claimed a release that never happened.
+version: 0.1.0+1
 
 environment:
   sdk: ^3.12.2

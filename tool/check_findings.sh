@@ -123,9 +123,33 @@ fi
 rm -f "$internal_report"
 
 echo
+# Two different facts, and folding them into one exit code makes CI red on good news.
+#
+# A **same-file** dangle is unambiguously a mistake in the file being checked: the entry it
+# names is right there or it is not, and nothing outside this repository can change that.
+#
+# A **cross-repo** dangle cannot be told apart from here. Both files delete an entry when
+# it is fixed, so the reference most likely dangles because the other side shipped it --
+# but a typo in the id looks identical, and so does citing an entry before the other repo
+# has pushed. That is the third outcome this repo insists on everywhere else, and it earns
+# its own exit code rather than being reported as failure or hidden as success.
+#
+#   0  everything resolves
+#   1  a same-file reference dangles -- a real error, here
+#   3  only cross-repo references dangle -- go read them; cannot be decided by this script
+if [ "$internal" -gt 0 ]; then
+  echo "$internal same-file reference(s) dangling. That is an error in the file itself."
+  [ "$dangling" -gt "$internal" ] &&
+    echo "$((dangling - internal)) cross-repo one(s) too — see above."
+  exit 1
+fi
 if [ "$dangling" -eq 0 ]; then
   echo "$checked cross-repo reference(s) resolving, and no dangling same-file ones."
-else
-  echo "$dangling dangling — see above. Across repos, most likely good news."
+  exit 0
 fi
-exit "$dangling"
+echo "$dangling cross-repo reference(s) dangling, and no same-file ones."
+echo
+echo "  This is not decided here. Either the other side fixed and deleted those entries --"
+echo "  which is good news, and makes whatever cited them work rather than a wait -- or the"
+echo "  id is wrong, or that repo has not pushed it yet. Go read them."
+exit 3

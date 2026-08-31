@@ -102,7 +102,8 @@ void main() {
     expect(
       Platform.operatingSystem,
       anyOf('ios', 'android'),
-      reason: 'run with -d against a device; on the host this file is meaningless',
+      reason:
+          'run with -d against a device; on the host this file is meaningless',
     );
   });
 
@@ -116,9 +117,7 @@ void main() {
     final request = await client.getUrl(
       Uri.parse('https://127.0.0.1:${server.port}/session'),
     );
-    final body = await (await request.close())
-        .transform(utf8.decoder)
-        .join();
+    final body = await (await request.close()).transform(utf8.decoder).join();
     client.close();
 
     expect(body, contains('"version":"test"'));

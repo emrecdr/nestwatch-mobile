@@ -30,13 +30,19 @@ void main() {
       // Play evaluates this against the store description and rejects apps that omit
       // it — and it must be present in every version code on every track, including the
       // first internal test upload.
-      final source = readSourceOrFail(manifest, why: 'the manifest carries the declaration Play rejects for.');
+      final source = readSourceOrFail(
+        manifest,
+        why: 'the manifest carries the declaration Play rejects for.',
+      );
       expect(source, contains('android:name="isMonitoringTool"'));
       expect(source, contains('android:value="child_monitoring"'));
     });
 
     test('it sits inside <application>, where a meta-data tag is read', () {
-      final source = readSourceOrFail(manifest, why: 'the manifest carries the declaration Play rejects for.');
+      final source = readSourceOrFail(
+        manifest,
+        why: 'the manifest carries the declaration Play rejects for.',
+      );
       final app = source.indexOf('<application');
       final flag = source.indexOf('isMonitoringTool');
       final close = source.indexOf('</application>');
@@ -55,7 +61,10 @@ void main() {
     // no nestwatch to pair with, so a policy behind sign-in is one they cannot open —
     // and every screen past pairing requires a paired server.
     test('the pairing screen offers it', () {
-      final source = readSourceOrFail('lib/src/ui/pairing_screen.dart', why: 'it is the only screen reachable without a paired PC.');
+      final source = readSourceOrFail(
+        'lib/src/ui/pairing_screen.dart',
+        why: 'it is the only screen reachable without a paired PC.',
+      );
       expect(
         source,
         contains('PrivacyScreen.route()'),

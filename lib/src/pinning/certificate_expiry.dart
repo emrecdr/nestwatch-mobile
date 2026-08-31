@@ -116,7 +116,8 @@ class CertificateExpiry {
   /// short enough that it still reads as news. Days 8 to 30 stay in the dialog on purpose.
   bool get isWarning =>
       life == CertificateLife.expired ||
-      (life == CertificateLife.expiringSoon && remaining.inDays <= strippedWithinDays);
+      (life == CertificateLife.expiringSoon &&
+          remaining.inDays <= strippedWithinDays);
 
   /// `null` when there is nothing worth saying.
   ///

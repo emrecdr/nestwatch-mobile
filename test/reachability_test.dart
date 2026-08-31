@@ -23,19 +23,23 @@ void main() {
       );
     });
 
-    test('a different range reads as elsewhere, and says why that is expected', () {
-      expect(at('192.168.1.42', ['10.55.0.9']), Whereabouts.looksElsewhere);
-      final said = explainUnreachable(
-        Whereabouts.looksElsewhere,
-        '192.168.1.42:8443',
-      );
-      expect(said, contains('home Wi-Fi'));
-      expect(
-        said,
-        contains('never goes through the internet'),
-        reason: 'the limitation is the design, so say so rather than apologise',
-      );
-    });
+    test(
+      'a different range reads as elsewhere, and says why that is expected',
+      () {
+        expect(at('192.168.1.42', ['10.55.0.9']), Whereabouts.looksElsewhere);
+        final said = explainUnreachable(
+          Whereabouts.looksElsewhere,
+          '192.168.1.42:8443',
+        );
+        expect(said, contains('home Wi-Fi'));
+        expect(
+          said,
+          contains('never goes through the internet'),
+          reason:
+              'the limitation is the design, so say so rather than apologise',
+        );
+      },
+    );
   });
 
   group('addresses that say nothing', () {

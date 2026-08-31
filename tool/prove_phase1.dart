@@ -70,7 +70,7 @@ Future<void> main(List<String> argv) async {
     overrides: overrides,
     identities: identities,
     sessions: InMemorySessionStore(),
-  
+
     forgetAnnounced: InMemorySeenRequestStore().clear,
   );
   check(overrides.pin == null, 'nothing is pinned before pairing starts');

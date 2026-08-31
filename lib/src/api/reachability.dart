@@ -74,7 +74,10 @@ Whereabouts whereAmI({
 /// The sentence a parent reads instead of an `errno`.
 ///
 /// [authority] is `host:port` as they paired it, so it is the thing they would recognise.
-String explainUnreachable(Whereabouts where, String authority) => switch (where) {
+String explainUnreachable(
+  Whereabouts where,
+  String authority,
+) => switch (where) {
   Whereabouts.offline =>
     'This phone is not on any network right now, so it cannot reach $authority. '
         'Nothing is wrong with that PC — join your home Wi-Fi and this will work again.',

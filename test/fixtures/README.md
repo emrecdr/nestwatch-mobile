@@ -36,3 +36,17 @@ browser would refuse the same certificate outright. That asymmetry is why the ap
 
 The tests read the fingerprints off the certificates at runtime, so regenerating needs
 no other edit.
+
+## For the secret scanner
+
+This repository is public, so automated scanning flags the private keys here. This section
+is what such an alert should be checked against.
+
+Checked rather than assumed on 2026-08-31: the `server.*` public key differs from the local
+development server's, so this is not a copy of a certificate that answers anywhere. Nothing
+in this repository configures these to be served — `tool/dev_server.dart` and the `prove_*`
+harnesses use certificates nestwatch generates at run time into a scratch directory.
+
+The root `.gitignore` ignores `*.jks`, `*.keystore` and `key.properties` anywhere in the
+tree, but deliberately **not** `*.pem`, because these three pairs have to stay committed for
+the reason above: a test that shells out to `openssl` fails on machines that lack it.

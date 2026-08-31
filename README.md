@@ -1,8 +1,17 @@
 # nestwatch-mobile
 
-Android client for [nestwatch](https://github.com/emrecdr/nestwatch) — a LAN-only parental
-dashboard served by a Rust binary on the monitored PC. Nothing leaves the house, so this app
+[![CI](https://github.com/emrecdr/nestwatch-mobile/actions/workflows/ci.yml/badge.svg)](https://github.com/emrecdr/nestwatch-mobile/actions/workflows/ci.yml)
+
+Android and iOS client for [nestwatch](https://github.com/emrecdr/nestwatch) — a LAN-only
+parental dashboard served by a Rust binary on the monitored PC. Nothing leaves the house, so this app
 talks to that PC directly over HTTPS with a **pinned certificate** and no cloud in between.
+
+How it is versioned is [`docs/VERSIONING.md`](docs/VERSIONING.md); what has changed is
+[`CHANGELOG.md`](CHANGELOG.md). CI runs on every push
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) and includes a job that checks out
+the nestwatch repository and runs the golden-file contract against it — both repositories
+are public, so the cross-repo gate no longer needs two checkouts on one machine and a
+person choosing to run it.
 
 The implementation plan is [`docs/PLAN.md`](docs/PLAN.md), what is still open is
 [`docs/OPEN-FINDINGS.md`](docs/OPEN-FINDINGS.md), the reviews behind them are
@@ -28,8 +37,13 @@ nestwatch repo and landed there; `prove_phase1.dart` checks it against that serv
 `pair_url` output rather than a fragment this side synthesised.
 
 What remains is all outside this repo: a Play Console `dataSync` declaration, a privacy
-policy, a release signing keystore, the QR camera path (needs hardware), and
-`Service.onTimeout` (needs API 35 and six real background hours).
+policy, a release signing keystore, the QR camera path (needs hardware),
+`Service.onTimeout` (needs API 35 and six real background hours), and — on iOS — the
+local-network permission prompt, which no simulator raises (`docs/OPEN-FINDINGS.md`, M15).
+
+The iOS side builds, and the pin was proven inside a running iOS app rather than argued
+from Apple's documentation: App Transport Security does not govern `dart:io`, which is the
+open question PLAN §7 left.
 
 Rules, routines, curfew and the audit log stay in the browser, deliberately —
 configuration is done rarely, and each screen added here is a second interface to keep in

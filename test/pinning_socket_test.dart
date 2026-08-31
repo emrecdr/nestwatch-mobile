@@ -40,9 +40,7 @@ void main() {
   });
 
   Future<String> get_(HttpClient client) async {
-    final request = await client.getUrl(
-      server.url('/session'),
-    );
+    final request = await client.getUrl(server.url('/session'));
     final response = await request.close();
     return response.transform(utf8.decoder).join();
   }

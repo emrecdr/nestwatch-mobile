@@ -284,6 +284,24 @@ Nothing here needs doing until then — and the way this repo finds out that day
 `tool/check_findings.sh` reporting that reference dangling, because a fixed entry is a
 deleted entry on both sides.
 
+**Three facts `nestwatch#O72` argues from stopped being true on 2026-08-31**, and the other
+side should know before weighing it again. It says, measured 2026-08-27, that this
+repository has *"no CI of any kind — no `.github/`, no runner config of any flavour"*; that
+*"the client's [CI] never runs this one"*; and that drift *"needs both checkouts on one
+machine and a person choosing to run it."*
+
+There is now `.github/workflows/ci.yml`, and because both repositories are public it checks
+out `emrecdr/nestwatch` and runs `tool/check_golden.sh` against it on every push and pull
+request — no token, no person. The manual gate O72 describes is the thing that changed.
+
+**This does not close O72, and the direction of its argument survives intact.** Its case was
+explicitly *"consolidation, not automation"* — one bespoke reader of another repository's
+source replaced by a gate already covering five other values. That is still true, and a
+`sed` matching `pub const RENEW_WARN_DAYS: u64 = <n>;` is still a reader of their Rust
+whether a robot runs it or a person does. What changed is only the *cost of leaving it*,
+which O72 gives as a reader *"that only speaks when somebody runs it."* It now speaks on
+every push. So this stays blocked on their side rather than becoming urgent.
+
 ### M12 · The screen reader still has no map of a screen
 
 **Two of this entry's three original examples were wrong and are gone.** The screenshot

@@ -153,7 +153,13 @@ class PairingController {
     required this._sessions,
     required Future<void> Function() forgetAnnounced,
     DateTime Function()? now,
-  }) : _forgetAnnounced = forgetAnnounced, // ignore: prefer_initializing_formals
+    // The parameter is public while the field is private, so callers write
+    // `forgetAnnounced:` rather than `_forgetAnnounced:`. An initializing formal would
+    // put the private name in the public constructor. The ignore sits on its own line
+    // because `dart format` splits the assignment and a trailing comment would land on
+    // the wrong one -- which is how it stopped suppressing anything once already.
+    // ignore: prefer_initializing_formals
+  }) : _forgetAnnounced = forgetAnnounced,
        _now = now ?? DateTime.now;
 
   void addListener(void Function() listener) => _listeners.add(listener);

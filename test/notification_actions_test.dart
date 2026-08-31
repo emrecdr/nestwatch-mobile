@@ -57,7 +57,6 @@ final _identity = ServerIdentity(
 );
 
 void main() {
-
   group('the happy paths', () {
     test('approve grants, and says nothing', () async {
       final client = _FakeClient();
@@ -69,7 +68,11 @@ void main() {
       expect(outcome, ActionOutcome.granted);
       expect(client.approved, ['req-1']);
       expect(actionFailureMessage(outcome), isNull);
-      expect(client.closed, isTrue, reason: 'a background client must not linger');
+      expect(
+        client.closed,
+        isTrue,
+        reason: 'a background client must not linger',
+      );
     });
 
     test('deny resolves, and says nothing', () async {
@@ -125,35 +128,38 @@ void main() {
       await performAction(
         actionId: approveActionId,
         requestId: 'req-a',
-        open: () async => (
-          identity: _identity,
-          client: _FakeClient(resolves: false),
-        ),
+        open: () async =>
+            (identity: _identity, client: _FakeClient(resolves: false)),
         seen: seen,
       );
-      expect(await seen.load(), {'req-a'}, reason: 'it is resolved; do not re-ask');
+      expect(await seen.load(), {
+        'req-a',
+      }, reason: 'it is resolved; do not re-ask');
     });
   });
 
   group('the parent must be told when nothing happened', () {
-    test('an unreachable PC complains, because the notification is already gone', () async {
-      final client = _FakeClient(
-        throws: const NestwatchException(
-          NestwatchFailure.unreachable,
-          'not on that network',
-        ),
-      );
-      final outcome = await performAction(
-        actionId: approveActionId,
-        requestId: 'req-3',
-        open: () async => (identity: _identity, client: client),
-      );
-      expect(outcome, ActionOutcome.failed);
-      final said = actionFailureMessage(outcome);
-      expect(said, isNotNull);
-      expect(said, contains('nothing changed on that PC'));
-      expect(client.closed, isTrue);
-    });
+    test(
+      'an unreachable PC complains, because the notification is already gone',
+      () async {
+        final client = _FakeClient(
+          throws: const NestwatchException(
+            NestwatchFailure.unreachable,
+            'not on that network',
+          ),
+        );
+        final outcome = await performAction(
+          actionId: approveActionId,
+          requestId: 'req-3',
+          open: () async => (identity: _identity, client: client),
+        );
+        expect(outcome, ActionOutcome.failed);
+        final said = actionFailureMessage(outcome);
+        expect(said, isNotNull);
+        expect(said, contains('nothing changed on that PC'));
+        expect(client.closed, isTrue);
+      },
+    );
 
     test('a lapsed session complains, and names the fix', () async {
       final outcome = await performAction(
@@ -219,7 +225,11 @@ void main() {
           return null;
         },
       );
-      expect(opened, 0, reason: 'a bad action id is rejected before opening anything');
+      expect(
+        opened,
+        0,
+        reason: 'a bad action id is rejected before opening anything',
+      );
     });
   });
 
@@ -235,11 +245,17 @@ void main() {
     });
 
     test('tapping the body is not an answer', () {
-      expect(isActionTap(NotificationResponseType.selectedNotification), isFalse);
+      expect(
+        isActionTap(NotificationResponseType.selectedNotification),
+        isFalse,
+      );
     });
 
     test('swiping it away is not an answer', () {
-      expect(isActionTap(NotificationResponseType.notificationDismissed), isFalse);
+      expect(
+        isActionTap(NotificationResponseType.notificationDismissed),
+        isFalse,
+      );
     });
 
     test('every response kind is decided about', () {
@@ -254,15 +270,19 @@ void main() {
     });
   });
 
-  test('every outcome is decided about, so a new one cannot default to silence', () {
-    for (final outcome in ActionOutcome.values) {
-      // Exhaustive by construction — the switch in actionFailureMessage will not compile
-      // if a case is added and not handled. This asserts the *intent*: exactly the two
-      // failure outcomes speak.
-      final said = actionFailureMessage(outcome);
-      final shouldSpeak =
-          outcome == ActionOutcome.failed || outcome == ActionOutcome.notPaired;
-      expect(said != null, shouldSpeak, reason: '$outcome');
-    }
-  });
+  test(
+    'every outcome is decided about, so a new one cannot default to silence',
+    () {
+      for (final outcome in ActionOutcome.values) {
+        // Exhaustive by construction — the switch in actionFailureMessage will not compile
+        // if a case is added and not handled. This asserts the *intent*: exactly the two
+        // failure outcomes speak.
+        final said = actionFailureMessage(outcome);
+        final shouldSpeak =
+            outcome == ActionOutcome.failed ||
+            outcome == ActionOutcome.notPaired;
+        expect(said != null, shouldSpeak, reason: '$outcome');
+      }
+    },
+  );
 }

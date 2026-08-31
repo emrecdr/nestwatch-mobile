@@ -150,33 +150,40 @@ void main() {
     // It left a real trace too: those identifiers are what suppress a second
     // notification, so a re-paired phone would stay quiet about requests it had
     // "already announced" to a pairing that no longer exists.
-    test('the pin, the cookie, and the announced-request identifiers', () async {
-      final identities = InMemoryServerIdentityStore();
-      final sessions = InMemorySessionStore();
-      final seen = InMemorySeenRequestStore();
-      await identities.save(
-        ServerIdentity(
-          host: '192.168.1.42',
-          port: 8443,
-          fingerprint: Fingerprint.fromBytes(List<int>.filled(32, 9)),
-          provenance: PinProvenance.verifiedFromQrCode,
-          pairedAt: DateTime(2026, 8, 31),
-        ),
-      );
-      await sessions.save(const SessionCookie('cookie'));
-      await seen.save({'r1', 'r2'});
+    test(
+      'the pin, the cookie, and the announced-request identifiers',
+      () async {
+        final identities = InMemoryServerIdentityStore();
+        final sessions = InMemorySessionStore();
+        final seen = InMemorySeenRequestStore();
+        await identities.save(
+          ServerIdentity(
+            host: '192.168.1.42',
+            port: 8443,
+            fingerprint: Fingerprint.fromBytes(List<int>.filled(32, 9)),
+            provenance: PinProvenance.verifiedFromQrCode,
+            pairedAt: DateTime(2026, 8, 31),
+          ),
+        );
+        await sessions.save(const SessionCookie('cookie'));
+        await seen.save({'r1', 'r2'});
 
-      final controller = PairingController(
-        overrides: PinnedHttpOverrides(),
-        identities: identities,
-        sessions: sessions,
-        forgetAnnounced: seen.clear,
-      );
-      await controller.unpair();
+        final controller = PairingController(
+          overrides: PinnedHttpOverrides(),
+          identities: identities,
+          sessions: sessions,
+          forgetAnnounced: seen.clear,
+        );
+        await controller.unpair();
 
-      expect(await identities.load(), isNull, reason: 'the pin');
-      expect(await sessions.load(), isNull, reason: 'the cookie');
-      expect(await seen.load(), isEmpty, reason: 'the announced-request identifiers');
-    });
+        expect(await identities.load(), isNull, reason: 'the pin');
+        expect(await sessions.load(), isNull, reason: 'the cookie');
+        expect(
+          await seen.load(),
+          isEmpty,
+          reason: 'the announced-request identifiers',
+        );
+      },
+    );
   });
 }

@@ -65,7 +65,7 @@ Future<void> main(List<String> argv) async {
     overrides: o,
     identities: identities,
     sessions: sessions,
-  
+
     forgetAnnounced: InMemorySeenRequestStore().clear,
   );
 

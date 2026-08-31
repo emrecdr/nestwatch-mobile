@@ -66,25 +66,28 @@ void main() {
     session!.client.close();
   });
 
-  test('a live app keeps the exact overrides object its controller holds', () async {
-    // What main() does, and what PairingController is given a reference to.
-    final appOverrides = PinnedHttpOverrides(pin: pin);
-    HttpOverrides.global = appOverrides;
+  test(
+    'a live app keeps the exact overrides object its controller holds',
+    () async {
+      // What main() does, and what PairingController is given a reference to.
+      final appOverrides = PinnedHttpOverrides(pin: pin);
+      HttpOverrides.global = appOverrides;
 
-    final session = await openBackgroundSession(
-      identities: _Identities(identity),
-      sessions: const _Sessions(cookie),
-    );
-    expect(session, isNotNull);
-    expect(
-      identical(HttpOverrides.current, appOverrides),
-      isTrue,
-      reason:
-          'replacing it would leave the controller holding an object nothing '
-          'consults, so unpair() would not drop the pin from the live client',
-    );
-    session!.client.close();
-  });
+      final session = await openBackgroundSession(
+        identities: _Identities(identity),
+        sessions: const _Sessions(cookie),
+      );
+      expect(session, isNotNull);
+      expect(
+        identical(HttpOverrides.current, appOverrides),
+        isTrue,
+        reason:
+            'replacing it would leave the controller holding an object nothing '
+            'consults, so unpair() would not drop the pin from the live client',
+      );
+      session!.client.close();
+    },
+  );
 
   test('and the controller can still change what is trusted afterwards', () async {
     // The consequence, stated as behaviour rather than as identity: distrust() on the
@@ -101,7 +104,8 @@ void main() {
     expect(
       (HttpOverrides.current! as PinnedHttpOverrides).pin,
       isNull,
-      reason: 'the parent pressed "Forget this PC"; the live client must forget it',
+      reason:
+          'the parent pressed "Forget this PC"; the live client must forget it',
     );
   });
 

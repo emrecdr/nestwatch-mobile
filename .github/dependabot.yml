@@ -1,0 +1,26 @@
+version: 2
+updates:
+  # The workflow pins action versions on purpose (a gate that changes underneath you
+  # reports on a toolchain nobody chose). Pinning without a way to move the pin is how a
+  # repository ends up on an action that no longer receives fixes, so this proposes the
+  # moves as pull requests that CI has to pass.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "ci"
+
+  # Deliberately monthly and grouped: `pubspec.lock` is what `tool/audit_deps.sh` reads to
+  # decide which packages actually ship, and every bump is a package that has to be
+  # re-audited against the one dependency rule. A weekly drip of single-package PRs would
+  # make that audit something nobody reads.
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      dart-dependencies:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"

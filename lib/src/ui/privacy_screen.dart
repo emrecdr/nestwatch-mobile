@@ -36,66 +36,66 @@ class PrivacyScreen extends StatelessWidget {
       body: SafeArea(
         top: false,
         child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
-        children: [
-          _p(
-            theme,
-            'This app talks to one computer in your own home, over your own network. '
-            'It has no account, no server of ours, and no analytics. Nothing it reads '
-            'is sent anywhere except back to that computer.',
-          ),
-          _h(theme, 'What it keeps on this phone'),
-          _bullet(
-            theme,
-            'The fingerprint of that computer\'s certificate — the value '
-            'that lets this app tell the right computer from an impostor.',
-          ),
-          _bullet(
-            theme,
-            'A sign-in cookie, so you do not retype the password daily.',
-          ),
-          _bullet(
-            theme,
-            'The identifiers of requests you have already been told about, '
-            'so the same one is not announced twice.',
-          ),
-          _p(
-            theme,
-            'All three are held in Android\'s encrypted store, under a key that cannot '
-            'leave this device. They are excluded from backups and from phone-to-phone '
-            'transfer. "Forget this PC" deletes all of them.',
-          ),
-          _h(theme, 'What it never keeps'),
-          _p(
-            theme,
-            'Pictures of your child\'s screen are shown and then discarded. They are '
-            'never written to storage on this phone, never sent anywhere, and are gone '
-            'when you leave the screen. This app writes no files at all.',
-          ),
-          _h(theme, 'The camera'),
-          _p(
-            theme,
-            'Used for one thing: reading the pairing code printed by the computer. '
-            'Nothing the camera sees is stored, and nothing is sent.',
-          ),
-          _h(theme, 'Your child\'s data'),
-          _p(
-            theme,
-            'A picture of your child\'s desktop is your child\'s personal data, and so '
-            'is the list of what they used and the reasons they type when asking for '
-            'more time. This app shows you that data and keeps none of it. What is '
-            'recorded lives on the computer being monitored, under your control, and '
-            'this app cannot make copies of it elsewhere.',
-          ),
-          _h(theme, 'Permissions'),
-          _p(
-            theme,
-            'Notifications, to tell you a request is waiting. The camera, for the '
-            'pairing code. Network access, to reach that one computer. A foreground '
-            'service, only while you switch on "watch now", so that checking every '
-            'minute is visible to you rather than hidden.',
-          ),
-        ],
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+          children: [
+            _p(
+              theme,
+              'This app talks to one computer in your own home, over your own network. '
+              'It has no account, no server of ours, and no analytics. Nothing it reads '
+              'is sent anywhere except back to that computer.',
+            ),
+            _h(theme, 'What it keeps on this phone'),
+            _bullet(
+              theme,
+              'The fingerprint of that computer\'s certificate — the value '
+              'that lets this app tell the right computer from an impostor.',
+            ),
+            _bullet(
+              theme,
+              'A sign-in cookie, so you do not retype the password daily.',
+            ),
+            _bullet(
+              theme,
+              'The identifiers of requests you have already been told about, '
+              'so the same one is not announced twice.',
+            ),
+            _p(
+              theme,
+              'All three are held in Android\'s encrypted store, under a key that cannot '
+              'leave this device. They are excluded from backups and from phone-to-phone '
+              'transfer. "Forget this PC" deletes all of them.',
+            ),
+            _h(theme, 'What it never keeps'),
+            _p(
+              theme,
+              'Pictures of your child\'s screen are shown and then discarded. They are '
+              'never written to storage on this phone, never sent anywhere, and are gone '
+              'when you leave the screen. This app writes no files at all.',
+            ),
+            _h(theme, 'The camera'),
+            _p(
+              theme,
+              'Used for one thing: reading the pairing code printed by the computer. '
+              'Nothing the camera sees is stored, and nothing is sent.',
+            ),
+            _h(theme, 'Your child\'s data'),
+            _p(
+              theme,
+              'A picture of your child\'s desktop is your child\'s personal data, and so '
+              'is the list of what they used and the reasons they type when asking for '
+              'more time. This app shows you that data and keeps none of it. What is '
+              'recorded lives on the computer being monitored, under your control, and '
+              'this app cannot make copies of it elsewhere.',
+            ),
+            _h(theme, 'Permissions'),
+            _p(
+              theme,
+              'Notifications, to tell you a request is waiting. The camera, for the '
+              'pairing code. Network access, to reach that one computer. A foreground '
+              'service, only while you switch on "watch now", so that checking every '
+              'minute is visible to you rather than hidden.',
+            ),
+          ],
         ),
       ),
     );

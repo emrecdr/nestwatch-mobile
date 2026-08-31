@@ -52,9 +52,7 @@ void main() {
   test('an expired certificate is ACCEPTED when the pin matches', () async {
     HttpOverrides.global = PinnedHttpOverrides(pin: expiredPin);
     final client = HttpClient();
-    final request = await client.getUrl(
-      server.url('/session'),
-    );
+    final request = await client.getUrl(server.url('/session'));
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
 
@@ -79,9 +77,7 @@ void main() {
       seen = cert.endValidity;
       return true;
     };
-    final request = await probe.getUrl(
-      server.url('/session'),
-    );
+    final request = await probe.getUrl(server.url('/session'));
     await (await request.close()).drain<void>();
     probe.close();
 
@@ -139,9 +135,7 @@ void main() {
       );
       final client = HttpClient();
       await expectLater(
-        client
-            .getUrl(server.url('/session'))
-            .then((r) => r.close()),
+        client.getUrl(server.url('/session')).then((r) => r.close()),
         throwsA(isA<HandshakeException>()),
       );
       expect(server.handlerRan, isFalse);

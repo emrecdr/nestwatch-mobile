@@ -21,13 +21,17 @@ void main() {
   const plistPath = 'ios/Runner/Info.plist';
   const dartPath = 'lib/src/background/background_poll.dart';
 
-  String plist() => readSourceOrFail(plistPath, why: 'Info.plist carries the iOS keys that fail silently.');
+  String plist() => readSourceOrFail(
+    plistPath,
+    why: 'Info.plist carries the iOS keys that fail silently.',
+  );
 
   test('the iOS target exists and its Info.plist is readable', () {
     expect(
       File(plistPath).existsSync(),
       isTrue,
-      reason: 'nothing below was checked — if iOS was removed, remove this file too',
+      reason:
+          'nothing below was checked — if iOS was removed, remove this file too',
     );
   });
 
@@ -39,11 +43,20 @@ void main() {
       r'<key>BGTaskSchedulerPermittedIdentifiers</key>\s*<array>(.*?)</array>',
       dotAll: true,
     ).firstMatch(plist())?.group(1);
-    expect(declared, isNotNull, reason: 'no BGTaskSchedulerPermittedIdentifiers at all');
+    expect(
+      declared,
+      isNotNull,
+      reason: 'no BGTaskSchedulerPermittedIdentifiers at all',
+    );
 
-    final registered = RegExp(
-      r"periodicTaskUniqueName = '([^']+)'",
-    ).firstMatch(readSourceOrFail(dartPath, why: 'it registers the identifier iOS must be told about.'))?.group(1);
+    final registered = RegExp(r"periodicTaskUniqueName = '([^']+)'")
+        .firstMatch(
+          readSourceOrFail(
+            dartPath,
+            why: 'it registers the identifier iOS must be told about.',
+          ),
+        )
+        ?.group(1);
     expect(registered, isNotNull, reason: 'could not read the Dart identifier');
 
     expect(
@@ -59,7 +72,10 @@ void main() {
     // Required for the permission prompt to appear at all. An empty or absent string is
     // an immediate rejection on submission, and a bad one is worse than that: this is the
     // sentence a parent reads when deciding whether to let the app reach their own PC.
-    for (final key in ['NSLocalNetworkUsageDescription', 'NSCameraUsageDescription']) {
+    for (final key in [
+      'NSLocalNetworkUsageDescription',
+      'NSCameraUsageDescription',
+    ]) {
       final value = RegExp(
         '<key>$key</key>\\s*<string>(.*?)</string>',
         dotAll: true,
@@ -88,17 +104,25 @@ void main() {
     );
   });
 
-  test('the bundle identifier matches Android, and is not the scaffold default', () {
-    final project = readSourceOrFail('ios/Runner.xcodeproj/project.pbxproj', why: 'it carries the bundle identifier, which cannot change after a first upload.');
-    expect(
-      project,
-      contains('PRODUCT_BUNDLE_IDENTIFIER = com.nestwatch.mobile;'),
-      reason: 'must match android applicationId; neither can change after first upload',
-    );
-    expect(
-      project,
-      isNot(contains('com.nestwatch.nestwatchMobile;')),
-      reason: 'the scaffold default stutters and was replaced',
-    );
-  });
+  test(
+    'the bundle identifier matches Android, and is not the scaffold default',
+    () {
+      final project = readSourceOrFail(
+        'ios/Runner.xcodeproj/project.pbxproj',
+        why:
+            'it carries the bundle identifier, which cannot change after a first upload.',
+      );
+      expect(
+        project,
+        contains('PRODUCT_BUNDLE_IDENTIFIER = com.nestwatch.mobile;'),
+        reason:
+            'must match android applicationId; neither can change after first upload',
+      );
+      expect(
+        project,
+        isNot(contains('com.nestwatch.nestwatchMobile;')),
+        reason: 'the scaffold default stutters and was replaced',
+      );
+    },
+  );
 }
