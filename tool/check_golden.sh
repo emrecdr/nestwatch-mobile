@@ -35,7 +35,30 @@ if [ ! -d "$SRC/tests/golden" ]; then
   exit 2
 fi
 
-echo "Comparing $MINE against $SRC/tests/golden ($(cd "$SRC" && git rev-parse --short HEAD))"
+src_sha=$(cd "$SRC" && git rev-parse --short HEAD 2>/dev/null)
+echo "Comparing $MINE against $SRC/tests/golden (${src_sha:-unknown commit})"
+
+# Is that commit published, or is it somebody's uncommitted afternoon?
+#
+# `NESTWATCH_REPO` defaults to `../nestwatch`, which is a WORKING TREE and may hold
+# anything: local commits, unpushed work, a half-finished branch. CI clones the pushed
+# branch instead, so the same command answers about two different trees and both answers
+# are true. Vendoring the golden files from the wrong one produces a repo that passes
+# locally and fails in CI, which is exactly what happened on 2026-09-02 -- goldens copied
+# out of unpushed work carrying `refused_total`, a field no published nestwatch had.
+#
+# Read from the local remote-tracking ref rather than the network, so this still works
+# offline. That ref can be stale, so this can warn about work that IS pushed; it cannot
+# stay silent about work that is not, which is the direction that matters.
+if [ -n "$src_sha" ] && (cd "$SRC" && git rev-parse --verify -q origin/main >/dev/null); then
+  if ! (cd "$SRC" && git merge-base --is-ancestor HEAD origin/main 2>/dev/null); then
+    echo
+    echo "  NOTE: $src_sha is not in that checkout's origin/main. You are comparing"
+    echo "  against local work. CI clones the pushed branch and will see something else —"
+    echo "  do not vendor golden files from here without checking which tree they came from."
+    echo "  (If origin/main is merely stale, fetch and re-run.)"
+  fi
+fi
 echo
 
 

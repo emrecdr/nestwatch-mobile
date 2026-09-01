@@ -133,6 +133,21 @@ verdict needs no threshold — but `renewWarnDays` is still read by
 Deleting the `sed` needs the threshold to be unnecessary, not merely duplicated. It is
 nearer than it was; it is not done.
 
+**Then the lesson was ignored by the person who wrote it, within the hour.** The goldens
+above were first vendored out of `../nestwatch`'s *working tree*, which had moved to
+`511647b` — ahead of the pushed `52c23e4` and carrying `refused` and `refused_total`, a
+further change nobody outside that machine can see. Everything passed locally. CI cloned
+the pushed branch, found two files drifted, and failed the `contract` job. Re-vendored from
+a fresh clone; the pushed shape is what is committed.
+
+**So it is a guard now rather than a caution.** `tool/check_golden.sh` prints the commit it
+compared against — it always did — and now also says when that commit is not in the
+checkout's `origin/main`, because printing a SHA relies on somebody recognising which SHA
+is published. It reads the local remote-tracking ref rather than the network, so it still
+works offline; a stale ref makes it warn about work that *is* pushed, which is the safe
+direction to be wrong in. Watched to fire against the working tree and to stay quiet
+against a fresh clone.
+
 **The lesson is about the checker, not the fields.** It answers about whichever checkout it
 is pointed at, and `NESTWATCH_REPO` defaults to `../nestwatch` — a working tree, which may
 hold anything. The same command gives two different true answers. Reading either one as
