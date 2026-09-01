@@ -43,6 +43,27 @@ flutter build appbundle --build-name=0.1.0 --build-number=$GITHUB_RUN_NUMBER
 rebase, a squash, or a branch — which `git rev-list --count HEAD` all can. That property is
 the whole requirement, so it is what the number is taken from.
 
+**With `--split-per-abi`, `BUILD` is not what lands in the APK.** Flutter adds a
+per-architecture offset, so one build number produces a different `versionCode` in each
+APK. Measured 2026-09-01 with `--build-number=1234`:
+
+| APK | `versionCode` | offset |
+|---|---|---|
+| `app-armeabi-v7a-release.apk` | 2234 | +1000 |
+| `app-arm64-v8a-release.apk` | 3234 | +2000 |
+| `app-x86_64-release.apk` | 5234 | +4000 |
+
+The x86_64 offset is +4000 and not +3000 because Flutter's ABI table reserves 3 for
+32-bit `x86`, which this project does not build. Worth stating, because the first version
+of this table said +3000 — extrapolated from the two rows above it rather than read off the
+APK, and wrong.
+
+This is deliberate on Flutter's part and is what a multi-APK listing needs: the store picks
+per device, and each architecture's series has to climb on its own without colliding with
+another's. Monotonicity is preserved inside each series, which is the requirement. It is
+recorded here because "the build number becomes the versionCode" is the obvious reading of
+the paragraph above, and it is off by a thousand.
+
 ## The contract version
 
 `ContractCheck.testedAgainst` states **where `test/golden/` was captured from**, not the

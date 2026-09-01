@@ -161,7 +161,39 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build apk --debug
+
+      # Release rather than debug, for two reasons. It is the stronger compile check --
+      # release runs R8 and icon tree-shaking, which debug does not, so a failure that only
+      # appears under shrinking is caught here instead of at store-upload time. And it is
+      # the only build worth keeping: the debug APK is 192 MB.
+      #
+      # `--split-per-abi` because the universal APK is 65.5 MB and carries three ABIs, one
+      # of which (x86_64, 23.8 MB) only an emulator can run. Measured 2026-08-31: arm64-v8a
+      # alone is 24.3 MB, a 63% reduction for the slice an actual phone uses. An App Bundle
+      # does this splitting itself, but that path needs an upload key and correctly refuses
+      # without one -- see `android/app/build.gradle.kts` and M7.
+      #
+      # `--build-number` from `github.run_number` is what docs/VERSIONING.md specifies: it
+      # is monotonic for the life of the repository and cannot be rewound by a rebase or a
+      # squash, which `git rev-list --count` can.
+      - name: Build release APKs, split by ABI
+        run: flutter build apk --release --split-per-abi --build-number=${{ github.run_number }}
+
+      # These are signed with the ANDROID DEBUG KEY, because no upload keystore exists in
+      # this repository and none should. They install on a phone for testing and Play will
+      # reject them, which is the intended state until M7. The artifact name says so, so
+      # that nobody has to read this comment to find out.
+      - name: Keep the installable APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: nestwatch-mobile-DEBUG-SIGNED-apk-${{ github.run_number }}
+          # x86_64 is deliberately not among these: it is emulator-only, and it is the
+          # largest of the three.
+          path: |
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          if-no-files-found: error
+          retention-days: 30
 
   build-ios:
     name: build · ios
@@ -175,9 +207,15 @@ jobs:
           cache: true
       - run: flutter pub get
       - name: Build without signing
-        # No certificate in CI, and none wanted: this proves the project compiles and its
-        # Info.plist is well-formed, not that it can be shipped.
-        run: flutter build ios --no-codesign --debug
+        # Release, matching the Android job, so shrinking and tree-shaking are exercised.
+        #
+        # Nothing is uploaded from here on purpose. `flutter build ipa` cannot run -- there
+        # is no signing certificate and no DEVELOPMENT_TEAM in the Xcode project -- and the
+        # unsigned `Runner.app` this produces cannot be installed on any device, so keeping
+        # it would offer a download that does not work. What this job proves is that the
+        # project compiles for device and its Info.plist is well-formed. Installing on a
+        # real iPhone needs an Apple Developer account; see M15.
+        run: flutter build ios --no-codesign --release
 
   # ---------------------------------------------------------------------------------
   # Slow, and not on every push. It runs the whole suite once per mutation.
