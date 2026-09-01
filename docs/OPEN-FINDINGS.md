@@ -68,6 +68,56 @@ Last audited against the tree on **2026-08-27**.
 
 ## Open
 
+### M20 · nestwatch is about to send the expiry verdict, which is what M6 was waiting for
+
+> **Cross-repo** · pairs with `nestwatch#O72`
+
+**Seen 2026-09-01, in the sibling checkout's local tree at `8ab193f` — not yet pushed.**
+`GET /api/usage/today` gains two fields:
+
+```diff
+  "budget_mins": 135,
++ "cert_days_left": 700,
++ "cert_expiring": false,
+```
+
+`src/rules.rs:595` computes the second as `cert_days_left.is_some_and(cert::renewal_due)`,
+so the **server applies its own threshold and sends the verdict**. Their own test comment
+says it plainly: *"Sending `cert_expiring` means the browser compares nothing."*
+
+**This is not what `nestwatch#O72` proposed, and it is better.** O72's fix was to publish
+the constant `RENEW_WARN_DAYS` in `limits.json` so each client could apply it. Publishing
+the *answer* instead removes the comparison from every client at once, rather than
+standardising the input to a comparison each one still performs.
+
+**What it means for `M6`.** That entry waits to delete `tool/check_golden.sh`'s `sed` over
+`src/cert.rs`. If the app stops needing the threshold, the `sed` goes — which is M6 closed
+by a route M6 did not anticipate. Whether it can is a real question and not a formality:
+
+- Our warning is computed from the pinned certificate's `notAfter`, taken from the
+  handshake, and is therefore available on **every** connection. `cert_expiring` arrives
+  only with a usage payload, so only on that screen and only when the request succeeds.
+- O72 argued this exact point in the other direction about `VALIDITY_DAYS`: the handshake
+  figure "describes the certificate in front of it rather than the one this version would
+  issue". That reasoning did not stop applying because a new field appeared.
+- So the likely shape is that the server's verdict is used to *agree with*, not replace,
+  the local one — and that two sources that can disagree is precisely the problem O72
+  raised about a third answer. Worth deciding deliberately rather than by whichever lands
+  first.
+
+**Nothing to do yet, and the reason is worth stating.** Their `origin/main` is `4740242`,
+which has neither field; `8ab193f` is seven-plus commits of unpushed local work. Verified
+both ways on 2026-09-01: `tool/check_golden.sh` against the local checkout reports **2 of
+11 drifted**, and against a `git archive` of their pushed `origin/main` reports **11 checks,
+nothing drifted**. CI clones the pushed branch, so it is green and correctly so.
+
+**The lesson is about the checker, not the fields.** It answers about whichever checkout it
+is pointed at, and `NESTWATCH_REPO` defaults to `../nestwatch` — a working tree, which may
+hold anything. The same command gives two different true answers. Reading either one as
+*the* answer, without saying which tree it came from, is how "we are aligned" gets said
+about a state nobody has shipped. Its output does name the commit it compared against; that
+line is the part to read.
+
 ### M19 · The suite had 253 tests and rendered nothing
 
 **Measured 2026-08-31:** zero occurrences of `testWidgets(` or `pumpWidget` anywhere under
