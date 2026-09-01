@@ -141,6 +141,13 @@ void main() {
       expect(usage.perApp.single.limitMinutes, 60);
       expect(usage.pages.single.name, 'Poki - Free Online Games');
       expect(usage.groups, isEmpty);
+
+      // Arrived in the payload on 2026-09-01. Pinned here even though no screen reads
+      // them yet (M20): the point of this file is that the wire shape is recorded from
+      // files serde produced, and a field nothing asserts is a field that can change
+      // without anyone finding out.
+      expect(usage.certDaysLeft, 700);
+      expect(usage.certExpiring, isFalse);
     });
 
     test('the four nulls that prose keeps losing', () {
@@ -157,6 +164,12 @@ void main() {
       // that is absent has to read the same as one that stopped.
       expect(usage.enforcerAgeSeconds, isNull);
       expect(usage.enforcementMayBeStopped, isTrue);
+
+      // cert_days_left: null means that PC could not say — same shape as the nulls above.
+      // cert_expiring is false there rather than null, because the server sends a verdict
+      // and "I could not tell" is spelled by the day count, not by the flag.
+      expect(usage.certDaysLeft, isNull);
+      expect(usage.certExpiring, isFalse);
 
       // 10 minutes of use, and nothing recorded what was in front. "Nothing was
       // watching", not "nothing happened" — the empty lists below are the absence of a

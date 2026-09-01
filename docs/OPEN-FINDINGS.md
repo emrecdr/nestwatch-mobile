@@ -105,11 +105,33 @@ by a route M6 did not anticipate. Whether it can is a real question and not a fo
   raised about a third answer. Worth deciding deliberately rather than by whichever lands
   first.
 
-**Nothing to do yet, and the reason is worth stating.** Their `origin/main` is `4740242`,
-which has neither field; `8ab193f` is seven-plus commits of unpushed local work. Verified
-both ways on 2026-09-01: `tool/check_golden.sh` against the local checkout reports **2 of
-11 drifted**, and against a `git archive` of their pushed `origin/main` reports **11 checks,
-nothing drifted**. CI clones the pushed branch, so it is green and correctly so.
+**Landed. They pushed on 2026-09-02** (`52c23e4`), and the contract check went red against
+the pushed branch exactly as it should. The golden files are vendored, `UsageToday` parses
+both fields, and `models_golden_test.dart` pins them — including `cert_days_left: null` in
+the unmeasured fixture, which is the same "could not say" shape as the four nulls beside it.
+
+**No screen reads them, and that is the decision rather than an omission.** The two answers
+are not interchangeable:
+
+| | this app's warning | `cert_expiring` |
+|---|---|---|
+| source | `notAfter` from the TLS handshake | that PC's own `renewal_due` |
+| available | every connection, including the pairing screen | only with a usage payload that succeeded |
+| whose clock | the phone's | the PC's |
+
+The last row is the interesting one. Both describe **the same certificate** — the pin
+guarantees it, since a rotated certificate is refused rather than read. So the numbers can
+only disagree if the two clocks do. A disagreement here is not a disagreement about the
+certificate; it is the phone and the PC telling different times, which nothing in this app
+currently detects and which would quietly distort every "used today" figure on the usage
+screen as well. That is worth building deliberately, and it is a different feature from the
+expiry warning.
+
+**What this does NOT do: close `M6`.** Tempting, since `cert_expiring` is the verdict and a
+verdict needs no threshold — but `renewWarnDays` is still read by
+`CertificateExpiry.of()`, which runs from the handshake on screens that never fetch usage.
+Deleting the `sed` needs the threshold to be unnecessary, not merely duplicated. It is
+nearer than it was; it is not done.
 
 **The lesson is about the checker, not the fields.** It answers about whichever checkout it
 is pointed at, and `NESTWATCH_REPO` defaults to `../nestwatch` — a working tree, which may
@@ -333,6 +355,12 @@ This entry is this side's: once that lands, vendor the enlarged file and delete 
 Nothing here needs doing until then — and the way this repo finds out that day arrived is
 `tool/check_findings.sh` reporting that reference dangling, because a fixed entry is a
 deleted entry on both sides.
+
+**`nestwatch#O72` is now overtaken on its own subject, though not closed.** They shipped
+`cert_expiring` (see `M20`) — the verdict rather than the constant. O72 proposed publishing
+`RENEW_WARN_DAYS` so each client could apply it; sending the answer removes the comparison
+from every client at once. This entry still waits, because `renewWarnDays` is read by the
+handshake path that runs where no usage payload exists.
 
 **Three facts `nestwatch#O72` argues from stopped being true on 2026-08-31**, and the other
 side should know before weighing it again. It says, measured 2026-08-27, that this

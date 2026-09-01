@@ -87,6 +87,29 @@ class UsageToday {
   /// already fixed twice." Not repeating it here.
   final bool focusMissing;
 
+  /// Days until that PC's TLS certificate lapses, as **that PC** counts them.
+  ///
+  /// Null when it cannot say. Not the same number as [CertificateExpiry.daysLeft], which
+  /// this app derives from the `notAfter` in the handshake: the certificate is the same
+  /// one, but the clocks are not. A disagreement between them is a disagreement about
+  /// what time it is, not about the certificate.
+  final int? certDaysLeft;
+
+  /// That PC's own verdict on whether the certificate is close enough to lapsing to say
+  /// so, computed there against its `RENEW_WARN_DAYS` and sent rather than implied.
+  ///
+  /// This is what `nestwatch#O72` was reaching for and better than what it proposed:
+  /// publishing the threshold would have had every client apply it separately, and
+  /// publishing the answer removes the comparison instead. nestwatch's own test says it —
+  /// "sending `cert_expiring` means the browser compares nothing."
+  ///
+  /// **Nothing reads this yet, deliberately.** See `docs/OPEN-FINDINGS.md` M20: this app's
+  /// warning comes from the handshake and is therefore available on every connection,
+  /// where this arrives only with a usage payload and only when that request succeeds.
+  /// Which of the two a parent should be shown is a decision, not a formality, and it is
+  /// recorded there rather than settled by whichever landed first.
+  final bool certExpiring;
+
   final List<UsageRow> perApp;
   final List<UsageRow> groups;
   final List<UsageRow> focused;
@@ -101,6 +124,8 @@ class UsageToday {
     required this.extraMinutes,
     required this.enforcerAgeSeconds,
     required this.focusMissing,
+    required this.certDaysLeft,
+    required this.certExpiring,
     required this.perApp,
     required this.groups,
     required this.focused,
@@ -118,6 +143,8 @@ class UsageToday {
     budgetMinutes: (json['budget_mins'] as num?)?.toInt() ?? 0,
     usedMinutes: (json['used_mins'] as num?)?.toInt() ?? 0,
     remainingMinutes: (json['remaining_mins'] as num?)?.toInt(),
+    certDaysLeft: (json['cert_days_left'] as num?)?.toInt(),
+    certExpiring: json['cert_expiring'] as bool? ?? false,
     extraMinutes: (json['extra_mins'] as num?)?.toInt() ?? 0,
     enforcerAgeSeconds: (json['enforcer_age_secs'] as num?)?.toInt(),
     focusMissing: json['focus_missing'] as bool? ?? false,
