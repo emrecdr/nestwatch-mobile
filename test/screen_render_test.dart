@@ -30,6 +30,37 @@ import 'package:nestwatch_mobile/src/ui/notice.dart';
 import 'package:nestwatch_mobile/src/ui/pairing_screen.dart';
 import 'package:nestwatch_mobile/src/ui/privacy_screen.dart';
 
+/// One thing to render, and the source file rendering it proves.
+///
+/// A record was enough while an entry was a builder and a string. It stopped being enough
+/// when the closing test needed to know *which file* each case covers: that list used to
+/// be retyped by hand below, so deleting a case here left the file still claiming to be
+/// rendered, with nothing rechecking the claim. [file] makes the two impossible to
+/// disagree -- the coverage list is now derived from the cases that actually run.
+class _Subject {
+  /// The basename under `lib/src/ui/`. Several subjects may name the same file: the three
+  /// `Notice` tones are one widget rendered three ways.
+  final String file;
+
+  /// What the test is called. Distinct per case, unlike [file].
+  final String label;
+
+  final Widget Function() build;
+
+  /// A string the render must actually put on screen. "Nothing was thrown" is an absence
+  /// and passes for a screen that draws an empty box -- which is the exact failure this
+  /// file exists to notice. Pairing it with a presence assertion makes the case fail
+  /// closed.
+  final String mustShow;
+
+  const _Subject({
+    required this.file,
+    required this.label,
+    required this.build,
+    required this.mustShow,
+  });
+}
+
 /// The smallest screen this app claims to support, and a large one.
 ///
 /// Both, because overflow is a function of height: a column that fits a Pixel 7 can still
@@ -48,6 +79,76 @@ Future<void> _render(WidgetTester tester, Widget child, Size size) async {
   await tester.pumpWidget(MaterialApp(home: child));
   await tester.pump();
 }
+
+// Constructible without a signed-in client. The screens that need one are not skipped
+// silently -- see the closing test, which names them.
+// Each entry carries a string it must actually put on screen. "Nothing was thrown" is
+// an absence and passes for a screen that renders an empty box -- which is the exact
+// failure this file exists to notice. Pairing it with a presence assertion makes the
+// case fail closed.
+// Constructible without a signed-in client. The screens that need one are not skipped
+// silently -- see the closing test, which names them.
+final _subjects = <_Subject>[
+  _Subject(
+    file: 'privacy_screen.dart',
+    label: 'PrivacyScreen',
+    build: () => const PrivacyScreen(),
+    mustShow: 'Privacy',
+  ),
+  _Subject(
+    file: 'fingerprint_view.dart',
+    label: 'FingerprintView',
+    build: () => FingerprintView(
+      Fingerprint.parse(
+        'E0:60:A4:A5:83:F3:49:7C:F2:21:2C:33:39:E4:04:03:'
+        '24:ED:72:FE:4F:67:E4:1B:54:E3:FF:84:1A:47:0D:AA',
+      ),
+    ),
+    mustShow: 'E0',
+  ),
+  _Subject(
+    file: 'notice.dart',
+    label: 'Notice (warning, the longest one shipped)',
+    build: () => const Notice(
+      'That PC refused the connection because this phone does not look like it is '
+      'on the same home network. If a VPN is switched on, turn it off.',
+      tone: NoticeTone.warning,
+      icon: Icons.warning_amber_rounded,
+    ),
+    mustShow: 'same home network',
+  ),
+  _Subject(
+    file: 'notice.dart',
+    label: 'Notice (advisory)',
+    build: () => const Notice(
+      'Screenshots are off on that PC.',
+      tone: NoticeTone.advisory,
+    ),
+    mustShow: 'Screenshots are off',
+  ),
+  _Subject(
+    file: 'notice.dart',
+    label: 'Notice (plain)',
+    build: () => const Notice('Ask on the PC itself.'),
+    mustShow: 'Ask on the PC itself',
+  ),
+  // The largest file in `lib/src/ui/` (439 lines) and the first thing a parent sees.
+  // It needs only a controller, and every one of that controller's collaborators has
+  // an in-memory implementation already -- the same set `restore_test.dart` uses.
+  _Subject(
+    file: 'pairing_screen.dart',
+    label: 'PairingScreen (nothing paired yet)',
+    build: () => PairingScreen(
+      controller: PairingController(
+        overrides: PinnedHttpOverrides(),
+        identities: InMemoryServerIdentityStore(),
+        sessions: InMemorySessionStore(),
+        forgetAnnounced: InMemorySeenRequestStore().clear,
+      ),
+    ),
+    mustShow: 'nestwatch',
+  ),
+];
 
 void main() {
   // Every case below asserts an *absence* -- "nothing was thrown". That is the direction
@@ -93,74 +194,20 @@ void main() {
   });
 
   group('screens build and lay out', () {
-    // Constructible without a signed-in client. The screens that need one are not skipped
-    // silently -- see the closing test, which names them.
-    // Each entry carries a string it must actually put on screen. "Nothing was thrown" is
-    // an absence and passes for a screen that renders an empty box -- which is the exact
-    // failure this file exists to notice. Pairing it with a presence assertion makes the
-    // case fail closed.
-    final subjects = <String, (Widget Function(), String)>{
-      'PrivacyScreen': (() => const PrivacyScreen(), 'Privacy'),
-      'FingerprintView': (
-        () => FingerprintView(
-          Fingerprint.parse(
-            'E0:60:A4:A5:83:F3:49:7C:F2:21:2C:33:39:E4:04:03:'
-            '24:ED:72:FE:4F:67:E4:1B:54:E3:FF:84:1A:47:0D:AA',
-          ),
-        ),
-        'E0',
-      ),
-      'Notice (warning, the longest one shipped)': (
-        () => const Notice(
-          'That PC refused the connection because this phone does not look like it is '
-          'on the same home network. If a VPN is switched on, turn it off.',
-          tone: NoticeTone.warning,
-          icon: Icons.warning_amber_rounded,
-        ),
-        'same home network',
-      ),
-      'Notice (advisory)': (
-        () => const Notice(
-          'Screenshots are off on that PC.',
-          tone: NoticeTone.advisory,
-        ),
-        'Screenshots are off',
-      ),
-      'Notice (plain)': (
-        () => const Notice('Ask on the PC itself.'),
-        'Ask on the PC itself',
-      ),
-      // The largest file in `lib/src/ui/` (439 lines) and the first thing a parent sees.
-      // It needs only a controller, and every one of that controller's collaborators has
-      // an in-memory implementation already -- the same set `restore_test.dart` uses.
-      'PairingScreen (nothing paired yet)': (
-        () => PairingScreen(
-          controller: PairingController(
-            overrides: PinnedHttpOverrides(),
-            identities: InMemoryServerIdentityStore(),
-            sessions: InMemorySessionStore(),
-            forgetAnnounced: InMemorySeenRequestStore().clear,
-          ),
-        ),
-        'nestwatch',
-      ),
-    };
-
     for (final size in _sizes.entries) {
-      for (final subject in subjects.entries) {
-        final (build, mustShow) = subject.value;
-        testWidgets('${subject.key} on a ${size.key}', (tester) async {
-          await _render(tester, Center(child: build()), size.value);
+      for (final subject in _subjects) {
+        testWidgets('${subject.label} on a ${size.key}', (tester) async {
+          await _render(tester, Center(child: subject.build()), size.value);
           expect(
             tester.takeException(),
             isNull,
             reason: 'threw or overflowed while building',
           );
           expect(
-            find.textContaining(mustShow, findRichText: true),
+            find.textContaining(subject.mustShow, findRichText: true),
             findsWidgets,
             reason:
-                'built without throwing, but put "$mustShow" on screen nowhere',
+                'built without throwing, but put "${subject.mustShow}" on screen nowhere',
           );
         });
       }
@@ -195,12 +242,11 @@ void main() {
       'poller.dart':
           'pure logic, covered by poller_test.dart and two mutations',
     };
-    const rendered = <String>{
-      'privacy_screen.dart',
-      'fingerprint_view.dart',
-      'notice.dart',
-      'pairing_screen.dart',
-    };
+    // Derived, never retyped. This used to be four literal filenames sitting beside the
+    // cases they described -- the rot this group exists to prevent, reproduced forty lines
+    // below the comment warning about it: delete a `testWidgets` case and its filename
+    // kept claiming to be rendered, with nothing left to recheck the claim.
+    final rendered = _subjects.map((s) => s.file).toSet();
 
     test('every file under lib/src/ui is either rendered here or named above', () {
       final files = Directory('lib/src/ui')
@@ -221,6 +267,14 @@ void main() {
         contains('home_screen.dart'),
         reason:
             'a known file is missing, so this listing is not reading the real tree',
+      );
+
+      // A file in both lists is a self-contradiction, and comparing each against the
+      // directory listing cannot see it: both memberships are individually plausible.
+      expect(
+        rendered.intersection(notRendered.keys.toSet()),
+        isEmpty,
+        reason: 'listed as both rendered and not rendered',
       );
 
       final unaccounted = files

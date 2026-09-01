@@ -385,9 +385,24 @@ echo "killed=$killed survived=$survived anchors-missing=$broken"
 # The exit status has to mean something, and it did not: this script reported survivors
 # and exited 0, so nothing could gate on it. A surviving mutant is an undefended claim; a
 # missing anchor is a claim nobody even attempted. Both are failures of the audit.
-if [ "$survived" -ne 0 ] || [ "$broken" -ne 0 ]; then
+# Both are failures, and they are not the same failure, so they do not share a status.
+#
+#   1  a mutation SURVIVED — a claim the tests do not defend. The code is the problem.
+#   2  an anchor is MISSING — the mutation never ran. The harness is the problem, and
+#      nothing was learned about the code either way.
+#
+# This is the same 0/1/2 the other checkers here use: 2 means "could not check", which is
+# exactly what a stale anchor is. Both are non-zero, so CI reds either way; the difference
+# is for whoever reads the status and has to decide which thing to go fix.
+if [ "$survived" -ne 0 ]; then
   echo
-  [ "$survived" -ne 0 ] && echo "$survived mutation(s) SURVIVED — a comment argues for something no test defends."
-  [ "$broken" -ne 0 ] && echo "$broken anchor(s) MISSING — those mutations did not run. Not the same as passing."
+  echo "$survived mutation(s) SURVIVED — a comment argues for something no test defends."
+  [ "$broken" -ne 0 ] &&
+    echo "$broken anchor(s) MISSING as well — those did not run. Not the same as passing."
   exit 1
+fi
+if [ "$broken" -ne 0 ]; then
+  echo
+  echo "$broken anchor(s) MISSING — those mutations did not run. Not the same as passing."
+  exit 2
 fi

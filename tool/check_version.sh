@@ -14,6 +14,21 @@ cd "$(dirname "$0")/.."
 status=0
 say() { printf '  %-12s %s\n' "$1" "$2"; }
 
+# One place where "these two should be equal" is decided.
+#
+# `tool/check_golden.sh` extracted the same shape into its `compare()` and its header says
+# why: "Two of these existed written out, and a third would have been a third copy of the
+# same three branches -- which is how the shapes drift apart and one of them quietly loses
+# its unreadable case." This script promptly wrote it out twice. Same lesson, same file.
+agree() { # label expected actual context
+  if [ "$3" = "$2" ]; then
+    say "$1" "$3 matches pubspec"
+  else
+    say MISMATCH "$4"
+    status=1
+  fi
+}
+
 # --- pubspec, the source of truth for the marketing version -------------------------
 pubspec=$(sed -n 's/^version: \([0-9][0-9.]*\)+\([0-9][0-9]*\).*/\1 \2/p' pubspec.yaml | head -1)
 name=${pubspec%% *}
@@ -37,12 +52,12 @@ else
   # The newest released heading, ignoring [Unreleased].
   top=$(sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | head -1)
   if [ -z "$top" ]; then
+    # Not a mismatch and not agreement: nothing has been released, so there is no version
+    # heading to disagree with. `agree` has no third answer, so this case stays outside it.
     say "changelog" "no released version yet (only [Unreleased]) — consistent with 0.x"
-  elif [ "$top" = "$name" ]; then
-    say "changelog" "$top matches pubspec"
   else
-    say MISMATCH "CHANGELOG's newest release is $top, pubspec says $name"
-    status=1
+    agree "changelog" "$name" "$top" \
+      "CHANGELOG's newest release is $top, pubspec says $name"
   fi
   grep -q '^## \[Unreleased\]' CHANGELOG.md ||
     { say MISSING "CHANGELOG.md has no '## [Unreleased]' section"; status=1; }
@@ -54,15 +69,8 @@ fi
 tag=$(git describe --tags --exact-match 2>/dev/null)
 if [ -z "$tag" ]; then
   say "tag" "this commit is not tagged — nothing to compare (not a pass)"
-  tag_checked=0
 else
-  tag_checked=1
-  if [ "$tag" = "v$name" ]; then
-    say "tag" "$tag matches pubspec"
-  else
-    say MISMATCH "tagged $tag but pubspec says $name"
-    status=1
-  fi
+  agree "tag" "v$name" "$tag" "tagged $tag but pubspec says $name"
 fi
 
 # --- the contract version, which is NOT the app's ------------------------------------
@@ -82,7 +90,7 @@ if [ "$status" -ne 0 ]; then
   echo "Versions disagree. See docs/VERSIONING.md."
   exit 1
 fi
-if [ "$tag_checked" -eq 0 ]; then
+if [ -z "$tag" ]; then
   echo "Everything checkable agrees; the tag was not among it."
   exit 0
 fi

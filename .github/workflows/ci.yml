@@ -87,6 +87,13 @@ jobs:
   contract:
     name: contract against nestwatch
     runs-on: ubuntu-latest
+    # Both steps below need the same two settings, and setting them twice is one edit away
+    # from a path that agrees in one step and not the other.
+    env:
+      NESTWATCH_REPO: ${{ github.workspace }}/nestwatch
+    defaults:
+      run:
+        working-directory: nestwatch-mobile
     steps:
       - uses: actions/checkout@v7
         with:
@@ -99,27 +106,18 @@ jobs:
           path: nestwatch
 
       - name: Golden files and the version they came from
-        working-directory: nestwatch-mobile
-        env:
-          NESTWATCH_REPO: ${{ github.workspace }}/nestwatch
         # Exit 2 means "could not compare", which is neither a pass nor a drift. It is
         # still a failure here on purpose: in CI the sibling checkout is a step above, so
         # not having it means the step above is broken, not that the answer is unknowable.
         run: bash tool/check_golden.sh
 
       - name: Cross-repo findings references resolve
-        working-directory: nestwatch-mobile
-        env:
-          NESTWATCH_REPO: ${{ github.workspace }}/nestwatch
-        # Three outcomes, and only one of them is this repo's fault.
+        # The exit codes and what they mean are documented once, in that script's own
+        # closing comment and in docs/VERSIONING.md — restating them here is a second copy
+        # to keep in step, and the two had already drifted in wording.
         #
-        #   0  everything resolves
-        #   1  a same-file reference dangles -- an error in our own file, so fail
-        #   3  only cross-repo references dangle -- most likely the other repo fixed and
-        #      deleted the entry, which is good news; it can also mean a typo or that they
-        #      have not pushed yet. Not decidable here, so it is surfaced and not failed.
-        #
-        # Failing on 3 would make this job go red every time the server ships something,
+        # Only the CI-specific decision belongs here: 3 is surfaced rather than failed,
+        # because failing on it would red this job every time the server ships something,
         # which is how a team learns to stop reading CI.
         run: |
           set +e
@@ -148,6 +146,11 @@ jobs:
   # ---------------------------------------------------------------------------------
   build-android:
     name: build · android
+    # Gated on the fast gate. `check` is the cheapest job in the graph (~1 min) and
+    # anything it rejects makes this one's result irrelevant; without `needs:` these
+    # start regardless and a doomed push still burns them. `audit` and `contract` stay
+    # ungated -- at 0.5 and 0.1 minutes, sequencing them would cost more than it saves.
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -197,6 +200,11 @@ jobs:
 
   build-ios:
     name: build · ios
+    # Gated on the fast gate. `check` is the cheapest job in the graph (~1 min) and
+    # anything it rejects makes this one's result irrelevant; without `needs:` these
+    # start regardless and a doomed push still burns them. `audit` and `contract` stay
+    # ungated -- at 0.5 and 0.1 minutes, sequencing them would cost more than it saves.
+    needs: check
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -223,6 +231,10 @@ jobs:
   mutation:
     name: mutation audit
     if: github.event_name != 'pull_request'
+    # Gated for the same reason as the two build jobs, and more so: this is the longest
+    # job in the graph (~9 min) and it reruns the whole suite once per mutation, so a
+    # `check` failure makes it 9 minutes spent on a tree that already lost.
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

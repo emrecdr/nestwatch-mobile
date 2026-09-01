@@ -96,8 +96,7 @@ control=0
 # and an empty hit list is the ordinary case. check_findings.sh reaches the same shape for
 # the same reason.
 hits=$(mktemp)
-fixture=$(mktemp -d)
-trap 'rm -f "$resolved" "$hits"; rm -rf "$fixture"' EXIT
+trap 'rm -f "$resolved" "$hits"' EXIT
 
 # The detector check, which is a different question from the control below.
 #
@@ -106,14 +105,19 @@ trap 'rm -f "$resolved" "$hits"; rm -rf "$fixture"' EXIT
 # malformed `$SUSPECT` -- one stray `[` while adding a term -- makes grep exit 2 and write
 # to the stderr this script discards, so `found` is empty and every package reads as
 # clean, while the control still passes and the run still prints "so the grep can see".
-# Demonstrated on 2026-08-31 against a fixture holding a known positive: the well-formed
-# pattern found it, the malformed one returned nothing, and the control passed for both.
+# Demonstrated on 2026-08-31 against a planted known positive: the well-formed pattern
+# found it, the malformed one returned nothing, and the control passed for both.
 #
 # So each alternative in `$SUSPECT` is asserted against a planted positive before the
-# pub-cache is read at all. Non-vacuity then rests on this fixture rather than on whatever
+# pub-cache is read at all. Non-vacuity then rests on those plants rather than on whatever
 # the cache happens to contain today -- a guard whose non-vacuity depends on the tree it
 # guards is one `pub upgrade` away from testing nothing. (The lesson is nestwatch#O79's,
 # reached there on the same class of defect; this is that lesson applied here.)
+#
+# The positives go down a pipe rather than into a temp directory. The check only asks
+# match-or-not, and `-r`/`-l` exist to say *which file* matched -- an answer nothing here
+# reads. Files would buy a second mktemp, a second thing in the trap, and a write and a
+# delete per term, for nothing.
 #
 # The literal is the alternative with its backslashes stripped, so `Socket\.connect`
 # plants `Socket.connect`. An alternative with richer regex syntax would not round-trip
@@ -126,18 +130,23 @@ trap 'rm -f "$resolved" "$hits"; rm -rf "$fixture"' EXIT
 # the second; only knowing the platform can.
 detector_ok=1
 i=0
+# `<<<` rather than a heredoc wrapping a command substitution: check_findings.sh already
+# feeds a while-read loop this way, and one idiom for one job is worth more than a
+# second way of spelling it.
 while IFS= read -r alt; do
   [ -n "$alt" ] || continue
   i=$((i + 1))
-  printf 'planted %s\n' "$(printf '%s' "$alt" | tr -d '\\')" > "$fixture/f$i.dart"
-  if ! grep -rlE "$SUSPECT" "$fixture/f$i.dart" >/dev/null 2>&1; then
+  # A here-string, not a pipe: `grep -q` exits at the first match and the writer then
+  # takes a broken pipe, which bash reports. The plant is one short line either way.
+  #
+  # grep's own stderr is deliberately NOT discarded here. When the pattern is malformed it
+  # says which way ("brackets ([ ]) not balanced"), and that names the defect that
+  # "DETECTOR FAILED" can only point at.
+  if ! grep -qE "$SUSPECT" <<< "planted $(printf '%s' "$alt" | tr -d '\\')"; then
     echo "  DETECTOR FAILED — SUSPECT does not match a planted \`$alt\`."
     detector_ok=0
   fi
-done <<EOF
-$(printf '%s' "$SUSPECT" | tr '|' '\n')
-EOF
-rm -f "$fixture"/*.dart
+done <<< "$(printf '%s' "$SUSPECT" | tr '|' '\n')"
 if [ "$detector_ok" -eq 0 ]; then
   echo
   echo "  The pattern cannot find what it is looking for, so a clean tree below would"

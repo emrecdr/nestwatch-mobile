@@ -128,8 +128,27 @@ compare "renew warning (days)" "$theirs_warn" "$mine_warn" \
 echo
 if [ "$drift" -eq 0 ]; then
   echo "$checked checks, nothing drifted."
-else
-  echo "$drift of $checked drifted. Fix them, then re-run flutter test —"
-  echo "the point is to find out what the change breaks, not to make the diff go away."
+  exit 0
 fi
-exit "$drift"
+echo "$drift of $checked drifted. Fix them, then re-run flutter test —"
+echo "the point is to find out what the change breaks, not to make the diff go away."
+
+# Exit 1, not `exit "$drift"`, and the difference is not cosmetic.
+#
+# This used to return the drift COUNT as its status, which collided with the `exit 2` above
+# meaning "could not compare at all". Two drifted files and a missing sibling checkout both
+# exited 2, and the caller had no way to tell "the contract moved" from "nothing was
+# checked" -- the exact distinction the rest of this file is built around.
+#
+# It is not hypothetical. On 2026-09-01 a gate script here reported `check_golden.sh exit=2`
+# and it was read as the could-not-compare branch; it was in fact 2 of 11 drifted. The
+# count belongs in the sentence above, which a person reads. The status is for a caller
+# branching on it, and a caller can only act on three answers:
+#
+#   0  compared, nothing moved
+#   1  compared, something moved
+#   2  could not compare -- see the exit above
+#
+# The count also wrapped mod 256, so 256 drifted comparisons would have reported success.
+# Unreachable at eleven checks, and still the wrong channel for a number.
+exit 1

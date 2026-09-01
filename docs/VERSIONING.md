@@ -87,3 +87,19 @@ section at the top; releasing moves it under a version heading with a date.
 `tool/check_version.sh` holds these together and is run by CI. It has the third outcome the
 other tools have: asked to check a tag when the checkout has none, it says it could not
 check rather than reporting a pass.
+
+**That sentence was not true when it was written**, and is recorded here rather than
+quietly corrected. It described a shared convention across `tool/*.sh` that did not exist:
+`check_golden.sh` returned the *count* of drifted comparisons as its exit status, so two
+drifted files exited 2 — the same status it used for "could not compare at all" — and
+`mutate.sh` returned the same 1 for a surviving mutation and for an anchor that had gone
+stale and never ran. The convention is real now, and it is:
+
+| exit | meaning |
+|---|---|
+| 0 | checked, and it agrees |
+| 1 | checked, and it does not — the thing being checked is wrong |
+| 2 | **could not check** — say so rather than report a pass |
+| 3 | `check_findings.sh` only: cross-repo, and not decidable from here |
+
+Counts belong in the output a person reads, never in the status a caller branches on.
