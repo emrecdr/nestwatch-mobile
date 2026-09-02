@@ -35,9 +35,15 @@ class Frame {
 
 /// One answer to a time request, and what that PC said about whether it will hold.
 ///
-/// Same shape as [Frame], for the same reason: the server knows something about what it
-/// just did that this app cannot work out for itself, and dropping it reports a success
-/// that is not one.
+/// Built for the same reason as [Frame] — the server knows something about what it just
+/// did that this app cannot work out for itself, and dropping it reports a success that is
+/// not one.
+///
+/// Deliberately **not** a shared generic, and not the same shape either: `Frame.bytes` is
+/// a payload that `servedTier` annotates, where `acted` *is* the status. A type over both
+/// would carry no behaviour and would couple two unrelated endpoints, so the resemblance
+/// is in the argument rather than in the fields. Said here because the earlier wording
+/// ("same shape as") invited exactly that unification.
 ///
 /// This used to be a bare `bool`. `_resolveTimeRequest` read the status, discarded the
 /// body with `final (response, _)`, and returned whether the call had acted — so
@@ -365,18 +371,19 @@ class NestwatchClient {
     );
   }
 
-  /// One optional string field, read so that every way of not saying it reads alike.
+  /// One optional string field off a body that may not be JSON at all.
   ///
-  /// Absent, `null`, empty, whitespace, the wrong type, or a body that is not JSON at
-  /// all: each means the server had nothing to add, and none of them may become a
-  /// sentence in front of a parent. The failure worth avoiding is the opposite of the one
-  /// that made this method necessary — having discarded the server's words, the next
-  /// mistake would be inventing some.
+  /// The decode and its `try` are this method's whole job; what counts as "nothing said"
+  /// is [nonEmptyString]'s, and lives once in `models.dart` because three copies of that
+  /// rule is what this replaced. A body that does not parse reads the same as a field
+  /// that is absent, which is the same as one that is blank — the server had nothing to
+  /// add, and none of those may become a sentence in front of a parent.
+  ///
+  /// The failure worth avoiding is the opposite of the one that made this necessary:
+  /// having discarded the server's words, the next mistake would be inventing some.
   static String? _stringOrNull(String body, String field) {
     try {
-      final value = (jsonDecode(body) as Map<String, dynamic>)[field];
-      if (value is! String || value.trim().isEmpty) return null;
-      return value;
+      return nonEmptyString((jsonDecode(body) as Map<String, dynamic>)[field]);
     } on Object {
       return null;
     }
@@ -431,14 +438,13 @@ class NestwatchClient {
       'That PC answered with HTTP ${response.statusCode}.';
 
   /// nestwatch answers errors as `{"error": "..."}`; anything else is not from it.
-  static String _errorFrom(String body) {
-    try {
-      return (jsonDecode(body) as Map<String, dynamic>)['error'] as String? ??
-          '';
-    } on Object {
-      return '';
-    }
-  }
+  ///
+  /// A thin adapter over [_stringOrNull] rather than a second decoder. It had its own
+  /// copy of the same try/decode/one-field read, sixty lines from the newer one and
+  /// disagreeing with it about blank — `''` there, `null` here. Its one caller asks
+  /// `reason.contains('too many')`, which a whitespace-only string fails either way, so
+  /// the two answers were never distinguishable at the only place that reads them.
+  static String _errorFrom(String body) => _stringOrNull(body, 'error') ?? '';
 
   /// `GET /api/usage/today`.
   Future<UsageToday> usageToday() async {

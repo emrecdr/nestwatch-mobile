@@ -5,6 +5,34 @@
 /// which a naive `as int` would have crashed on.
 library;
 
+/// One rule for "the server said nothing", in one place.
+///
+/// Absent, `null`, the wrong type and blank all mean the same thing, and every optional
+/// string this app reads off the wire wants that same reading. It lived in three of them
+/// at once — `UsageToday._nonEmpty`, `NestwatchClient._stringOrNull` and the older
+/// `_errorFrom` — each with its own paragraph arguing the same rule, and `_errorFrom`
+/// already disagreeing with the others about blank. Three homes meant the day somebody
+/// decides whitespace-only is a real value, or that the *trimmed* string should be
+/// returned, they have to find all three and each one's tests keep passing without the
+/// others.
+///
+/// Top-level rather than a static, so the API layer can share it: this file imports
+/// nothing, which is what makes it safe to depend on from anywhere.
+///
+/// **`null` is the ordinary case**, not an edge — `active_routine` is null whenever the
+/// base rules are in force, and `curfew_note` whenever bedtime is not in the way. Blank is
+/// the unreachable one: measured 2026-09-02 against the pushed 0.6.0, `api::save_routine`
+/// trims and rejects an empty routine name and `Config::validate` rejects it again on
+/// load. Handled anyway, because the cost is one clause and the failure it prevents is
+/// putting "Routine  is running now" in front of a parent — and recorded as unreachable so
+/// nobody later mistakes it for evidence that blank is a real wire shape. Nothing tests
+/// that branch, deliberately: a test for a payload the server cannot produce asserts
+/// against a server that does not exist.
+String? nonEmptyString(Object? raw) {
+  if (raw is! String || raw.trim().isEmpty) return null;
+  return raw;
+}
+
 /// One pending "can I have more time" request.
 ///
 /// The queue is capped at 5 server-side (`MAX_PENDING`, nestwatch `src/timereq.rs`), so
@@ -101,14 +129,29 @@ class Refusals {
   /// True on the evening this is worth showing, which is not most evenings.
   bool get any => total > 0;
 
-  static Refusals fromJson(Map<String, dynamic> json, Object? total) {
-    int at(String key) => (json[key] as num?)?.toInt() ?? 0;
-    return Refusals(
-      clockChanges: at('clock_changes'),
-      dayResets: at('day_resets'),
-      shutdownCancels: at('shutdown_cancels'),
-      total: (total as num?)?.toInt() ?? 0,
-    );
+  /// Reads **both** keys off the usage payload, not the nested object alone.
+  ///
+  /// It used to take the inner map plus the sibling total as a bare positional `Object?`,
+  /// which split one fact across two places: this class owned `clock_changes` and friends,
+  /// and the caller owned `refused_total` — so the pairing the doc above argues for was
+  /// enforced nowhere, and both call sites read as `fromJson(const {...}, 5)` with a bare
+  /// number carrying the whole meaning. It is also the only two-argument `fromJson` in
+  /// this file; every other one takes a payload and reads what it needs.
+  ///
+  /// Named for what it takes. A missing or non-map `refused` reads as [none] — a server
+  /// predating the field said nothing, which is not the same as saying zero, but renders
+  /// identically and correctly.
+  static Refusals fromUsage(Map<String, dynamic> usage) {
+    if (usage['refused'] case final Map<String, dynamic> counts) {
+      int at(String key) => (counts[key] as num?)?.toInt() ?? 0;
+      return Refusals(
+        clockChanges: at('clock_changes'),
+        dayResets: at('day_resets'),
+        shutdownCancels: at('shutdown_cancels'),
+        total: (usage['refused_total'] as num?)?.toInt() ?? 0,
+      );
+    }
+    return none;
   }
 }
 
@@ -202,25 +245,6 @@ class UsageToday {
     required this.pages,
   });
 
-  /// A string field where absent, null, the wrong type and blank all mean the same thing.
-  ///
-  /// **`null` is the ordinary case**, not an edge: the base rules are in force most of the
-  /// day, and nothing is running then. That branch is load-bearing and the golden files
-  /// pin it.
-  ///
-  /// **Blank is not reachable and is handled anyway.** Measured 2026-09-02 against the
-  /// pushed 0.6.0: `api::save_routine` trims and rejects an empty name, and
-  /// `Config::validate` rejects one again on load — two gates, so no well-behaved
-  /// nestwatch can send `""`. Kept because the cost is one clause and the failure it
-  /// prevents is putting "Routine  is running now" in front of a parent, and recorded as
-  /// unreachable so nobody later mistakes it for evidence that blank names are a real wire
-  /// shape. Nothing tests it, deliberately: a test for a payload the server cannot produce
-  /// asserts against a server that does not exist.
-  static String? _nonEmpty(Object? raw) {
-    if (raw is! String || raw.trim().isEmpty) return null;
-    return raw;
-  }
-
   static List<UsageRow> _rows(Object? raw) => (raw as List? ?? [])
       .whereType<Map<String, dynamic>>()
       .map(UsageRow.fromJson)
@@ -237,16 +261,11 @@ class UsageToday {
     extraMinutes: (json['extra_mins'] as num?)?.toInt() ?? 0,
     enforcerAgeSeconds: (json['enforcer_age_secs'] as num?)?.toInt(),
     focusMissing: json['focus_missing'] as bool? ?? false,
-    activeRoutine: _nonEmpty(json['active_routine']),
+    activeRoutine: nonEmptyString(json['active_routine']),
     // Both halves come off the wire together: the parts for the sentences, the total for
-    // the decision about whether there is anything to say at all.
-    refused: switch (json['refused']) {
-      final Map<String, dynamic> counts => Refusals.fromJson(
-        counts,
-        json['refused_total'],
-      ),
-      _ => Refusals.none,
-    },
+    // the decision about whether there is anything to say at all. Which is why the reader
+    // takes the whole payload rather than being handed one half by this line.
+    refused: Refusals.fromUsage(json),
     perApp: _rows(json['per_app']),
     groups: _rows(json['groups']),
     focused: _rows(json['focused']),

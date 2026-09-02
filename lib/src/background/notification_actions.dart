@@ -66,12 +66,23 @@ enum ActionOutcome {
 class ActionResult {
   final ActionOutcome outcome;
 
-  /// `curfew_note` from the approve, when there was one. Always null for every outcome
-  /// but [ActionOutcome.granted] — nothing else got as far as a grant to have advice
-  /// about.
+  /// `curfew_note` from the approve, when there was one.
+  ///
+  /// Null for every outcome but [ActionOutcome.granted] — nothing else got as far as a
+  /// grant to have advice about — and that is now a fact about the constructors rather
+  /// than a promise in a comment. It was the latter, and [answerReport] reads this field
+  /// *before* the outcome on the strength of it: a `failed` result carrying a note would
+  /// have been announced as "Approved — bedtime still applies", reporting a failure as a
+  /// grant. Unreachable in practice and one call site away from being reachable, which is
+  /// this file's whole subject.
   final String? curfewNote;
 
-  const ActionResult(this.outcome, {this.curfewNote});
+  /// The grant, and anything that PC said about it.
+  const ActionResult.granted({this.curfewNote})
+    : outcome = ActionOutcome.granted;
+
+  /// Every other outcome. Cannot carry a note, because nothing else granted anything.
+  const ActionResult.plain(this.outcome) : curfewNote = null;
 }
 
 /// Carry out a tapped action. Pure of plugin calls so it can be driven in a test.
@@ -82,14 +93,16 @@ Future<ActionResult> performAction({
   SeenRequestStore seen = const SecureSeenRequestStore(),
 }) async {
   if (requestId == null || requestId.isEmpty) {
-    return const ActionResult(ActionOutcome.failed);
+    return const ActionResult.plain(ActionOutcome.failed);
   }
   if (actionId != approveActionId && actionId != denyActionId) {
-    return const ActionResult(ActionOutcome.failed);
+    return const ActionResult.plain(ActionOutcome.failed);
   }
 
   final session = await open();
-  if (session == null) return const ActionResult(ActionOutcome.notPaired);
+  if (session == null) {
+    return const ActionResult.plain(ActionOutcome.notPaired);
+  }
 
   try {
     // Both return **false** rather than throwing when the request was already resolved:
@@ -105,11 +118,11 @@ Future<ActionResult> performAction({
         ? await session.client.approveTimeRequest(requestId)
         : await session.client.denyTimeRequest(requestId);
     if (!decision.acted) {
-      return const ActionResult(ActionOutcome.alreadyResolved);
+      return const ActionResult.plain(ActionOutcome.alreadyResolved);
     }
     return actionId == approveActionId
-        ? ActionResult(ActionOutcome.granted, curfewNote: decision.curfewNote)
-        : const ActionResult(ActionOutcome.denied);
+        ? ActionResult.granted(curfewNote: decision.curfewNote)
+        : const ActionResult.plain(ActionOutcome.denied);
   } on NestwatchException {
     // Unreachable, lapsed, refused — anything that means the change was not made.
     //
@@ -121,7 +134,7 @@ Future<ActionResult> performAction({
     // waiting — which is a worse silence than the one this whole feature was built to
     // remove.
     await forgetSeen(requestId, seen);
-    return const ActionResult(ActionOutcome.failed);
+    return const ActionResult.plain(ActionOutcome.failed);
   } finally {
     session.client.close();
   }
@@ -186,8 +199,9 @@ Future<void> _handleAndReport({
 /// own enforcer uses, and a phone that rewrote it into its own words would be re-deriving
 /// the one thing it is not in a position to know.
 ({String title, String message})? answerReport(ActionResult result) {
-  // Checked before the outcome, and safe to: `curfewNote` is only ever set alongside
-  // `granted`, which `actionFailureMessage` maps to silence.
+  // Checked before the outcome, and the constructors are what make that safe: only
+  // `ActionResult.granted` can carry a note, and `actionFailureMessage` maps `granted` to
+  // silence. This ordering used to rest on every call site remembering the rule.
   final note = result.curfewNote;
   if (note != null) {
     return (title: 'Approved — bedtime still applies', message: note);

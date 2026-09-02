@@ -183,10 +183,12 @@ mutate "refusals: a quiet day is reported as a refusal" \
 # The client re-adds the three counts rather than taking the total that PC sent. Identical
 # today, and wrong the day a fourth kind of refusal is counted and only the total moves —
 # which is exactly why nestwatch sends the sum beside the parts.
+# Re-anchored after `Refusals.fromUsage` began reading both keys itself rather than being
+# handed the sibling total as an untyped positional. The line moved; the decision did not.
 mutate "refusals: the total is re-derived instead of taken as sent" \
   lib/src/api/models.dart \
-  "      total: (total as num?)?.toInt() ?? 0," \
-  "      total: at('clock_changes') + at('day_resets') + at('shutdown_cancels'),"
+  "        total: (usage['refused_total'] as num?)?.toInt() ?? 0," \
+  "        total: at('clock_changes') + at('day_resets') + at('shutdown_cancels'),"
 
 # A zero count grows a sentence saying zero, which is the thing the section's own rule
 # forbids: it appears only when something happened, so a line reading "0 clock changes

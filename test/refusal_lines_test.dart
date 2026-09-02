@@ -102,17 +102,12 @@ void main() {
       );
     });
 
-    test('plural above one', () {
-      expect(
-        refusalLines(_of(clock: 2)).single,
-        startsWith('2 clock changes ignored'),
-      );
-      expect(
-        refusalLines(_of(shutdowns: 9)).single,
-        startsWith('9 shutdowns cancelled on the PC'),
-      );
-    });
-
+    // No separate "plural above one" case. It asserted `_of(clock: 2)` starts with
+    // "2 clock changes ignored" -- the same input the test below pins in full, and
+    // `_plural` branches only on `n == 1`, so 9 exercises nothing 2 does not. It made a
+    // wording change three edits instead of two and produced a second failure carrying no
+    // information the first did not. The `_plural => many` mutation is still killed by
+    // `singular at one`.
     test('the wording matches the dashboard, so one event has one name', () {
       // Copied from `refusedRows()` in nestwatch `assets/app.js`. Two surfaces inventing
       // separate vocabularies for the same three facts is how a parent ends up wondering
@@ -154,11 +149,10 @@ void main() {
       // the sum moves and the three named parts do not. A client that re-added them would
       // report that day as quiet. nestwatch's own note is that the total rides along "so
       // the client does not add a fourth place that knows how to sum these".
-      final refused = Refusals.fromJson(const {
-        'clock_changes': 1,
-        'day_resets': 0,
-        'shutdown_cancels': 0,
-      }, 5);
+      final refused = Refusals.fromUsage(const {
+        'refused': {'clock_changes': 1, 'day_resets': 0, 'shutdown_cancels': 0},
+        'refused_total': 5,
+      });
 
       expect(refused.total, 5, reason: 'as sent, not 1');
       expect(refused.any, isTrue);
@@ -182,16 +176,21 @@ void main() {
     });
 
     test('a missing total reads as nothing to show, not as the sum', () {
-      // A server predating the field sends neither, and `Refusals.none` is the right
-      // answer. Reading the parts instead would put a section in front of a parent that
-      // the server never said anything about.
-      final refused = Refusals.fromJson(const {
-        'clock_changes': 3,
-        'day_resets': 2,
-        'shutdown_cancels': 1,
-      }, null);
+      // Reading the parts instead would put a section in front of a parent that the
+      // server never said anything about.
+      final refused = Refusals.fromUsage(const {
+        'refused': {'clock_changes': 3, 'day_resets': 2, 'shutdown_cancels': 1},
+      });
       expect(refused.total, 0);
       expect(refused.any, isFalse);
+    });
+
+    test('a payload with no `refused` at all is `none`, not zeros it invented', () {
+      // A server predating the field sends neither key. Now that the reader takes the
+      // whole payload, that case is its own branch rather than a `switch` at the call
+      // site -- so this is where it is pinned.
+      expect(Refusals.fromUsage(const {'used_mins': 10}).any, isFalse);
+      expect(Refusals.fromUsage(const {'used_mins': 10}).total, 0);
     });
   });
 }

@@ -112,7 +112,10 @@ class _UsageScreenState extends State<UsageScreen>
         const SizedBox(height: 8),
         for (final line in refusalLines(refused))
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
+            // The same rhythm `_section` gives its rows. It was 4 here for no reason
+            // anybody could have stated, which on one screen with two sections is a
+            // difference a reader has to decide is deliberate.
+            padding: const EdgeInsets.symmetric(vertical: 6),
             child: Text(line, style: theme.textTheme.bodyMedium),
           ),
       ],

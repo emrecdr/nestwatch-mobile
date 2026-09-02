@@ -311,6 +311,36 @@ void main() {
       // And the reverse: a name that no longer exists is a reason nobody has revisited.
       final stale = rendered.union(notRendered.keys.toSet()).difference(files);
       expect(stale, isEmpty, reason: 'listed but no longer present: $stale');
+
+      // The *reasons* escaped the discipline this group is built on.
+      //
+      // `rendered` is derived from the cases that run, precisely so a hand-typed list
+      // cannot drift -- and then four entries below claim "covered by <file>_test.dart"
+      // in prose nothing checks. Delete `refusal_lines_test.dart` and `refusal_lines.dart`
+      // becomes wholly unchecked -- no widget test, no unit test -- while this suite goes
+      // on asserting every file is accounted for. That is the fail-open this group exists
+      // to close, reproduced inside it.
+      //
+      // Only the checkable half is checked. The platform-channel reasons stay prose
+      // because nothing can verify "needs the camera"; that asymmetry is the point.
+      final claims = RegExp(r'covered by (\S+_test\.dart)');
+      final claimed = <String>{
+        for (final reason in notRendered.values)
+          if (claims.firstMatch(reason) case final m?) m.group(1)!,
+      };
+      expect(
+        claimed,
+        isNotEmpty,
+        reason:
+            'the reason-scanning regex matched nothing -- it has stopped reading',
+      );
+      for (final file in claimed) {
+        expect(
+          File('test/$file').existsSync(),
+          isTrue,
+          reason: 'a reason names test/$file, which does not exist',
+        );
+      }
     });
   });
 }
