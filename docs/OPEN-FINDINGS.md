@@ -125,22 +125,57 @@ and this app now depends on that field: `curfew_note` is still produced at both 
 in the pushed `src/api.rs` — the approve handler and `extra-time`. The `Decision` reader is
 safe, and it is now pinned on their side as well as tested on this one.
 
-### M23 · Nothing survives leaving the house
+### M23 · Nothing survives leaving the house, and the obvious fix is a privacy change
 
 Screen data lives in `PolledScreenState.data` and nowhere else. Measured 2026-09-02:
-nothing under `lib/src/ui/` or `lib/src/api/` writes a payload to disk — the pin, the
-session cookie and the announced-request ids are the only persisted things. So on a cold
-start away from home all four tabs render `waitingPane()`.
+nothing under `lib/` writes to the filesystem at all — the pin, the session cookie and the
+announced-request ids are the only persisted things, and all three are in the Keystore. So
+on a cold start away from home, all four tabs render `waitingPane()`.
 
 `UX-REVIEW.md` §2 established that leaving the house "is not an error, it is the single
-most common thing that will ever happen to it". The reachability work that came out of it
-produces the right sentence, and the sentence is all there is.
+most common thing that will ever happen to it".
 
-**The cheap version is one payload, not four.** Persist the last `UsageToday` with the time
-it arrived and render it behind an explicit "as of 18:42" header when the fetch fails.
-Usage is a monotonic record of a day that already happened, so it ages honestly. Pending
-requests are the opposite and must **not** be cached: a stale queue invites a parent to
-approve something already resolved, and the 400 that comes back is the good case.
+**This entry's own first version proposed the fix and was wrong, and that is the finding.**
+It read: *"the cheap version is one payload, not four — persist the last `UsageToday` with
+the time it arrived and render it behind an explicit 'as of 18:42' header."* Cheap in
+engineering terms. The policy cost was never checked, and it is disqualifying.
+
+**What is actually in that payload**, from the vendored golden — real server output:
+
+```json
+"focused": [{"name": "minecraft", "minutes": 40}, {"name": "chrome", "minutes": 15}],
+"pages":   [{"name": "Poki - Free Online Games", "minutes": 13}]
+```
+
+That is a child's application and browsing history. `PrivacyScreen` names it, verbatim, as
+the child's personal data — *"the list of what they used"* — and then says **"This app
+shows you that data and keeps none of it."** Two sentences earlier it says **"This app
+writes no files at all."** Both are true of this build; re-verified 2026-09-02, `grep` for
+any filesystem write in `lib/` still returns nothing.
+
+So the filed fix would have made three statements in the policy false, written a child's
+app-and-browsing history onto a second device, and put it outside the Keystore where the
+other three items live. **The right precedent is already in this repo**, at
+`PairingController.unpair`: that cleared two of the three things the screen promised to
+delete, and its comment states the standard — *"An inaccuracy anywhere else is a bug; in a
+privacy policy it is a false statement about data handling, in the document Play requires
+to be truthful."*
+
+**And the gap is smaller than the entry claimed.** Away from home a parent does not get a
+blank screen: `waitingPane()` renders the sentence `explainUnreachable` produced — which
+tells them they are away, that nothing is wrong with that PC, and offers *Try again*. The
+missing thing is the *numbers*, not an explanation.
+
+**So this is blocked on a decision, not on engineering**, and the decision is not this
+repo's to make. Any cached figure — even aggregates like `used_mins`, which the server
+itself treats as the child's own entitled-to-know data on `/status` — needs four things
+moved together: the in-app text, the policy at the public URL, the Play Data Safety form
+(`M7`), and `unpair()` growing a fourth clear. Doing three of the four is the exact failure
+`unpair` already recorded.
+
+Worth knowing before deciding: pending requests must **not** be cached under any variant. A
+stale queue invites a parent to approve something already resolved, and the 400 that comes
+back is the good case.
 
 ### M22 · A moved PC needs an eyeball, for a certificate the app already holds
 
