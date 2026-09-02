@@ -27,6 +27,27 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   `BGTaskScheduler` identifiers.
 - `FLAG_SECURE` on Android, keeping the child's screen out of the recents thumbnail.
 - First rendering tests for the UI layer (`test/screen_render_test.dart`).
+- **The usage screen says which routine is running.** nestwatch 0.6.0 sends
+  `active_routine` — the name of the scheduled routine whose settings are in force, or null
+  when the base rules are. Without it the budget can change at 16:00 with nothing on screen
+  accounting for it, which is a defect this app had and could not have found by itself: the
+  number was correct and unexplained. Their reason for sending it is quoted where it is
+  read, because it applies more to a phone than to the dashboard — the phone is where a
+  parent looks when something seems wrong.
+- **"Refused today", on the evenings there is anything to say.** That PC declines several
+  things a day and gets them right — a clock moved to shift the day boundary, a second
+  midnight rollover, a shutdown cancelled with `shutdown /a` — and every one of those went
+  to a log inside an ACL-hardened folder needing an Administrator console on the child's
+  PC. The record existed exactly where a parent checking from their phone could not reach
+  it. It is counts, never a list: all three are things a child can repeat on a timer, and a
+  row per occurrence would hand the person being limited a way to rotate the history out.
+  <br>Hidden entirely when the total is zero, which is nearly every evening — a section
+  reading "0, 0, 0" is one that stops being read, and this has to still be noticeable on
+  the evening it is not zero. The wording is copied from the dashboard rather than invented,
+  so one event has one name across both surfaces, and `refusal_lines_test.dart` holds the
+  constraint that makes the card safe to show the child as well: it states what the tool
+  did, never what anyone meant by it. A family that genuinely crossed a time zone produces
+  the same counts as a clock moved on purpose, and nothing here pretends to tell them apart.
 
 ### Fixed
 
@@ -39,6 +60,20 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   route correctly. The callback is now `onSessionLost` and fires only for a lapsed
   session; a missing endpoint stops the stream and leaves the 60-second poll — which
   exists for exactly this — carrying the screens.
+- **A screen reader was told the child's desktop was current when it could be hours old.**
+  The screenshot's accessible label was built from a *relative* time — "just now" — computed
+  once when the widget last rebuilt. That screen is the only one whose poller can be stopped
+  while its content stays up, and `_frameAt` is set immediately before the rebuild, so the
+  label always evaluated to "just now" and then nothing recomputed it. The visible line
+  said "Frame from 14:32:07" and stayed true; the spoken one did not. Both now come from
+  one function and carry the same absolute time, which makes no claim about *now* and so
+  has nothing to go stale. It also puts the app back on the usual convention instead of
+  inverting it — published guidance is relative for the visible label and absolute for
+  assistive technology, and this screen had those the wrong way round.
+  <br>Found while checking whether nestwatch 0.6.0's own screen-reader fix applied here. It
+  does not: theirs was a live region announcing a counter 61 times a minute, and `liveRegion`
+  appears nowhere in this app. The phone had the opposite defect — announced too rarely to
+  ever be corrected — reached from the other direction.
 - **A grant that bedtime was going to swallow was reported as a plain success.** Screen
   time and bedtime are independent limits on that PC, so approving a time request during a
   curfew window adds minutes the child cannot use. nestwatch says so in `curfew_note` on
@@ -68,6 +103,15 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   whole tree rather than the mutated file, so an edit made mid-run is silently reverted from
   a snapshot taken before it — including in files the script never mutates. Found by losing
   one.
+- **The mutation audit caught a comment arguing for something no test defended — mine.**
+  `Refusals.total` is taken as nestwatch sends it rather than re-added from the three parts,
+  and a doc comment said so at length. Replacing it with a local sum **survived**: the test
+  making that argument built a `Refusals` by hand, so it exercised the rendering and never
+  once went through `fromJson`, which is where the decision lives. The parts and the total
+  agree in today's payload, so nothing else noticed. The replacement test parses JSON whose
+  total exceeds the parts — not a hypothetical server but the next one, since the whole
+  reason the field is sent is the day a fourth kind of refusal is counted and only the sum
+  moves.
 - The first wire coverage of a **mutating** response. All nine golden files are `GET`
   payloads on both sides of the contract, which is how a field on the approve reply went
   unread with every gate green; the approve and deny bodies are now stubbed from shapes
@@ -80,8 +124,11 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   marker header once the sink's own certificate was pinned.
 - ATS does not govern `dart:io`, settled inside a running iOS app rather than from
   documentation.
-- Alignment with nestwatch 0.5.1: nine golden files byte-identical, 11 contract checks, and
-  all eight live harnesses green.
+- Alignment with nestwatch **0.6.0**: nine golden files byte-identical, 11 contract checks,
+  and all eight live harnesses green as of 0.5.1. `testedAgainst` moved to `0.6.0` **with**
+  the files, which is the rule that constant exists under — the goldens were taken from
+  `git archive origin/main`, not from the sibling working tree, which was three commits
+  past what CI can see and moved twice more while this was written.
 - **`curfew_note` observed on the wire, with a control.** A dev nestwatch 0.5.1 was
   installed on a throwaway port on 2026-09-02, a request submitted through `POST
   /time-request` and approved twice. With bedtime off the reply was

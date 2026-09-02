@@ -307,6 +307,24 @@ and both carry a comment in `rules.rs` saying so — "rendering silence as zero 
 this codebase has already fixed twice". Both are surfaced *above* the numbers they qualify,
 and a missing heartbeat reads as the warning, never as health.
 
+**An unexplained budget is the same failure in a quieter register.** nestwatch 0.6.0 sends
+`active_routine` — the name of the scheduled routine whose settings are in force, or null
+when the base rules are — because without it the budget can change at 16:00 with nothing
+accounting for it, and "an unexplained number reads as a bug in exactly the way an
+unexplained number always does here". It is rendered under the headline. Not a caveat: the
+figures are right, they are just not the usual ones.
+
+**"Refused today" appears only when there is something to say.** That PC declines a handful
+of things — a clock moved to shift the day boundary, a second midnight rollover, a shutdown
+cancelled with `shutdown /a` — and until 0.6.0 the record lived in a log inside an
+ACL-hardened folder needing an Administrator console on the child's own PC. Counts, never a
+list, because all three are repeatable on a timer and a row per occurrence would let the
+person being limited rotate the history out. Hidden at zero, which is nearly every evening.
+The sentences are copied from the dashboard's `refusedRows()` so one event has one name
+across both surfaces, and `refusal_lines_test.dart` holds the constraint that keeps the
+section safe to show the child as well as the parent: it says what the tool did, never what
+anyone meant by it.
+
 `Image.network` is deliberately unused for the screenshot despite PLAN §2 proving it is
 pinned: `ImageCache` keys on the URL, this URL never changes, and a 5-second refresh would
 redisplay one cached frame forever. Fetching bytes through the pinned client and rendering

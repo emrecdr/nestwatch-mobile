@@ -257,6 +257,8 @@ void main() {
       'background_promise.dart':
           'needs WorkManager registration, which is a platform channel',
       'screen_load.dart': 'pure logic, covered by screen_load_test.dart',
+      'frame_label.dart': 'pure logic, covered by frame_label_test.dart',
+      'refusal_lines.dart': 'pure logic, covered by refusal_lines_test.dart',
       'relative_time.dart': 'pure logic, covered by relative_time_test.dart',
       'poller.dart':
           'pure logic, covered by poller_test.dart and two mutations',

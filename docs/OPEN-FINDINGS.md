@@ -101,20 +101,29 @@ fifth reader `M6` is open in order to delete. Preset choices well inside any pla
 need no copy and are the way in; that is a design decision worth making deliberately rather
 than alongside a bug fix.
 
-**Three things to raise with nestwatch, none of them filed there.** That repository has no
-`FINDINGS-INBOX.md`, and its working tree was dirty with another session's changes on
-2026-09-02 — writing into `docs/OPEN-FINDINGS.md` under those conditions is the exact
-deadlock this repo's inbox protocol was invented to end. Recorded here instead:
+**Two things to raise with nestwatch, neither filed there.** That repository has no
+`FINDINGS-INBOX.md`, and its working tree has been dirty with another session's changes
+every time this was checked — writing into `docs/OPEN-FINDINGS.md` under those conditions
+is the exact deadlock this repo's inbox protocol was invented to end. Recorded here
+instead:
 
 1. `curfew_note` mixes a fact with a **dashboard-specific instruction**. The fact travels
    to any client; the instruction does not. Splitting them, or dropping the second
-   sentence, would make the field portable.
+   sentence, would make the field portable — and there are now three clients, not two.
 2. `MAX_REQUEST_MINUTES` belongs in `limits.json` for the same reason `max_code_minutes`
-   already is.
-3. **`tests/golden/` covers no mutating response.** All nine files are `GET` payloads, so
-   `curfew_note`, `budget_note` and the `extra-time` reply are outside the contract gate on
-   both sides — which is why this app could discard a field for weeks with every check
-   green. An `approve.json` would have caught it.
+   already is. Still absent from the pushed file, re-checked at 0.6.0.
+
+A third item stood here — that `tests/golden/` covered no mutating response — and it is
+gone because it is done, not because it was dropped. `cdf6630` asserts the exact key set of
+both `/api/extra-time` bodies, and their reason for a Rust test over a golden file is worth
+carrying: a field-by-field check passes when a field is *added*, and adding one is the
+change most likely to be made without thinking about who else reads it. The trigger was a
+third consumer — Voortgang, in the `studygo` repository — rather than this app. Same hole.
+
+**Re-measured against 0.6.0 on 2026-09-02**, because a minor bump can move the wire format
+and this app now depends on that field: `curfew_note` is still produced at both call sites
+in the pushed `src/api.rs` — the approve handler and `extra-time`. The `Decision` reader is
+safe, and it is now pinned on their side as well as tested on this one.
 
 ### M23 · Nothing survives leaving the house
 
@@ -266,14 +275,26 @@ further change nobody outside that machine can see. Everything passed locally. C
 the pushed branch, found two files drifted, and failed the `contract` job. Re-vendored from
 a fresh clone; the pushed shape is what is committed.
 
-**Still unpushed as of 2026-09-02, and re-measured rather than assumed.** That checkout is
-now five commits ahead of `origin/main`, still at `52c23e4`, and `git show
-origin/main:tests/golden/usage-today.json` carries no `refused` — while a dev instance built
-from the local tree serves `"refused":{"clock_changes":0,"day_resets":0,
-"shutdown_cancels":0}` and `"refused_total":0`. So the fields are real, observed on a live
-wire, and **must not be vendored yet**: doing so would fail the `contract` job for the third
-time on the same subject. The way this repo learns the day has arrived is the guard below
-falling silent, not a memory of having seen the field work.
+**`refused` has since landed, and so has a third field nobody was waiting for.** nestwatch
+released **0.6.0** on 2026-09-02 and `origin/main` now carries `refused`, `refused_total`
+and `active_routine` in both `usage-today` goldens. All three are vendored, parsed and
+pinned, and `testedAgainst` moved to `0.6.0` **with** the files rather than alone, which is
+the rule this constant exists under.
+
+**Vendored from the pushed tree, and the guard is why.** Pointed at `../nestwatch` the
+checker again reported comparing against local work — that checkout was three commits past
+`origin/main` at the time and moved twice more while this was being written, because another
+session is committing into it. The goldens were taken from `git archive origin/main`
+instead, which is what CI clones and which writes nothing into their repo. Third time on
+this subject; first time it cost nothing, because the guard said so before the copy rather
+than after the push.
+
+**`active_routine` was the surprise, and it fixes a defect this app had without knowing.**
+It names which scheduled routine put today's numbers in force, or is null when the base
+rules did. nestwatch's reason for sending it — that without it "the card is a budget that
+changes at 16:00 for no stated reason, which reads as a bug in exactly the way an
+unexplained number always does here" — applied word for word to the usage screen, which
+showed a budget it could not account for. It is rendered under the headline now.
 
 **So it is a guard now rather than a caution.** `tool/check_golden.sh` prints the commit it
 compared against — it always did — and now also says when that commit is not in the
@@ -548,7 +569,21 @@ screen actually *sounds*, and every claim in the first version of this entry tha
 written from the code rather than from the widget turned out to be wrong. This wants
 TalkBack and VoiceOver on real hardware, not another read of the source.
 
-**One item is now specific enough to implement in a single sitting, and was still left.**
+**Two things measured on 2026-09-02, so the next reader starts from facts rather than a
+count.** `liveRegion` appears **nowhere** in `lib/` — which matters because nestwatch 0.6.0
+fixed a screen-reader defect of exactly that kind (a region announcing a counter 61 times a
+minute) and the fix does not transfer: this app cannot have that bug, and importing their
+remedy would be adding a live region where none exists. And the full spoken surface is
+nine strings: two `Semantics` labels on Approve and Deny, six tooltips, and one
+`semanticLabel` on the screenshot. Everything but the last is static or bound to a value
+that cannot change while it is on screen.
+
+The screenshot label *was* the exception and is fixed — it carried a relative time on the
+one screen that stops rebuilding, so it said "just now" about a frame of any age. That is
+in `git log`, not here, because it is done.
+
+**Two items are now specific enough to implement in a single sitting, and both were
+still left.**
 The curfew notice added on 2026-09-02 (`M24`) is the canonical live-region case: it appears
 in response to an action, it carries the one message in this app whose whole purpose is to
 stop a parent believing something untrue, and a parent who has just moved focus will not be
@@ -558,6 +593,19 @@ shared `Notice`, because six of the seven uses are state-derived and would re-an
 every rebuild of the caveat strip — so it needs its own opt-in flag; and this entry's own
 history is a run of accessibility claims written from the code that turned out to be wrong
 at the widget. Shipping an announcement nobody has heard would be one more.
+
+The second is **"Refused today"**, and it comes with a precedent rather than a guess: the
+dashboard marks that same list `aria-live="polite"` with `aria-atomic="true"`. The phone's
+usage screen repolls every 60 s, so the question a device would answer is whether an
+unchanged list stays quiet between polls. Flutter announces on a semantics *change*, which
+should mean it does — and "should mean" is exactly the kind of claim this entry exists to
+stop being written from the code rather than heard.
+
+**One thing that cannot happen here, recorded so nobody imports the fix.** nestwatch 0.6.0
+fixed a screen reader being read a counter 61 times a minute, caused by a live region on a
+line that changed every second. This app has no live regions at all, so it cannot have that
+defect. It had the mirror image — a label that never changed and so was never corrected —
+and that one is fixed. Checking whether their fix applied here is how it was found.
 
 ### M13 · The bottom inset is handled; the rest was not the problem
 

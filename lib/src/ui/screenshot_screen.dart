@@ -25,8 +25,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../api/nestwatch_api.dart';
+import 'frame_label.dart';
 import 'poller.dart';
-import 'relative_time.dart';
 import 'screen_load.dart';
 
 class ScreenshotScreen extends StatefulWidget {
@@ -180,10 +180,11 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
                 maxScale: 5,
                 child: Center(
                   child: Image.memory(
-                    semanticLabel: _frameAt == null
-                        ? 'A picture of the screen on that PC.'
-                        : 'A picture of the screen on that PC, '
-                              '${ago(_frameAt!)}.',
+                    // The same fact the visible line below states, from the same
+                    // function. This used to be `ago()` -- a relative time baked in at
+                    // build, on the one screen that stops rebuilding while its content
+                    // stays up, so it said "just now" about a frame of any age.
+                    semanticLabel: frameLabel(_frameAt),
                     bytes,
                     fit: BoxFit.contain,
                     // Without this every new frame fades in from blank, which at 5s
@@ -238,7 +239,7 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
                     : _frameAt == null
                     ? 'Preview resolution, so text may not be legible. Each single '
                           'frame is recorded on that PC.'
-                    : 'Frame from ${_clock(_frameAt!)}.',
+                    : 'Frame from ${frameClock(_frameAt!)}.',
                 style: theme.textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
@@ -248,9 +249,4 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
       ],
     );
   }
-
-  static String _clock(DateTime at) =>
-      '${at.hour.toString().padLeft(2, '0')}:'
-      '${at.minute.toString().padLeft(2, '0')}:'
-      '${at.second.toString().padLeft(2, '0')}';
 }

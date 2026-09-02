@@ -22,6 +22,7 @@ import '../api/models.dart';
 import '../api/nestwatch_api.dart';
 import 'notice.dart';
 import 'polled_screen.dart';
+import 'refusal_lines.dart';
 
 class UsageScreen extends PolledScreen {
   final NestwatchClient client;
@@ -76,8 +77,45 @@ class _UsageScreenState extends State<UsageScreen>
           if (usage.focusMissing) _focusMissingNotice(),
           _section(context, 'Most used', usage.focused),
           _section(context, 'Pages', usage.pages),
+          // Last, and absent on nearly every day. It is not a caveat about the numbers
+          // above — the limits held — so it does not belong at the top with the two that
+          // are.
+          if (usage.refused.any) _refusedSection(context, usage.refused),
         ],
       ),
+    );
+  }
+
+  /// What that PC declined today, on the evenings there is anything.
+  ///
+  /// Hidden entirely when the total is zero, which is nearly every evening. nestwatch's
+  /// own reasoning for that, and it applies to a phone at least as much: "a card that
+  /// reads '0, 0, 0' every evening is a card that stops being read, and this one has to
+  /// still be noticeable on the evening it is not zero."
+  ///
+  /// The decision to show is made from `refused_total` as that PC summed it, never from
+  /// re-adding the three counts here — see [Refusals.total].
+  Widget _refusedSection(BuildContext context, Refusals refused) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        Text(refusalsTitle, style: theme.textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          refusalsIntro,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 8),
+        for (final line in refusalLines(refused))
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Text(line, style: theme.textTheme.bodyMedium),
+          ),
+      ],
     );
   }
 
@@ -103,6 +141,21 @@ class _UsageScreenState extends State<UsageScreen>
                         '${usage.budgetMinutes} min',
               style: theme.textTheme.bodyLarge,
             ),
+            // Why the budget is what it is, when it is not the usual one.
+            //
+            // A routine can change the numbers above at 16:00 with nothing on screen
+            // saying so, and nestwatch's own note is that an unexplained number "reads as
+            // a bug in exactly the way an unexplained number always does here". The phone
+            // is where a parent looks when something seems wrong, so it is the surface
+            // that can least afford to show a figure it cannot account for.
+            if (usage.activeRoutine case final routine?) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Routine $routine is running now — these are its settings, not '
+                'your usual ones.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
             if (usage.day != null) ...[
               const SizedBox(height: 4),
               Text(usage.day!, style: theme.textTheme.bodySmall),

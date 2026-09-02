@@ -148,6 +148,19 @@ void main() {
       // without anyone finding out.
       expect(usage.certDaysLeft, 700);
       expect(usage.certExpiring, isFalse);
+
+      // Arrived with nestwatch 0.6.0. `refused_total` is taken as sent rather than summed
+      // here, so this asserts the *server's* arithmetic reached the model -- a client that
+      // re-added the three parts would also produce 6 and would pass a weaker check.
+      expect(usage.refused.clockChanges, 2);
+      expect(usage.refused.dayResets, 1);
+      expect(usage.refused.shutdownCancels, 3);
+      expect(usage.refused.total, 6);
+      expect(usage.refused.any, isTrue);
+
+      // null here, and it is the ordinary case: the base rules are in force, so there is
+      // no routine to name. A blank name would be worse than none -- see `_nonEmpty`.
+      expect(usage.activeRoutine, isNull);
     });
 
     test('the four nulls that prose keeps losing', () {
@@ -178,6 +191,13 @@ void main() {
       expect(usage.focusMissing, isTrue);
       expect(usage.focused, isEmpty);
       expect(usage.perApp, isEmpty);
+
+      // The zeros are *sent*, not absent -- nestwatch always reports `refused`, so that a
+      // test can see the field is being produced at all. Reading them as a quiet day is
+      // this side's job, and `any` is where that happens.
+      expect(usage.refused.total, 0);
+      expect(usage.refused.any, isFalse);
+      expect(usage.activeRoutine, isNull);
     });
   });
 }

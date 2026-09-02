@@ -60,6 +60,58 @@ class UsageRow {
   );
 }
 
+/// What that PC declined to do today, as counts.
+///
+/// Three things nestwatch detects and refuses several times on a bad day: a clock moved to
+/// shift the day boundary, a second midnight rollover that would have wiped the tally, and
+/// a shutdown cancelled with `shutdown /a`. Each went to a log inside an ACL-hardened
+/// folder that needs an Administrator console on the child's PC — so the record existed
+/// exactly where the parent could not reach it.
+///
+/// **Counts, never a list, and the reason is not brevity.** All three are things the child
+/// can repeat on a timer, and a row per occurrence would hand the person being limited a
+/// way to rotate the history out. A count cannot grow the file.
+class Refusals {
+  final int clockChanges;
+  final int dayResets;
+  final int shutdownCancels;
+
+  /// `refused_total`, as that PC summed it — **not** re-added here.
+  ///
+  /// nestwatch sends the total beside the parts precisely so no client decides what counts
+  /// as a refusal; its own comment says the dashboard adds no second opinion. Summing the
+  /// three locally would work today and would be a fourth place to change on the day a
+  /// fourth kind of refusal is counted.
+  final int total;
+
+  const Refusals({
+    required this.clockChanges,
+    required this.dayResets,
+    required this.shutdownCancels,
+    required this.total,
+  });
+
+  static const none = Refusals(
+    clockChanges: 0,
+    dayResets: 0,
+    shutdownCancels: 0,
+    total: 0,
+  );
+
+  /// True on the evening this is worth showing, which is not most evenings.
+  bool get any => total > 0;
+
+  static Refusals fromJson(Map<String, dynamic> json, Object? total) {
+    int at(String key) => (json[key] as num?)?.toInt() ?? 0;
+    return Refusals(
+      clockChanges: at('clock_changes'),
+      dayResets: at('day_resets'),
+      shutdownCancels: at('shutdown_cancels'),
+      total: (total as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 /// `GET /api/usage/today` (nestwatch `rules::today_summary`).
 class UsageToday {
   final String? day;
@@ -110,6 +162,22 @@ class UsageToday {
   /// recorded there rather than settled by whichever landed first.
   final bool certExpiring;
 
+  /// Which scheduled routine put these numbers in force, or null when the base rules did.
+  ///
+  /// nestwatch 0.6.0. Its own reason for sending it is the reason to render it: without
+  /// it "the card is a budget that changes at 16:00 for no stated reason, which reads as a
+  /// bug in exactly the way an unexplained number always does here". That is as true of a
+  /// phone screen as of the dashboard — more so, because the phone is where a parent looks
+  /// when something seems wrong.
+  ///
+  /// The *name*, not a flag, because "a routine is active" does not say which one to a
+  /// parent who has both Homework and Weekend scheduled.
+  final String? activeRoutine;
+
+  /// What that PC refused today. [Refusals.none] on a server predating the field, which
+  /// reads the same as a quiet day — correctly, since neither is anything to show.
+  final Refusals refused;
+
   final List<UsageRow> perApp;
   final List<UsageRow> groups;
   final List<UsageRow> focused;
@@ -126,11 +194,32 @@ class UsageToday {
     required this.focusMissing,
     required this.certDaysLeft,
     required this.certExpiring,
+    required this.activeRoutine,
+    required this.refused,
     required this.perApp,
     required this.groups,
     required this.focused,
     required this.pages,
   });
+
+  /// A string field where absent, null, the wrong type and blank all mean the same thing.
+  ///
+  /// **`null` is the ordinary case**, not an edge: the base rules are in force most of the
+  /// day, and nothing is running then. That branch is load-bearing and the golden files
+  /// pin it.
+  ///
+  /// **Blank is not reachable and is handled anyway.** Measured 2026-09-02 against the
+  /// pushed 0.6.0: `api::save_routine` trims and rejects an empty name, and
+  /// `Config::validate` rejects one again on load — two gates, so no well-behaved
+  /// nestwatch can send `""`. Kept because the cost is one clause and the failure it
+  /// prevents is putting "Routine  is running now" in front of a parent, and recorded as
+  /// unreachable so nobody later mistakes it for evidence that blank names are a real wire
+  /// shape. Nothing tests it, deliberately: a test for a payload the server cannot produce
+  /// asserts against a server that does not exist.
+  static String? _nonEmpty(Object? raw) {
+    if (raw is! String || raw.trim().isEmpty) return null;
+    return raw;
+  }
 
   static List<UsageRow> _rows(Object? raw) => (raw as List? ?? [])
       .whereType<Map<String, dynamic>>()
@@ -148,6 +237,16 @@ class UsageToday {
     extraMinutes: (json['extra_mins'] as num?)?.toInt() ?? 0,
     enforcerAgeSeconds: (json['enforcer_age_secs'] as num?)?.toInt(),
     focusMissing: json['focus_missing'] as bool? ?? false,
+    activeRoutine: _nonEmpty(json['active_routine']),
+    // Both halves come off the wire together: the parts for the sentences, the total for
+    // the decision about whether there is anything to say at all.
+    refused: switch (json['refused']) {
+      final Map<String, dynamic> counts => Refusals.fromJson(
+        counts,
+        json['refused_total'],
+      ),
+      _ => Refusals.none,
+    },
     perApp: _rows(json['per_app']),
     groups: _rows(json['groups']),
     focused: _rows(json['focused']),

@@ -171,6 +171,53 @@ mutate "notification: a grant bedtime will swallow reports nothing" \
   '  if (note != null) {' \
   '  if (note == null && note != null) {'
 
+# The refusals card appears on every quiet evening instead of the rare loud one. nestwatch's
+# own argument for hiding it is that "a card that reads '0, 0, 0' every evening is a card
+# that stops being read, and this one has to still be noticeable on the evening it is not
+# zero" — so showing it always destroys the property it exists for.
+mutate "refusals: a quiet day is reported as a refusal" \
+  lib/src/api/models.dart \
+  '  bool get any => total > 0;' \
+  '  bool get any => total >= 0;'
+
+# The client re-adds the three counts rather than taking the total that PC sent. Identical
+# today, and wrong the day a fourth kind of refusal is counted and only the total moves —
+# which is exactly why nestwatch sends the sum beside the parts.
+mutate "refusals: the total is re-derived instead of taken as sent" \
+  lib/src/api/models.dart \
+  "      total: (total as num?)?.toInt() ?? 0," \
+  "      total: at('clock_changes') + at('day_resets') + at('shutdown_cancels'),"
+
+# A zero count grows a sentence saying zero, which is the thing the section's own rule
+# forbids: it appears only when something happened, so a line reading "0 clock changes
+# ignored" answers a question nobody asked.
+mutate "refusals: a zero count still gets a line" \
+  lib/src/ui/refusal_lines.dart \
+  '  if (refused.clockChanges > 0)' \
+  '  if (refused.clockChanges >= 0)'
+
+# Singular and plural collapse. Reads as "1 clock changes ignored" on the day it fires,
+# which is the day the card is being read most carefully.
+mutate "refusals: the count and its noun stop agreeing" \
+  lib/src/ui/refusal_lines.dart \
+  'String _plural(int n, String one, String many) => n == 1 ? one : many;' \
+  'String _plural(int n, String one, String many) => many;'
+
+# The spoken label stops saying when the frame is from, which is the half of the old defect
+# that mattered: a screen reader gets a picture with no age at all, on the one screen whose
+# content outlives its last rebuild.
+mutate "screenshot: the spoken label drops the time the frame was taken" \
+  lib/src/ui/frame_label.dart \
+  "    : 'A picture of the screen on that PC, taken at \${frameClock(frameAt)}.';" \
+  "    : 'A picture of the screen on that PC.';"
+
+# The clock loses its padding, so 09:05:03 becomes 9:5:3 -- read aloud as "nine five three"
+# rather than a time, and shown that way to everyone else too.
+mutate "screenshot: the clock stops zero-padding" \
+  lib/src/ui/frame_label.dart \
+  "    '\${at.hour.toString().padLeft(2, '0')}:'" \
+  "    '\${at.hour.toString()}:'"
+
 mutate "screenshot: the served tier is not reported" \
   lib/src/api/nestwatch_api.dart \
   "        servedTier: served," \

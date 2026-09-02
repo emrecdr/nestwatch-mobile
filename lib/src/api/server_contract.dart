@@ -45,7 +45,7 @@ class ContractCheck {
   /// Bump this **with** the golden files, never on its own — it is a statement about what
   /// those files came from, and the two moving separately is how a version check starts
   /// lying. `tool/check_golden.sh` compares it against the sibling checkout's `Cargo.toml`.
-  static const String testedAgainst = '0.5.0';
+  static const String testedAgainst = '0.6.0';
 
   final ContractAgreement agreement;
 
