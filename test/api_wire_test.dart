@@ -16,6 +16,7 @@
 /// the only guard.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -45,6 +46,21 @@ void main() {
   /// the header.
   String? servedTier = 'preview';
 
+  /// What the stub puts in `curfew_note` on an approve.
+  ///
+  /// The bodies below are **copied off the wire**, not composed here: a dev nestwatch
+  /// 0.5.1 was installed on a throwaway port on 2026-09-02, a curfew window covering the
+  /// current time was set through `POST /api/curfew`, and a request was submitted and
+  /// approved. With bedtime off it answered `{"curfew_note":null,...}`; with bedtime on,
+  /// the sentence below. Both are reproduced byte for byte, including the typographic
+  /// dash and the escaped quotes, because a stub that answers a tidier shape than the
+  /// server tests the parser against a server that does not exist.
+  String? curfewNote;
+
+  /// When true, approve answers 400 — what nestwatch does under its mutex for a request
+  /// somebody has already resolved.
+  var alreadyResolved = false;
+
   /// Minimal JPEG: SOI, a stub SOF0 declaring 1x1, EOI. Enough for the client to hand
   /// back bytes; this file is about the request, not the image.
   final jpeg = <int>[
@@ -58,6 +74,8 @@ void main() {
     captureFails = false;
     lanRefused = false;
     servedTier = 'preview';
+    curfewNote = null;
+    alreadyResolved = false;
     final context = SecurityContext()
       ..useCertificateChain('$dir/server.cert.pem')
       ..usePrivateKey('$dir/server.key.pem');
@@ -136,6 +154,28 @@ void main() {
         '/login': () => response
           ..statusCode = 200
           ..cookies.add(Cookie('hh_session', 'issued-by-test'))
+          ..write('{"ok":true}'),
+
+        '/api/time-requests/r1/approve': () {
+          if (alreadyResolved) {
+            response
+              ..statusCode = HttpStatus.badRequest
+              ..write('{"error":"no such pending request"}');
+            return;
+          }
+          response
+            ..statusCode = 200
+            ..write(
+              '{"curfew_note":${curfewNote == null ? 'null' : jsonEncode(curfewNote)},'
+              '"minutes":30,"ok":true}',
+            );
+        },
+
+        // A bare `{"ok":true}` — measured, and the reason `Decision.curfewNote` is
+        // documented as always null here. Denying grants nothing, so there is nothing
+        // for bedtime to swallow.
+        '/api/time-requests/r1/deny': () => response
+          ..statusCode = 200
           ..write('{"ok":true}'),
       };
 
@@ -263,6 +303,60 @@ void main() {
         isNot(isA<Future<Object?> Function()>()),
         reason: 'neither parameter may acquire a default',
       );
+    });
+  });
+
+  group('what the approve response says, and used to throw away', () {
+    // `_resolveTimeRequest` read the status and discarded the body with
+    // `final (response, _)`. So `curfew_note` — the sentence nestwatch computes
+    // precisely so a parent does not believe a grant took effect when bedtime will
+    // swallow it — arrived on every single approve and was never read. Nothing here or
+    // in the golden files could have caught that: all nine goldens are GET payloads, so
+    // no mutating response body was covered on either side of the contract.
+
+    test('a note on the wire reaches the caller, verbatim', () async {
+      const note =
+          'Bedtime is in force now, so the PC will still shut down — screen time '
+          'and bedtime are separate limits. Use "Later bedtime tonight" on the '
+          'Curfew card to move bedtime itself.';
+      curfewNote = note;
+      final decision = await client.approveTimeRequest('r1');
+      expect(decision.acted, isTrue);
+      expect(
+        decision.curfewNote,
+        note,
+        reason: 'the phone must not paraphrase a verdict that PC owns',
+      );
+    });
+
+    test('an ordinary approve carries no note', () async {
+      // The control. `curfew_note` is present on every approve and is `null` when there
+      // is nothing in the way — so a reader that cannot tell null from a sentence would
+      // pass the test above and warn on every grant.
+      final decision = await client.approveTimeRequest('r1');
+      expect(decision.acted, isTrue);
+      expect(decision.curfewNote, isNull);
+    });
+
+    test('an already-resolved approve acts on nothing', () async {
+      alreadyResolved = true;
+      final decision = await client.approveTimeRequest('r1');
+      expect(decision.acted, isFalse);
+
+      // Deliberately **not** also asserting the note is null. It would pass, and it
+      // would pass for the wrong reason: nestwatch's 400 body is
+      // `{"error":"no such pending request"}`, which carries no `curfew_note` at all,
+      // so a reader that cheerfully parsed advice off a failed call would satisfy the
+      // assertion just as well. Making the stub answer a shape the server never sends
+      // would test a server that does not exist — the trap this file's own header
+      // warns about — so the guarantee is stated in `Decision`'s doc and left
+      // undefended rather than guarded by a check that cannot fail.
+    });
+
+    test('deny reports that it acted, and carries no note', () async {
+      final decision = await client.denyTimeRequest('r1');
+      expect(decision.acted, isTrue);
+      expect(decision.curfewNote, isNull);
     });
   });
 

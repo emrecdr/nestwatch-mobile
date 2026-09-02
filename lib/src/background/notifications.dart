@@ -129,12 +129,23 @@ Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
 /// browser dashboard, or on another phone.
 Future<void> cancelForRequest(String id) => _plugin.cancel(id: id.hashCode);
 
-/// Tell the parent an answer they gave from the notification did not land.
+/// Tell the parent something about an answer they gave from the notification.
 ///
 /// Deliberately a separate id from the request's own, so it cannot replace a still-live
 /// prompt for a different request — and deliberately not `autoCancel: false`, because a
 /// parent who reads it and swipes it away has understood it.
-Future<void> notifyActionFailed(String requestId, String message) async {
+///
+/// [title] is a parameter rather than the constant it used to be because there are now
+/// two things worth saying here, and they are not both bad news. One is that the answer
+/// did not land. The other is that it did, and bedtime will swallow it anyway — which
+/// under the old fixed title *"That did not go through"* would have been a false
+/// statement about a grant that went through perfectly. One request produces at most one
+/// of the two, so they share an id and the second cannot pile up behind the first.
+Future<void> notifyAboutAnswer(
+  String requestId, {
+  required String title,
+  required String message,
+}) async {
   const details = NotificationDetails(
     android: AndroidNotificationDetails(
       _channelId,
@@ -145,8 +156,8 @@ Future<void> notifyActionFailed(String requestId, String message) async {
     ),
   );
   await _plugin.show(
-    id: 'failed:$requestId'.hashCode,
-    title: 'That did not go through',
+    id: 'answer:$requestId'.hashCode,
+    title: title,
     body: message,
     notificationDetails: details,
   );

@@ -23,20 +23,24 @@ class _FakeClient implements NestwatchClient {
   final List<String> denied = [];
   bool closed = false;
 
-  _FakeClient({this.throws, this.resolves = true});
+  /// What the stand-in server says about bedtime when it grants. Null is the ordinary
+  /// day; a string is what nestwatch sends when the minutes cannot beat the curfew.
+  final String? curfewNote;
+
+  _FakeClient({this.throws, this.resolves = true, this.curfewNote});
 
   @override
-  Future<bool> approveTimeRequest(String id) async {
+  Future<Decision> approveTimeRequest(String id) async {
     if (throws != null) throw throws!;
     approved.add(id);
-    return resolves;
+    return Decision(acted: resolves, curfewNote: resolves ? curfewNote : null);
   }
 
   @override
-  Future<bool> denyTimeRequest(String id) async {
+  Future<Decision> denyTimeRequest(String id) async {
     if (throws != null) throw throws!;
     denied.add(id);
-    return resolves;
+    return Decision(acted: resolves);
   }
 
   @override
@@ -60,14 +64,14 @@ void main() {
   group('the happy paths', () {
     test('approve grants, and says nothing', () async {
       final client = _FakeClient();
-      final outcome = await performAction(
+      final result = await performAction(
         actionId: approveActionId,
         requestId: 'req-1',
         open: () async => (identity: _identity, client: client),
       );
-      expect(outcome, ActionOutcome.granted);
+      expect(result.outcome, ActionOutcome.granted);
       expect(client.approved, ['req-1']);
-      expect(actionFailureMessage(outcome), isNull);
+      expect(actionFailureMessage(result.outcome), isNull);
       expect(
         client.closed,
         isTrue,
@@ -77,14 +81,77 @@ void main() {
 
     test('deny resolves, and says nothing', () async {
       final client = _FakeClient();
-      final outcome = await performAction(
+      final result = await performAction(
         actionId: denyActionId,
         requestId: 'req-2',
         open: () async => (identity: _identity, client: client),
       );
-      expect(outcome, ActionOutcome.denied);
+      expect(result.outcome, ActionOutcome.denied);
       expect(client.denied, ['req-2']);
-      expect(actionFailureMessage(outcome), isNull);
+      expect(actionFailureMessage(result.outcome), isNull);
+    });
+  });
+
+  group('a grant that bedtime will swallow is not silence', () {
+    // The whole risk of moving approval to a lock screen is a grant that looks like it
+    // worked and did not. `curfew_note` is nestwatch answering exactly that question, and
+    // it arrived on every approve while this app returned a bare bool and dropped the
+    // body — so the one surface that most needed the caveat was the one furthest from it.
+    const note =
+        'Bedtime is in force now, so the PC will still shut down — screen time '
+        'and bedtime are separate limits.';
+
+    test('the note is reported, and not as a failure', () async {
+      final client = _FakeClient(curfewNote: note);
+      final result = await performAction(
+        actionId: approveActionId,
+        requestId: 'req-c1',
+        open: () async => (identity: _identity, client: client),
+      );
+      expect(result.outcome, ActionOutcome.granted);
+      expect(result.curfewNote, note);
+
+      final report = answerReport(result);
+      expect(report, isNotNull);
+      expect(
+        report!.message,
+        note,
+        reason:
+            'passed through verbatim — that PC owns this verdict, not this phone',
+      );
+      expect(
+        report.title,
+        isNot(contains('did not go through')),
+        reason: 'the minutes really were granted; only bedtime is in the way',
+      );
+    });
+
+    test('an ordinary grant still says nothing at all', () async {
+      // The control. Without it this group would pass just as well against code that
+      // notified on every approve, which would put a notification in front of a parent
+      // every time they answered their child.
+      final result = await performAction(
+        actionId: approveActionId,
+        requestId: 'req-c2',
+        open: () async => (identity: _identity, client: _FakeClient()),
+      );
+      expect(result.outcome, ActionOutcome.granted);
+      expect(result.curfewNote, isNull);
+      expect(answerReport(result), isNull);
+    });
+
+    test('a deny carries no note even when one is configured', () async {
+      // Denying grants nothing, so there is nothing for bedtime to swallow. Measured
+      // against 0.5.1: deny answers a bare `{"ok":true}`.
+      final result = await performAction(
+        actionId: denyActionId,
+        requestId: 'req-c3',
+        open: () async =>
+            (identity: _identity, client: _FakeClient(curfewNote: note)),
+      );
+      expect(result.outcome, ActionOutcome.denied);
+      expect(result.curfewNote, isNull);
+      expect(answerReport(result), isNull);
     });
   });
 
@@ -148,13 +215,13 @@ void main() {
             'not on that network',
           ),
         );
-        final outcome = await performAction(
+        final result = await performAction(
           actionId: approveActionId,
           requestId: 'req-3',
           open: () async => (identity: _identity, client: client),
         );
-        expect(outcome, ActionOutcome.failed);
-        final said = actionFailureMessage(outcome);
+        expect(result.outcome, ActionOutcome.failed);
+        final said = actionFailureMessage(result.outcome);
         expect(said, isNotNull);
         expect(said, contains('nothing changed on that PC'));
         expect(client.closed, isTrue);
@@ -162,13 +229,13 @@ void main() {
     );
 
     test('a lapsed session complains, and names the fix', () async {
-      final outcome = await performAction(
+      final result = await performAction(
         actionId: approveActionId,
         requestId: 'req-4',
         open: () async => null,
       );
-      expect(outcome, ActionOutcome.notPaired);
-      expect(actionFailureMessage(outcome), contains('sign in'));
+      expect(result.outcome, ActionOutcome.notPaired);
+      expect(actionFailureMessage(result.outcome), contains('sign in'));
     });
   });
 
@@ -179,24 +246,24 @@ void main() {
     // The real client returns false here; it does not throw. Getting this wrong in the
     // first draft would have reported every race as a hard failure.
     final client = _FakeClient(resolves: false);
-    final outcome = await performAction(
+    final result = await performAction(
       actionId: approveActionId,
       requestId: 'req-5',
       open: () async => (identity: _identity, client: client),
     );
-    expect(outcome, ActionOutcome.alreadyResolved);
-    expect(actionFailureMessage(outcome), isNull);
+    expect(result.outcome, ActionOutcome.alreadyResolved);
+    expect(actionFailureMessage(result.outcome), isNull);
   });
 
   group('nothing acts on a malformed tap', () {
     test('an unknown action id does nothing', () async {
       final client = _FakeClient();
-      final outcome = await performAction(
+      final result = await performAction(
         actionId: 'nestwatch.something-else',
         requestId: 'req-6',
         open: () async => (identity: _identity, client: client),
       );
-      expect(outcome, ActionOutcome.failed);
+      expect(result.outcome, ActionOutcome.failed);
       expect(client.approved, isEmpty);
       expect(client.denied, isEmpty);
     });
@@ -204,12 +271,12 @@ void main() {
     test('a missing request id does nothing', () async {
       final client = _FakeClient();
       for (final id in <String?>[null, '']) {
-        final outcome = await performAction(
+        final result = await performAction(
           actionId: approveActionId,
           requestId: id,
           open: () async => (identity: _identity, client: client),
         );
-        expect(outcome, ActionOutcome.failed);
+        expect(result.outcome, ActionOutcome.failed);
       }
       expect(client.approved, isEmpty);
     });

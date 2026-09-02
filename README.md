@@ -285,10 +285,21 @@ default is exactly how the wrong tier gets sent.
 
 **A second approve returns 400, not 200.** The mutex in `TimeRequests::resolve` makes the
 *grant* happen exactly once — it does not make the second call succeed. So `approve` returns
-`bool` for "was this the call that acted", and a 400 refreshes the list instead of showing
-a parent an error. The button is debounced too; nestwatch's own comment records why the gate
-exists: "six concurrent approvals of one request all returned `Some` — so a parent
-double-tapping Approve on a phone granted the minutes twice".
+a `Decision`, whose `acted` answers "was this the call that acted", and a 400 refreshes the
+list instead of showing a parent an error. The button is debounced too; nestwatch's own
+comment records why the gate exists: "six concurrent approvals of one request all returned
+`Some` — so a parent double-tapping Approve on a phone granted the minutes twice".
+
+**An approve that succeeds can still be worth a warning.** Screen time and bedtime are
+independent limits on that PC, so minutes granted inside a curfew window are minutes the
+child cannot use — and nestwatch says so in `curfew_note` on the approve response rather
+than leaving each client to work it out against a clock it does not own. That is the other
+half of `Decision`, and it is why the return type is not a `bool`: it was one, the body was
+discarded, and the sentence arrived on every approve and was read by nothing. It now shows
+as a notice that waits to be dismissed — not a snackbar, which would time out on the one
+message in this app that exists to correct a false belief — and as a second notification
+when the answer came from a lock screen, where the app used to say nothing at all on
+success.
 
 **`used_mins: 0` is ambiguous.** It means both "nobody used the PC" and "nothing was
 watching". `enforcer_age_secs` and `focus_missing` are the only things that separate them,
@@ -332,10 +343,23 @@ Three things were read rather than assumed, because the parser turns on them:
 | `HttpClientResponse` is a `Stream<List<int>>` | `dart:io`, which is why `utf8.decoder` binds to it |
 
 Reconnection lives in `ServerEvents`, apart from the wire code, and backs off from one
-second to a cap of thirty. Only a delivered **event** resets that backoff — a successful
-*connect* would also be satisfied by a server that accepts and immediately closes, which
-turns backoff into a busy loop that reports itself as healthy. A 401 is handed up rather
-than retried: another connection cannot fix a lapsed session.
+second to a cap of **two minutes** — longer than the poll it sits beside, deliberately, and
+this line said "thirty" until 2026-09-02 because the cap moved and the prose did not. At
+30 s a PC that was simply switched off got asked twice a minute, which is more traffic than
+the 60 s poll this was meant to relieve. Freshness costs nothing here: the poll is the
+backstop, so a stream that takes two minutes to notice the PC came back has lost nothing a
+parent can see.
+
+Only a delivered **event** resets that backoff — a successful *connect* would also be
+satisfied by a server that accepts and immediately closes, which turns backoff into a busy
+loop that reports itself as healthy.
+
+**Two failures are permanent for the stream, and they are not permanent for the same
+thing.** Both stop it, because retrying either hammers a PC answering correctly. Only the
+lapsed session is handed up, through `onSessionLost`, and that callback is named for the
+one thing it means. It used to be `onFatal` and fired for both — so a PC running a
+nestwatch older than 0.4.0, which answers 404 to this route forever, signed the parent out
+of a server working perfectly on every other path, and did it again on the next mount.
 
 `isReceiving` is exposed because a screen claiming live updates it is not receiving is
 worse than one that admits to polling.

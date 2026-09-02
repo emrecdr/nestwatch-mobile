@@ -33,6 +33,39 @@ class Frame {
   bool get isPreview => servedTier == null || servedTier == 'preview';
 }
 
+/// One answer to a time request, and what that PC said about whether it will hold.
+///
+/// Same shape as [Frame], for the same reason: the server knows something about what it
+/// just did that this app cannot work out for itself, and dropping it reports a success
+/// that is not one.
+///
+/// This used to be a bare `bool`. `_resolveTimeRequest` read the status, discarded the
+/// body with `final (response, _)`, and returned whether the call had acted — so
+/// `curfew_note`, which nestwatch computes precisely to stop a parent believing a grant
+/// took effect, arrived on every approve and was never named anywhere in this repo.
+class Decision {
+  /// True when this call is the one that resolved the request, false when somebody had
+  /// already answered it — the browser, another phone, or a second tap.
+  final bool acted;
+
+  /// `curfew_note`: set when bedtime will swallow the minutes just granted.
+  ///
+  /// nestwatch computes it against its own trusted clock, so it cannot disagree with the
+  /// enforcer about whether a window is open — which is exactly why this app must not
+  /// re-derive it. Screen time and bedtime are independent limits, and approving a
+  /// request during a curfew window "looked like it would work and did not" (nestwatch
+  /// `api::extend_curfew`).
+  ///
+  /// Null in three different situations that all read the same way — nothing to add:
+  /// nothing is in the way; the call was a deny (**measured 2026-09-02** against 0.5.1:
+  /// deny answers a bare `{"ok":true}` and carries no note); or the PC predates the
+  /// field. A client must not turn a server that did not answer into a warning it
+  /// invented.
+  final String? curfewNote;
+
+  const Decision({required this.acted, this.curfewNote});
+}
+
 /// `GET /session` — unauthenticated and LAN-gated (nestwatch `auth::me`).
 ///
 /// §5 picks this as the first call for three reasons at once: it needs no credentials,
@@ -295,8 +328,9 @@ class NestwatchClient {
 
   /// `POST /api/time-requests/{id}/approve`.
   ///
-  /// Returns `true` when this call is the one that granted the minutes, `false` when the
-  /// request had already been resolved.
+  /// [Decision.acted] is `true` when this call is the one that granted the minutes,
+  /// `false` when the request had already been resolved; [Decision.curfewNote] carries
+  /// what that PC said about whether the grant can actually take effect.
   ///
   /// That distinction exists because the server answers **400** — not 200 — to a second
   /// approve (`"no such pending request"`, confirmed on the wire). The mutex in
@@ -307,20 +341,45 @@ class NestwatchClient {
   ///
   /// So a 400 here is an ordinary race, not something to show a parent. The screen
   /// refreshes instead.
-  Future<bool> approveTimeRequest(String id) =>
+  Future<Decision> approveTimeRequest(String id) =>
       _resolveTimeRequest(id, 'approve');
 
   /// `POST /api/time-requests/{id}/deny`. Same 400-means-already-resolved shape.
-  Future<bool> denyTimeRequest(String id) => _resolveTimeRequest(id, 'deny');
+  Future<Decision> denyTimeRequest(String id) =>
+      _resolveTimeRequest(id, 'deny');
 
-  Future<bool> _resolveTimeRequest(String id, String verb) async {
-    final (response, _) = await _send(
+  Future<Decision> _resolveTimeRequest(String id, String verb) async {
+    final (response, body) = await _send(
       'POST',
       '/api/time-requests/${Uri.encodeComponent(id)}/$verb',
     );
-    if (response.statusCode == HttpStatus.badRequest) return false;
+    // A request somebody else already answered carries no advice about a grant that did
+    // not happen here, so there is nothing to read out of this body.
+    if (response.statusCode == HttpStatus.badRequest) {
+      return const Decision(acted: false);
+    }
     _requireOk(response);
-    return true;
+    return Decision(
+      acted: true,
+      curfewNote: _stringOrNull(body, 'curfew_note'),
+    );
+  }
+
+  /// One optional string field, read so that every way of not saying it reads alike.
+  ///
+  /// Absent, `null`, empty, whitespace, the wrong type, or a body that is not JSON at
+  /// all: each means the server had nothing to add, and none of them may become a
+  /// sentence in front of a parent. The failure worth avoiding is the opposite of the one
+  /// that made this method necessary — having discarded the server's words, the next
+  /// mistake would be inventing some.
+  static String? _stringOrNull(String body, String field) {
+    try {
+      final value = (jsonDecode(body) as Map<String, dynamic>)[field];
+      if (value is! String || value.trim().isEmpty) return null;
+      return value;
+    } on Object {
+      return null;
+    }
   }
 
   /// `GET /api/time-codes` → the issued codes nobody has redeemed yet.

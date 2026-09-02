@@ -77,7 +77,9 @@ class _HomeScreenState extends State<HomeScreen> {
     open: () => widget.client.events(),
     onChanged: (subject) => _stale[subject]?.value++,
     // A 401 here means what it means anywhere else, and reconnecting cannot fix it.
-    onFatal: (_) => widget.controller.signOut(),
+    // This fires for the lapsed session and nothing else — see [ServerEvents.onSessionLost]
+    // for the older PC that used to take this same exit and end up signed out in a loop.
+    onSessionLost: (_) => widget.controller.signOut(),
   );
 
   /// Stops the stream while the app is backgrounded.

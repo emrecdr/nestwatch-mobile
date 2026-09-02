@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
+import 'notice.dart';
 import 'polled_screen.dart';
 import 'relative_time.dart';
 
@@ -43,17 +44,24 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
   /// sent, which also stops the 400 it would come back with.
   final _deciding = <String>{};
 
+  /// What that PC said about the last grant, when it said anything.
+  ///
+  /// Held rather than shown and forgotten. The grant it describes has already happened
+  /// and the row it happened to is gone from the list by the time this renders, so there
+  /// is nothing on screen that would otherwise carry the caveat.
+  String? _curfewNote;
+
   Future<void> _decide(TimeRequest request, {required bool approve}) async {
     if (!_deciding.add(request.id)) return;
     // The set was already mutated by the guard above; this is the rebuild that greys
     // the buttons out. Saying so beats an empty setState that reads like a leftover.
     setState(() {});
     try {
-      final acted = approve
+      final decision = approve
           ? await widget.client.approveTimeRequest(request.id)
           : await widget.client.denyTimeRequest(request.id);
       if (!mounted) return;
-      if (!acted) {
+      if (!decision.acted) {
         // 400: somebody already resolved it — the browser dashboard, or another phone.
         // An ordinary race, not something to put in front of a parent. Just re-read.
         _snack('That request had already been handled.');
@@ -63,6 +71,17 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
               ? 'Approved — ${request.minutes} more minutes today.'
               : 'Denied.',
         );
+        // Only an approve moves this, and it replaces rather than accumulates.
+        //
+        // A grant that comes back with **no** note is positive evidence that nothing is
+        // in the way right now, so it correctly clears a stale one. A deny carries no
+        // note because it granted nothing — it says nothing about bedtime either way, so
+        // letting it clear would throw away a caveat the parent may not have finished
+        // reading. Two notes stacked would be worse than one: the parent would be left
+        // working out which grant each was about.
+        if (approve) {
+          setState(() => _curfewNote = decision.curfewNote);
+        }
       }
     } on NestwatchException catch (e) {
       if (!mounted) return;
@@ -85,6 +104,25 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
     final requests = data;
     if (requests == null) return waitingPane();
 
+    // Above the list, not inside it: the list is rebuilt from every poll and the note
+    // belongs to an action, so anything that scrolled with the rows would be sorted or
+    // scrolled away from the thing it is about.
+    return Column(
+      children: [
+        if (_curfewNote case final note?)
+          Notice(
+            note,
+            tone: NoticeTone.warning,
+            icon: Icons.bedtime,
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            onDismiss: () => setState(() => _curfewNote = null),
+          ),
+        Expanded(child: _list(requests)),
+      ],
+    );
+  }
+
+  Widget _list(List<TimeRequest> requests) {
     return RefreshIndicator(
       onRefresh: load,
       child: requests.isEmpty

@@ -38,6 +38,16 @@ export PATH="/Users/emrec/development/flutter/bin:$PATH"
 
 BACKUP=$(mktemp -d)
 cp -R lib "$BACKUP/lib"
+# **Do not edit anything under `lib/` while this is running.**
+#
+# `restore` replaces the whole tree, not the one file just mutated — which is what makes it
+# safe against a mutation that lands somewhere unexpected, and what makes an edit made
+# mid-run vanish without a word. It happened on 2026-09-02: a one-line change to
+# `time_requests_screen.dart`, a file this script never mutates, was gone by the next
+# command, because the snapshot predated it. Nothing warns; the file simply reverts.
+#
+# `test/`, `tool/` and `docs/` are untouched and safe to edit — except this file itself,
+# which bash reads incrementally as it runs.
 restore() { rm -rf lib; cp -R "$BACKUP/lib" lib; }
 trap 'restore; rm -rf "$BACKUP"' EXIT
 
@@ -132,6 +142,34 @@ mutate "screenshot: timer frames omit live=1 (audit-log eviction)" \
   lib/src/api/nestwatch_api.dart \
   "    final query = onTimer ? '?tier=preview&live=1' : '?tier=preview';" \
   "    final query = '?tier=preview';"
+
+# The state this app shipped in until 2026-09-02, restored on purpose.
+#
+# Not an inversion, and the header above is right that those are usually weaker — but
+# this one is not hypothetical. `_resolveTimeRequest` read the status and threw the body
+# away with `final (response, _)`, so `curfew_note` arrived on every approve and was
+# never read. What this defends is that the *reading* is load-bearing, and the honest way
+# to state that is to put the defect back.
+mutate "approve: the curfew note is received and dropped again" \
+  lib/src/api/nestwatch_api.dart \
+  "      curfewNote: _stringOrNull(body, 'curfew_note')," \
+  "      curfewNote: null,"
+
+# An inversion, and it swaps the two failures for each other: the lapsed session stops
+# signing out, and the PC too old to have the endpoint starts. That is precisely the bug
+# this guard was added for, so a surviving line here means both directions are unguarded.
+mutate "events: the wrong permanent failure signs the parent out" \
+  lib/src/api/server_events.dart \
+  '          if (error.failure == NestwatchFailure.sessionExpired) {' \
+  '          if (error.failure != NestwatchFailure.sessionExpired) {'
+
+# The note reaches `answerReport` and is dropped there instead. A parent answering from
+# a lock screen gets silence, which is the surface where silence costs most: the
+# notification is already gone, so there is nothing left on screen to carry the caveat.
+mutate "notification: a grant bedtime will swallow reports nothing" \
+  lib/src/background/notification_actions.dart \
+  '  if (note != null) {' \
+  '  if (note == null && note != null) {'
 
 mutate "screenshot: the served tier is not reported" \
   lib/src/api/nestwatch_api.dart \
@@ -325,10 +363,14 @@ mutate "notification: a failed answer says nothing" \
   "  ActionOutcome.failed =>" \
   "  ActionOutcome.failed => null, // silenced\n  ActionOutcome.values =>"
 
-mutate "notification: away-from-home reads as unreachable to nobody" \
+# Re-anchored 2026-09-02: the line it named became a block when `approveTimeRequest` began
+# returning a `Decision` instead of a bool. The audit reported ANCHOR MISSING rather than a
+# pass, which is the whole reason that third outcome exists — a mutation that cannot be
+# applied has proved nothing, and a run that called it `killed` would have been lying.
+mutate "notification: an already-resolved race reads as a grant" \
   lib/src/background/notification_actions.dart \
-  "    if (!resolved) return ActionOutcome.alreadyResolved;" \
-  "    if (resolved) return ActionOutcome.alreadyResolved;"
+  "    if (!decision.acted) {" \
+  "    if (decision.acted) {"
 
 # Whereabouts. Collapsing the offline case into the elsewhere case would tell a parent
 # with no network at all that they are on the wrong one.

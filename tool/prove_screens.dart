@@ -96,9 +96,18 @@ Future<void> main(List<String> argv) async {
   stdout.writeln('\n2. Approve grants once');
   final before = await client.usageToday();
   final granted = await client.approveTimeRequest(first.id);
-  check(granted, 'the first approve reports that it acted');
+  check(granted.acted, 'the first approve reports that it acted');
+  // Printed rather than asserted: whether bedtime is in the way depends on the curfew
+  // configured on whichever PC this is pointed at, so a check either way would be a
+  // claim about that machine's settings rather than about this app.
+  stdout.writeln(
+    '         curfew_note: ${granted.curfewNote ?? '(none — nothing in the way)'}',
+  );
   final again = await client.approveTimeRequest(first.id);
-  check(!again, 'the second reports "already resolved" instead of throwing');
+  check(
+    !again.acted,
+    'the second reports "already resolved" instead of throwing',
+  );
   final after = await client.usageToday();
   check(
     after.extraMinutes == before.extraMinutes + first.minutes,
@@ -115,9 +124,13 @@ Future<void> main(List<String> argv) async {
   } else {
     final target = remaining.first;
     final denied = await client.denyTimeRequest(target.id);
-    check(denied, 'deny reports that it acted');
+    check(denied.acted, 'deny reports that it acted');
     check(
-      !await client.denyTimeRequest(target.id),
+      denied.curfewNote == null,
+      'and a deny carries no curfew note, because it granted nothing',
+    );
+    check(
+      !(await client.denyTimeRequest(target.id)).acted,
       'and a second deny reports "already resolved"',
     );
     final afterDeny = await client.usageToday();

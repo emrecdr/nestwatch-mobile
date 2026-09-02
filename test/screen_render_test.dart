@@ -132,6 +132,25 @@ final _subjects = <_Subject>[
     build: () => const Notice('Ask on the PC itself.'),
     mustShow: 'Ask on the PC itself',
   ),
+  _Subject(
+    file: 'notice.dart',
+    label: 'Notice (dismissible, carrying the real curfew note)',
+    // The exact sentence nestwatch 0.5.1 sends, captured off the wire on 2026-09-02 --
+    // not a shortened stand-in. It is the longest string this widget will be asked to
+    // render, it now shares its row with a close button, and 320 logical pixels is the
+    // narrowest screen the app claims. That combination is where a `Row` overflows, and
+    // an overflow here would land on top of the one message this app has that exists
+    // solely to stop a parent believing something untrue.
+    build: () => Notice(
+      'Bedtime is in force now, so the PC will still shut down — screen time and '
+      'bedtime are separate limits. Use "Later bedtime tonight" on the Curfew card '
+      'to move bedtime itself.',
+      tone: NoticeTone.warning,
+      icon: Icons.bedtime,
+      onDismiss: () {},
+    ),
+    mustShow: 'separate limits',
+  ),
   // The largest file in `lib/src/ui/` (439 lines) and the first thing a parent sees.
   // It needs only a controller, and every one of that controller's collaborators has
   // an in-memory implementation already -- the same set `restore_test.dart` uses.

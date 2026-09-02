@@ -56,17 +56,143 @@ the script says so rather than reporting a failure. Its third outcome is the usu
 without the sibling checkout on the machine, nothing was compared, and it exits 2 saying so
 instead of reporting a clean run.
 
-**Two things this repo cannot check for itself, and both bite the entries below.** There is
-no CI — no `.github/`, no runner config of any kind — and `.git/hooks/` holds only the
-shipped `.sample` files (checked 2026-08-27). So `flutter test`, `tool/mutate.sh`,
-`tool/check_golden.sh` and `tool/audit_deps.sh` are all things a person runs, and "the
-suite covers it" always means "when somebody runs the suite".
+**What runs by itself, and what still waits for a person.** This paragraph used to say
+there was no CI of any kind, which was true when it was written on 2026-08-27 and stopped
+being true four days later — a claim several entries below still lean on, so it is corrected
+here rather than left to rot. `.github/workflows/ci.yml` now runs analyze, format, the
+suite, both platform builds, `tool/audit_deps.sh`, `tool/check_version.sh`,
+`tool/check_golden.sh` against a fresh `emrecdr/nestwatch` clone, and the mutation audit —
+on every push, with no token and nobody choosing to.
 
-Last audited against the tree on **2026-08-27**.
+What is still a person: `.git/hooks/` holds only the shipped `.sample` files, so nothing is
+checked *before* a commit; and the eight `tool/prove_*.dart` harnesses need a live nestwatch
+on the LAN, which no runner has. For those, "the suite covers it" still means "when somebody
+runs it".
+
+Last audited against the tree on **2026-09-02**.
 
 ---
 
 ## Open
+
+### M24 · The note now reaches the parent; the control it names is on the other device
+
+> **Cross-repo** · pairs with nestwatch (unfiled — see below)
+
+`curfew_note` is read and shown as of 2026-09-02. Its second sentence is
+*"Use \"Later bedtime tonight\" on the Curfew card to move bedtime itself."* — and there
+is no Curfew card on the phone, because `PLAN.md` §5 kept curfew in the browser. So the app
+now tells a parent something true and points them at a device they may not be near.
+
+**Passing it through verbatim is still right.** The alternative is this app paraphrasing a
+verdict computed against that PC's trusted clock, which is the comparison `M6` and
+`nestwatch#O72` exist to stop clients making. The fix is to make the sentence true here
+rather than to rewrite it: `POST /api/curfew/extend` is published, takes `{"minutes":N}`,
+and answers `{"ok","minutes","until":"HH:MM","budget_note"}` — **measured on the wire
+2026-09-02** against 0.5.1. A control labelled exactly "Later bedtime tonight" would make
+the server's own instruction correct on this screen.
+
+**Not done in the same pass, for one specific reason.** The endpoint validates against
+`MAX_REQUEST_MINUTES`, and `limits.json` does not publish it — checked: the vendored file
+carries `code_len`, `login_lockout_secs`, `login_max_fails`, `max_active_codes` and
+`max_code_minutes`, and nothing else. A free-entry control would therefore need this app to
+hold its own copy of a constant that lives in nestwatch's Rust, which is precisely the
+fifth reader `M6` is open in order to delete. Preset choices well inside any plausible cap
+need no copy and are the way in; that is a design decision worth making deliberately rather
+than alongside a bug fix.
+
+**Three things to raise with nestwatch, none of them filed there.** That repository has no
+`FINDINGS-INBOX.md`, and its working tree was dirty with another session's changes on
+2026-09-02 — writing into `docs/OPEN-FINDINGS.md` under those conditions is the exact
+deadlock this repo's inbox protocol was invented to end. Recorded here instead:
+
+1. `curfew_note` mixes a fact with a **dashboard-specific instruction**. The fact travels
+   to any client; the instruction does not. Splitting them, or dropping the second
+   sentence, would make the field portable.
+2. `MAX_REQUEST_MINUTES` belongs in `limits.json` for the same reason `max_code_minutes`
+   already is.
+3. **`tests/golden/` covers no mutating response.** All nine files are `GET` payloads, so
+   `curfew_note`, `budget_note` and the `extra-time` reply are outside the contract gate on
+   both sides — which is why this app could discard a field for weeks with every check
+   green. An `approve.json` would have caught it.
+
+### M23 · Nothing survives leaving the house
+
+Screen data lives in `PolledScreenState.data` and nowhere else. Measured 2026-09-02:
+nothing under `lib/src/ui/` or `lib/src/api/` writes a payload to disk — the pin, the
+session cookie and the announced-request ids are the only persisted things. So on a cold
+start away from home all four tabs render `waitingPane()`.
+
+`UX-REVIEW.md` §2 established that leaving the house "is not an error, it is the single
+most common thing that will ever happen to it". The reachability work that came out of it
+produces the right sentence, and the sentence is all there is.
+
+**The cheap version is one payload, not four.** Persist the last `UsageToday` with the time
+it arrived and render it behind an explicit "as of 18:42" header when the fetch fails.
+Usage is a monotonic record of a day that already happened, so it ages honestly. Pending
+requests are the opposite and must **not** be cached: a stale queue invites a parent to
+approve something already resolved, and the 400 that comes back is the good case.
+
+### M22 · A moved PC needs an eyeball, for a certificate the app already holds
+
+`ServerIdentity` stores `host` and `port`, and nothing revisits them. Measured 2026-09-02:
+no mDNS, Bonjour, multicast or NSD anywhere in `lib/`, `ios/`, `android/`, or in the whole
+nestwatch tree. When DHCP moves that PC, the pin is still valid and the app can no longer
+find what it is pinned to.
+
+Recovery is "Type the address instead", which carries no fingerprint — so `begin()` takes
+the `_observeForFirstUse` branch, calls `_overrides.distrust()`, and asks the parent to
+compare 64 hex characters against a Windows console. The stored fingerprint has exactly
+three readers (`restorePin`, the background isolate, and two display sites) and is **never**
+compared against one observed at a new address, though it would settle the question with no
+human involved. `_persistIdentity` then writes `trustedOnFirstUse`, so a PC originally
+verified from a QR code is permanently relabelled.
+
+**Three situations share one mechanism**, and two of them should not: first pairing
+(verified, correct), same certificate at a new address (provable without a human), and a
+genuinely new certificate after `--new-cert` (needs a human, correct). Conflating the
+middle case with the last is how a parent gets trained to click through fingerprint
+comparisons — the habit `PLAN.md` §5 quotes nestwatch on depending upon them not having.
+
+**`PLAN.md` §7 deferred the sweep "once pinning exists". Pinning exists**, and has since
+`prove_pin` observed 0 application bytes against a wrong certificate. The item never moved
+into this register because §7 is a plan document, so nothing re-reads it. Two cautions
+before building it: on iOS a subnet sweep is the "network scanning" that raises
+local-network privacy, which `M15` records as unproven on hardware and *silently denied*
+in the background while undetermined; and the smaller fix needs neither a sweep nor a
+permission, because the certificate already carries the machine hostname as a SAN and
+`cert.rs` calls it "the *stable* half" for exactly this reason. Storing both costs one
+field. It does interact with `whereAmI`, which returns `cannotTell` for a non-numeric host.
+
+**`PLAN.md` §5 is half wrong where it says so, and should be corrected in place.** It
+claims the app is "immune to the SAN/DHCP problem that breaks the browser today". It is
+immune to the TLS half and equally broken on the addressing half, and that sentence is what
+makes the problem look solved.
+
+### M21 · Three platform clocks, one already past
+
+Measured 2026-09-02.
+
+| | Here | Current | Consequence |
+|---|---|---|---|
+| Flutter | 3.44.6 | 3.47.1 | three minors behind; pinned in CI as `FLUTTER_VERSION` |
+| Dart | 3.12.2 | 3.13.1 | `sdk: ^3.12.2` already admits it |
+| iOS deployment | 14.0 | 15.0 floor | 3.47 lifts the floor 13 → 15; this **must** move |
+| Play target API | 36 | 36 | compliant — `flutter.targetSdkVersion` is 36 |
+| AGP / Kotlin | 9.0.1 / 2.3.20 | 9.1.0 / 2.4.0 | below 3.47's verified pair |
+
+**The Play clock has run out rather than being close.** Since 31 August 2026 new apps and
+updates must target API 36 or be rejected in Play Console, with extensions available only
+to 1 November. The code side is compliant; what this changes is that `M7` — store
+paperwork only a Play Console can finish — now has a date rather than an intention.
+
+**The structural item is Material leaving the SDK.** 3.47 ships `material_ui` and
+`cupertino_ui` as standalone packages and deprecates the in-SDK versions from November.
+Every screen here imports `package:flutter/material.dart`. Not urgent, not optional
+forever, and much cheaper while the UI is fourteen files than it will ever be again.
+
+Two things land free on upgrade: 3.47 auto-detects Android high-contrast and colour
+inversion, which is on `M12`'s side of the ledger.
 
 ### M20 · nestwatch is about to send the expiry verdict, which is what M6 was waiting for
 
@@ -139,6 +265,15 @@ above were first vendored out of `../nestwatch`'s *working tree*, which had move
 further change nobody outside that machine can see. Everything passed locally. CI cloned
 the pushed branch, found two files drifted, and failed the `contract` job. Re-vendored from
 a fresh clone; the pushed shape is what is committed.
+
+**Still unpushed as of 2026-09-02, and re-measured rather than assumed.** That checkout is
+now five commits ahead of `origin/main`, still at `52c23e4`, and `git show
+origin/main:tests/golden/usage-today.json` carries no `refused` — while a dev instance built
+from the local tree serves `"refused":{"clock_changes":0,"day_resets":0,
+"shutdown_cancels":0}` and `"refused_total":0`. So the fields are real, observed on a live
+wire, and **must not be vendored yet**: doing so would fail the `contract` job for the third
+time on the same subject. The way this repo learns the day has arrived is the guard below
+falling silent, not a memory of having seen the field work.
 
 **So it is a guard now rather than a caution.** `tool/check_golden.sh` prints the commit it
 compared against — it always did — and now also says when that commit is not in the
@@ -412,6 +547,17 @@ warning strip are the likely shapes.
 screen actually *sounds*, and every claim in the first version of this entry that was
 written from the code rather than from the widget turned out to be wrong. This wants
 TalkBack and VoiceOver on real hardware, not another read of the source.
+
+**One item is now specific enough to implement in a single sitting, and was still left.**
+The curfew notice added on 2026-09-02 (`M24`) is the canonical live-region case: it appears
+in response to an action, it carries the one message in this app whose whole purpose is to
+stop a parent believing something untrue, and a parent who has just moved focus will not be
+looking at the top of the list where it lands. `Semantics(liveRegion: true)` is the
+annotation. It was **not** added, for two reasons worth keeping: it must not go on the
+shared `Notice`, because six of the seven uses are state-derived and would re-announce on
+every rebuild of the caveat strip — so it needs its own opt-in flag; and this entry's own
+history is a run of accessibility claims written from the code that turned out to be wrong
+at the widget. Shipping an announcement nobody has heard would be one more.
 
 ### M13 · The bottom inset is handled; the rest was not the problem
 

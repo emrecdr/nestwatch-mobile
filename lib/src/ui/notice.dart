@@ -34,12 +34,28 @@ class Notice extends StatelessWidget {
 
   final EdgeInsetsGeometry? margin;
 
+  /// Given when the notice is the parent's to clear rather than the state's.
+  ///
+  /// The other seven are derived: an expired certificate, an enforcer that stopped
+  /// reporting, rules switched off — each appears because something is true and goes when
+  /// it stops being true, so a close button would only argue with the next rebuild.
+  ///
+  /// One is not like that. `curfew_note` answers an action rather than describing a
+  /// state: it is the server's reply to *this* approval, there is no later payload that
+  /// withdraws it, and it must not be put where it can time out. Material's own guidance
+  /// is that a snackbar "shouldn't be the only way to access a core use case" and that a
+  /// message needing an action belongs in something that waits — and WCAG 2.2.1 is about
+  /// exactly this, since a parent using a screen reader may still be hearing the row when
+  /// a four-second bar has already gone. So it waits, and dismissing is the parent's.
+  final VoidCallback? onDismiss;
+
   const Notice(
     this.text, {
     super.key,
     this.tone = NoticeTone.plain,
     this.icon,
     this.margin,
+    this.onDismiss,
   });
 
   @override
@@ -57,6 +73,7 @@ class Notice extends StatelessWidget {
     };
 
     final body = Text(text, style: TextStyle(color: foreground));
+    final dismiss = onDismiss;
 
     return Container(
       margin: margin,
@@ -65,14 +82,30 @@ class Notice extends StatelessWidget {
         color: background,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: icon == null
+      child: icon == null && dismiss == null
           ? body
           : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: foreground),
-                const SizedBox(width: 10),
+                if (icon != null) ...[
+                  Icon(icon, color: foreground),
+                  const SizedBox(width: 10),
+                ],
                 Expanded(child: body),
+                if (dismiss != null) ...[
+                  const SizedBox(width: 4),
+                  // Sized to the text rather than to Material's default 48dp box, which
+                  // would push the words off-centre against a two-line notice. The
+                  // *target* is still 48dp — `IconButton` keeps its own — so this is a
+                  // layout constraint, not a smaller thing to hit.
+                  IconButton(
+                    onPressed: dismiss,
+                    icon: const Icon(Icons.close, size: 18),
+                    color: foreground,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Dismiss',
+                  ),
+                ],
               ],
             ),
     );

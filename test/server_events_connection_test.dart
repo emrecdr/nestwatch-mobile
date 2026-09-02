@@ -130,7 +130,7 @@ void main() {
           );
         },
         onChanged: (_) {},
-        onFatal: (e) => fatal = e,
+        onSessionLost: (e) => fatal = e,
       );
       events.start();
       async.flushMicrotasks();
@@ -147,7 +147,7 @@ void main() {
   test('a PC too old to have the endpoint is not asked again', () {
     fakeAsync((async) {
       var opens = 0;
-      Object? fatal;
+      Object? lost;
       final events = ServerEvents(
         open: () {
           opens++;
@@ -163,14 +163,27 @@ void main() {
           );
         },
         onChanged: (_) {},
-        onFatal: (e) => fatal = e,
+        onSessionLost: (e) => lost = e,
       );
       events.start();
       async.flushMicrotasks();
       expect(opens, 1);
-      expect(fatal, isA<NestwatchException>());
       async.elapse(const Duration(hours: 2));
       expect(opens, 1, reason: 'asked once, told no, stopped');
+
+      // **And the parent stays signed in.**
+      //
+      // This is the assertion the old shape could not make. `onFatal` fired for both
+      // permanent failures, the only caller wired it to `signOut()`, and so a 404 here
+      // signed the parent out of a PC that answers every other route correctly. Because
+      // `HomeScreen` re-mounts after the password is re-entered and starts the stream
+      // again, that was not one sign-out — it was a loop with nothing to end it.
+      expect(
+        lost,
+        isNull,
+        reason:
+            'a missing endpoint is not a lapsed session, and must not sign out',
+      );
     });
   });
 

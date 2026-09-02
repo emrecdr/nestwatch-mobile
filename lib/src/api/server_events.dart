@@ -142,8 +142,21 @@ class ServerEvents {
   /// [subjectsOf] — so `all` arrives as every subject rather than as a word to interpret.
   final void Function(String subject) onChanged;
 
-  /// Called when a lapsed session is seen, which reconnecting cannot fix.
-  final void Function(Object error)? onFatal;
+  /// Called when the **session** has lapsed, and only then.
+  ///
+  /// Named for the one thing it means, because the previous name did not. It was
+  /// `onFatal`, which is true of two different failures — a lapsed session and an
+  /// endpoint that will never exist — and the only caller wired it to `signOut()` with
+  /// the comment "a 401 here means what it means anywhere else". That comment is correct
+  /// about the 401 and silent about the 404, which took the same exit: a PC running a
+  /// nestwatch older than 0.4.0 answers 404 to `/api/events` forever, so the parent was
+  /// signed out of a working server, typed the password, and was signed out again on the
+  /// next mount. A loop with no state that ends it.
+  ///
+  /// The failure that is permanent for the *stream* is not therefore permanent for the
+  /// *session*, and a callback that cannot tell a caller which one happened invites
+  /// exactly that conflation. This one can only mean the session.
+  final void Function(Object error)? onSessionLost;
 
   static const Duration _firstBackoff = Duration(seconds: 1);
 
@@ -161,7 +174,11 @@ class ServerEvents {
   bool _wanted = false;
   bool _receiving = false;
 
-  ServerEvents({required this.open, required this.onChanged, this.onFatal});
+  ServerEvents({
+    required this.open,
+    required this.onChanged,
+    this.onSessionLost,
+  });
 
   /// Whether a stream is currently delivering. False while retrying, and false before the
   /// first connection — a screen that claims live updates it is not receiving is worse
@@ -196,12 +213,20 @@ class ServerEvents {
       },
       onError: (Object error) {
         _receiving = false;
-        // A lapsed session is not something another connection fixes. Handing it up
-        // rather than retrying stops this quietly hammering a PC that is answering 401
-        // perfectly correctly.
+        // Two failures another connection cannot fix, wanting two different answers.
+        //
+        // Both stop the stream: retrying either hammers a PC that is answering
+        // correctly. Only the lapsed session is handed up, because only that one is a
+        // fact about the parent's sign-in. A PC too old to have the endpoint is a PC
+        // this app works against on every other route — the 60 s poll underneath is
+        // precisely the backstop for a stream that is not there, and `ContractCheck` has
+        // already told the parent the two versions disagree. Signing them out over it
+        // took away an app that was working.
         if (error is NestwatchException && _isPermanent(error.failure)) {
           stop();
-          onFatal?.call(error);
+          if (error.failure == NestwatchFailure.sessionExpired) {
+            onSessionLost?.call(error);
+          }
           return;
         }
         _scheduleRetry();

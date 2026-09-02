@@ -55,20 +55,41 @@ enum ActionOutcome {
   failed,
 }
 
+/// What a tapped action did, and anything that PC said about it.
+///
+/// The outcome alone was not enough. `granted` was mapped to "say nothing", which is
+/// right for an ordinary grant and wrong for the one case where the server answers a
+/// successful approve with a reason the minutes will not be usable — see
+/// [Decision.curfewNote]. A notification the parent tapped is gone by the time this runs,
+/// so silence here is the parent walking away believing something that is not true, which
+/// is the exact failure the rest of this file was written to prevent.
+class ActionResult {
+  final ActionOutcome outcome;
+
+  /// `curfew_note` from the approve, when there was one. Always null for every outcome
+  /// but [ActionOutcome.granted] — nothing else got as far as a grant to have advice
+  /// about.
+  final String? curfewNote;
+
+  const ActionResult(this.outcome, {this.curfewNote});
+}
+
 /// Carry out a tapped action. Pure of plugin calls so it can be driven in a test.
-Future<ActionOutcome> performAction({
+Future<ActionResult> performAction({
   required String? actionId,
   required String? requestId,
   Future<BackgroundSession?> Function() open = openBackgroundSession,
   SeenRequestStore seen = const SecureSeenRequestStore(),
 }) async {
-  if (requestId == null || requestId.isEmpty) return ActionOutcome.failed;
+  if (requestId == null || requestId.isEmpty) {
+    return const ActionResult(ActionOutcome.failed);
+  }
   if (actionId != approveActionId && actionId != denyActionId) {
-    return ActionOutcome.failed;
+    return const ActionResult(ActionOutcome.failed);
   }
 
   final session = await open();
-  if (session == null) return ActionOutcome.notPaired;
+  if (session == null) return const ActionResult(ActionOutcome.notPaired);
 
   try {
     // Both return **false** rather than throwing when the request was already resolved:
@@ -80,13 +101,15 @@ Future<ActionOutcome> performAction({
     //
     // The race matters more here than in the app: two taps on a lock screen are easier
     // than two on a button, and the browser or another phone may have answered already.
-    final resolved = actionId == approveActionId
+    final decision = actionId == approveActionId
         ? await session.client.approveTimeRequest(requestId)
         : await session.client.denyTimeRequest(requestId);
-    if (!resolved) return ActionOutcome.alreadyResolved;
+    if (!decision.acted) {
+      return const ActionResult(ActionOutcome.alreadyResolved);
+    }
     return actionId == approveActionId
-        ? ActionOutcome.granted
-        : ActionOutcome.denied;
+        ? ActionResult(ActionOutcome.granted, curfewNote: decision.curfewNote)
+        : const ActionResult(ActionOutcome.denied);
   } on NestwatchException {
     // Unreachable, lapsed, refused — anything that means the change was not made.
     //
@@ -98,7 +121,7 @@ Future<ActionOutcome> performAction({
     // waiting — which is a worse silence than the one this whole feature was built to
     // remove.
     await forgetSeen(requestId, seen);
-    return ActionOutcome.failed;
+    return const ActionResult(ActionOutcome.failed);
   } finally {
     session.client.close();
   }
@@ -140,11 +163,38 @@ Future<void> _handleAndReport({
   required String? requestId,
 }) async {
   await initNotifications();
-  final outcome = await performAction(actionId: actionId, requestId: requestId);
-  final complaint = actionFailureMessage(outcome);
-  if (complaint != null) {
-    await notifyActionFailed(requestId ?? '', complaint);
+  final result = await performAction(actionId: actionId, requestId: requestId);
+  final report = answerReport(result);
+  if (report != null) {
+    await notifyAboutAnswer(
+      requestId ?? '',
+      title: report.title,
+      message: report.message,
+    );
   }
+}
+
+/// What to put in front of the parent about the answer they just gave, or null when the
+/// notification simply vanishing was the whole truth.
+///
+/// Two different things can need saying and only one of them is a failure, which is why
+/// this sits above [actionFailureMessage] rather than inside it. The grant that cannot
+/// beat bedtime **succeeded** — the minutes really were added — so reporting it under
+/// *"That did not go through"* would trade one false belief for another.
+///
+/// The note is passed through **verbatim**. nestwatch computes it against the clock its
+/// own enforcer uses, and a phone that rewrote it into its own words would be re-deriving
+/// the one thing it is not in a position to know.
+({String title, String message})? answerReport(ActionResult result) {
+  // Checked before the outcome, and safe to: `curfewNote` is only ever set alongside
+  // `granted`, which `actionFailureMessage` maps to silence.
+  final note = result.curfewNote;
+  if (note != null) {
+    return (title: 'Approved — bedtime still applies', message: note);
+  }
+  final complaint = actionFailureMessage(result.outcome);
+  if (complaint == null) return null;
+  return (title: 'That did not go through', message: complaint);
 }
 
 /// What to tell the parent, or null when the notification vanishing was the truth.
