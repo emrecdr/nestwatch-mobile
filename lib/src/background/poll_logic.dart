@@ -10,6 +10,7 @@ library;
 import '../api/models.dart';
 import '../api/nestwatch_api.dart';
 import 'seen_requests.dart';
+import 'sign_in_notice.dart';
 
 /// WorkManager's floor on Android. Anything smaller is clamped without complaint, so
 /// asking for less would be a promise the platform quietly declines to keep.
@@ -26,18 +27,42 @@ Future<void> pollOnce({
   required SeenRequestStore store,
   required Future<void> Function(List<TimeRequest>) notify,
   required Future<void> Function(String id) cancel,
+  required SignInNotice signInNotice,
 }) async {
   final List<TimeRequest> pending;
   try {
     pending = await client.timeRequests();
-  } on NestwatchException {
-    // A lapsed session or an unreachable PC is ordinary in the background: the phone may
-    // simply be away from home, where `require_lan_peer` answers 403 before any auth
-    // work. Nothing is shown for it — a notification saying "could not reach the PC"
-    // every fifteen minutes while a parent is at work would be worse than silence, and
-    // §5 is clear that a 401 means re-prompt for the password at next launch, not now.
+  } on NestwatchException catch (e) {
+    // **An unreachable PC stays silent; a lapsed sign-in does not.** This used to treat
+    // them alike, under a comment that named them as two things and then justified the
+    // silence with only one of them: "the phone may simply be away from home, where
+    // `require_lan_peer` answers 403 before any auth work", and a notice about that every
+    // fifteen minutes while a parent is at work is worse than saying nothing. That is
+    // still true, and is still what happens for every failure but one.
+    //
+    // It was safe to fold the lapsed session in with it only because, until nestwatch
+    // 0.7.0, a session being polled every fifteen minutes could not lapse: the idle
+    // window slid forward on each request, so an installed app refreshed its own session
+    // indefinitely and this branch was reached almost only by the transient case.
+    //
+    // 0.7.0 added `SESSION_MAX_DAYS`, an absolute ceiling measured from `first_seen` that
+    // activity does not move. So every paired phone now loses its session exactly one
+    // month after pairing, guaranteed, and the old behaviour was to answer that by
+    // returning quietly — no notification, nothing on any screen, and the parent's first
+    // symptom is that their child's requests stopped arriving. Silence is indistinguishable
+    // from "nobody asked", which is the one wrong answer this app must never give.
+    //
+    // Only `sessionExpired`. `unreachable`, a LAN refusal and `notPermitted` all keep the
+    // old silence: the first two are transient and self-healing, and the third is answered
+    // on screen by `scopeRefusal` at pairing time, not by a notification at 3am.
+    if (e.failure == NestwatchFailure.sessionExpired) {
+      await signInNotice.raise();
+    }
     return;
   }
+
+  // The session answered, so a notice about it has stopped being true.
+  await signInNotice.lower();
 
   final seen = await store.load();
   final diff = diffPending(pending.map((r) => r.id), seen);

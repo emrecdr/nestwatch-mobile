@@ -546,6 +546,62 @@ echo "killed=$killed survived=$survived anchors-missing=$broken"
 # This is the same 0/1/2 the other checkers here use: 2 means "could not check", which is
 # exactly what a stale anchor is. Both are non-zero, so CI reds either way; the difference
 # is for whoever reads the status and has to decide which thing to go fix.
+# --- nestwatch 0.7.0: the absolute session cap ---------------------------------------
+#
+# 0.7.0 added `SESSION_MAX_DAYS`, a ceiling measured from `first_seen` that activity does
+# not move -- so every paired phone loses its session exactly one month after pairing.
+# Before it, a polled session slid its own expiry forward and effectively never lapsed,
+# which is why folding "lapsed" in with "away from home" and staying silent was survivable.
+# These four hold the parts of that fix a comment would otherwise be arguing alone.
+
+# The discrimination inverts: an away-from-home phone raises the alarm four times an hour,
+# and a session that has actually ended says nothing. Both directions wrong at once.
+mutate "session: a transient failure alarms and a real lapse stays silent" \
+  lib/src/background/poll_logic.dart \
+  '    if (e.failure == NestwatchFailure.sessionExpired) {' \
+  '    if (e.failure != NestwatchFailure.sessionExpired) {'
+
+# The latch stops latching, so a lapse that lasts a week is 672 notifications.
+mutate "session: the parent is re-told every fifteen minutes" \
+  lib/src/background/sign_in_notice.dart \
+  '    if (await store.announced()) return;' \
+  '    if (false) return;'
+
+# Recorded before announced. A notification that then fails to post is marked as sent,
+# permanently, and the background isolate reports success either way -- so the parent is
+# never told and nothing anywhere says so.
+mutate "session: the notice is recorded as sent before it is sent" \
+  lib/src/background/sign_in_notice.dart \
+  '    await announce();
+    await store.markAnnounced();' \
+  '    await store.markAnnounced();
+    await announce();'
+
+# Cleared before withdrawn, so a failed withdrawal strands a notice on screen with the
+# flag already re-armed and nothing left that knows to remove it.
+mutate "session: the notice is re-armed before it is taken down" \
+  lib/src/background/sign_in_notice.dart \
+  '    await withdraw();
+    await store.clear();' \
+  '    await store.clear();
+    await withdraw();'
+
+# --- nestwatch 0.7.0: what this phone calls itself ------------------------------------
+
+# The id moves into the range `request.id.hashCode` occupies, where a pending request and
+# the "sign in again" notice can silently replace one another.
+mutate "session: the notice id can collide with a request id" \
+  lib/src/background/notifications.dart \
+  'const int signInNoticeId = -1;' \
+  'const int signInNoticeId = 1;'
+
+# The app stops naming itself, so the *Signed-in devices* card shows a row a parent cannot
+# recognise -- next to the button that signs that device out.
+mutate "identity: the user agent stops naming this app" \
+  lib/src/api/client_identity.dart \
+  "    'nestwatch-mobile/\$appVersion (\$operatingSystem)';" \
+  "    'Dart/3.12 (dart:io)';"
+
 summary
 
 if [ "$survived" -ne 0 ]; then

@@ -22,6 +22,8 @@ import 'dart:io';
 import '../api/nestwatch_api.dart';
 import '../pairing/secure_identity_store.dart';
 import 'secure_seen_requests.dart';
+import 'secure_sign_in_notice.dart';
+import 'sign_in_notice.dart';
 import '../pairing/server_identity.dart';
 import '../pairing/session_store.dart';
 import '../pinning/pinned_http_overrides.dart';
@@ -99,6 +101,11 @@ Future<bool> pollPairedServer() async {
       store: const SecureSeenRequestStore(),
       notify: notifyTimeRequests,
       cancel: cancelForRequest,
+      signInNotice: const SignInNotice(
+        store: SecureSignInNotice(),
+        announce: notifySignInNeeded,
+        withdraw: cancelSignInNeeded,
+      ),
     );
     return true;
   } finally {

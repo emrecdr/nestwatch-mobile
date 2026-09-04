@@ -16,6 +16,28 @@ const _channelName = 'Time requests';
 const _channelDescription =
     'Tells you when your child asks for more screen time.';
 
+/// A **second channel**, so that muting one does not mute the other.
+///
+/// Android lets a parent turn off a channel without turning off the app. Someone who
+/// silences *Time requests* — reasonably, during a work day — must still be reachable
+/// when this phone stops being able to see them at all, because that notice is the only
+/// thing standing between them and a silence they would read as "no requests".
+const _signInChannelId = 'nestwatch.sign_in';
+const _signInChannelName = 'Sign-in';
+const _signInChannelDescription =
+    'Tells you when this phone needs you to sign in to your PC again.';
+
+/// The id [notifySignInNeeded] posts under.
+///
+/// **Negative on purpose.** Every other notification here is posted under
+/// `request.id.hashCode`, and a fixed positive constant could in principle be some
+/// request id's hash — in which case a lapsed session would silently replace a pending
+/// request, or the reverse. `String.hashCode` on this VM is never negative (checked over
+/// 400k random strings and over the shapes a real request id takes; the lowest seen was
+/// 1), so a negative id cannot collide with one. `test/notifications_id_test.dart`
+/// holds that property, because it is an assumption about someone else's hash function.
+const int signInNoticeId = -1;
+
 final FlutterLocalNotificationsPlugin _plugin =
     FlutterLocalNotificationsPlugin();
 
@@ -162,3 +184,61 @@ Future<void> notifyAboutAnswer(
     notificationDetails: details,
   );
 }
+
+/// Tell the parent this phone can no longer reach their PC on their behalf.
+///
+/// Posted by the background poll when a round comes back `sessionExpired`, and **only**
+/// through [SignInNoticeStore], which is what stops it being posted every fifteen
+/// minutes. See `poll_logic.dart` for why that case is separated from the ordinary
+/// away-from-home failure, which stays silent.
+///
+/// ## What it says, and what it carefully does not
+///
+/// It does not say "expired". Since nestwatch 0.7.0 a 401 has four causes — the sliding
+/// idle window, the new absolute one-month cap, a session revoked from the parent's
+/// *Signed-in devices* card, and a pre-0.6.0 session refused for carrying no scope — and
+/// they are indistinguishable on the wire, all four arriving as a bare 401. "Expired" is
+/// false for the revoked one, and a parent who has just signed this phone out from their
+/// dashboard being told its sign-in "expired" is being told something they know is wrong.
+/// *Ended* is true of all four, and the remedy is the same for all four.
+///
+/// It leads with the consequence rather than the cause, because the consequence is the
+/// part a parent cannot see for themselves: notifications stopping looks exactly like
+/// nobody asking.
+///
+/// No action buttons. A body tap opens the app, which is where the password is typed —
+/// and `onNotificationAction` ignores everything that is not an action tap, so this
+/// cannot be misread as answering a request.
+Future<void> notifySignInNeeded() async {
+  await initNotifications();
+  await _plugin.show(
+    id: signInNoticeId,
+    // No payload: there is no request this belongs to, and `_handleAndReport` would
+    // take a non-null one as an id to answer.
+    title: 'Sign in to nestwatch again',
+    body:
+        'This phone\'s sign-in has ended, so it can no longer tell you when your '
+        'child asks for more screen time. Open nestwatch to sign in.',
+    notificationDetails: const NotificationDetails(
+      iOS: DarwinNotificationDetails(),
+      android: AndroidNotificationDetails(
+        _signInChannelId,
+        _signInChannelName,
+        channelDescription: _signInChannelDescription,
+        importance: Importance.high,
+        priority: Priority.high,
+        // Dismissable: a parent who has seen it and cannot act right now should be able
+        // to clear it. The store, not the notification, is what remembers.
+        autoCancel: true,
+        // Belt and braces with [SignInNoticeStore]. If a re-post ever does happen —
+        // a store that failed to write, a reinstall — it updates in place in silence
+        // rather than sounding again.
+        onlyAlertOnce: true,
+      ),
+    ),
+  );
+}
+
+/// Take it down. Called when a poll succeeds again, so the notice does not outlive the
+/// problem it describes.
+Future<void> cancelSignInNeeded() => _plugin.cancel(id: signInNoticeId);

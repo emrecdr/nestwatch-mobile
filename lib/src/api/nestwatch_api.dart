@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'client_identity.dart';
 import 'models.dart';
 import 'reachability.dart';
 import 'server_events.dart';
@@ -290,6 +291,11 @@ class NestwatchClient {
   bool get hasSession => _cookie != null;
 
   HttpClient get _client => _http ??= HttpClient()
+    // Read once by `auth::remember_device`, at login and at pairing, and shown to a
+    // parent in nestwatch 0.7.0's *Signed-in devices* card next to that row's Sign out
+    // button. Left unset, `dart:io` sends `Dart/<sdk> (dart:io)` and the row names no
+    // product. See client_identity.dart.
+    ..userAgent = clientUserAgent
     ..connectionTimeout = timeout
     // The dashboard opens one connection and keeps it; matching that keeps a phone from
     // holding sockets open against a PC that is also serving a browser.

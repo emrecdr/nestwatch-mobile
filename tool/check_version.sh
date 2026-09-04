@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Do the version numbers agree with each other?
 #
-# Four places can disagree: `pubspec.yaml`, `CHANGELOG.md`, the git tag, and -- separately
-# and for a different reason -- `ContractCheck.testedAgainst`. See docs/VERSIONING.md.
+# Five places can disagree: `pubspec.yaml`, `CHANGELOG.md`, the git tag, the version this
+# app announces to that PC in `client_identity.dart`, and -- separately and for a different
+# reason -- `ContractCheck.testedAgainst`. See docs/VERSIONING.md.
 #
 # Like the other checkers here, this has three outcomes rather than two. Asked about a tag
 # on a checkout that has none, it says so and exits 2 instead of reporting a pass: "no tag
@@ -71,6 +72,26 @@ if [ -z "$tag" ]; then
   say "tag" "this commit is not tagged — nothing to compare (not a pass)"
 else
   agree "tag" "v$name" "$tag" "tagged $tag but pubspec says $name"
+fi
+
+# --- the version this app announces to that PC ---------------------------------------
+# `lib/src/api/client_identity.dart` writes the app version out rather than reading
+# `pubspec.yaml`, because reading the real one needs `package_info_plus` and that string
+# is not worth a dependency. The cost is a fifth place that can disagree, and this script
+# is where the other four are already held to each other.
+#
+# It is not cosmetic. That string is stored on the session by `auth::remember_device` and
+# shown to a parent in nestwatch's *Signed-in devices* card, beside the button that signs
+# that device out. A stale version there names the wrong build of the app on the row
+# somebody is deciding whether to revoke.
+announced=$(sed -n "s/^const String appVersion = '\([^']*\)';.*/\1/p" \
+  lib/src/api/client_identity.dart | head -1)
+if [ -z "$announced" ]; then
+  say UNREADABLE "could not read appVersion from lib/src/api/client_identity.dart"
+  status=1
+else
+  agree "user-agent" "$name" "$announced" \
+    "client_identity.dart announces $announced, pubspec says $name"
 fi
 
 # --- the contract version, which is NOT the app's ------------------------------------

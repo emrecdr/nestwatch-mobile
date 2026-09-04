@@ -24,6 +24,7 @@ import 'dart:isolate';
 import 'package:nestwatch_mobile/src/api/models.dart';
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/background/poll_logic.dart';
+import 'package:nestwatch_mobile/src/background/sign_in_notice.dart';
 import 'package:nestwatch_mobile/src/background/seen_requests.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
@@ -105,6 +106,7 @@ Future<void> main(List<String> argv) async {
     store: store,
     notify: (r) async => notified.add(r),
     cancel: (id) async => cancelled.add(id),
+    signInNotice: SignInNotice.recording(),
   );
 
   await poll();
@@ -152,6 +154,7 @@ Future<void> main(List<String> argv) async {
     store: grew,
     notify: (_) async {},
     cancel: (_) async {},
+    signInNotice: SignInNotice.recording(),
   );
   check(
     !(await grew.load()).contains('old-1'),
@@ -169,6 +172,7 @@ Future<void> main(List<String> argv) async {
     store: InMemorySeenRequestStore(),
     notify: (r) async => notified.add(r),
     cancel: (_) async {},
+    signInNotice: SignInNotice.recording(),
   );
   check(
     notified.length == before,

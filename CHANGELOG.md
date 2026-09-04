@@ -49,7 +49,41 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   did, never what anyone meant by it. A family that genuinely crossed a time zone produces
   the same counts as a clock moved on purpose, and nothing here pretends to tell them apart.
 
+- **This phone now says which app it is, so it can be told apart before it is signed out.**
+  nestwatch 0.7.0 added a *Signed-in devices* card: every session the PC holds, each with
+  its own Sign out. It fills each row from the `User-Agent` of the request that signed in,
+  read once at pairing. This app sent none, so `dart:io` supplied `Dart/3.12 (dart:io)` —
+  captured off the wire rather than read off the SDK — and the row named no product, said
+  nothing about a phone, and *changed identity* whenever the app was rebuilt against a
+  newer Dart. It now announces `nestwatch-mobile/<version> (android|ios)`, and
+  `tool/check_version.sh` holds that version to `pubspec.yaml` so the row cannot name a
+  build this is not. Their release notes say why it matters: revoking the wrong device is
+  the mistake worth guarding against.
+
 ### Fixed
+
+- **Signing in now ends on a fixed date, and this app used to meet that in silence.**
+  nestwatch 0.7.0 added `SESSION_MAX_DAYS`: a ceiling measured from when a device signed
+  in, which activity does not move. Before it, the 30-day window slid forward on every
+  request, so a phone polling every fifteen minutes refreshed its own session indefinitely
+  and a lapsed sign-in in the background was very nearly impossible. It is now certain, for
+  every paired phone, one month after pairing.
+  <br>The background poll answered any failure by returning quietly, under a comment that
+  named two cases and justified the silence with only one of them — an unreachable PC,
+  which is transient, self-heals, and would be worse as a notification every fifteen
+  minutes while a parent is at work. That reasoning was right about that case and was
+  covering a second one it did not describe. So on day thirty the notifications would have
+  stopped, with nothing on any screen and nothing in any log, and the parent's first
+  symptom would have been their child's requests no longer arriving — indistinguishable
+  from nobody asking, which is the one wrong answer this app must never give.
+  <br>A lapsed sign-in now posts a notice, on **its own channel** so that muting time
+  requests does not mute it, **once** rather than every round, and it is withdrawn as soon
+  as a poll succeeds again. An unreachable PC and a phone off the LAN keep the old silence.
+  It says the sign-in has *ended* rather than *expired*, because since 0.7.0 a 401 has four
+  causes — the idle window, the new ceiling, a device revoked from that card, and a
+  pre-0.6.0 session refused for carrying no scope — and they are indistinguishable on the
+  wire. "Expired" is false for the revoked one, and a parent who has just signed this phone
+  out themselves should not be told something they know is wrong.
 
 - **A PC running a nestwatch older than 0.4.0 signed the parent out, in a loop.**
   `/api/events` arrived in 0.4.0, so an older PC answers 404 forever. `ServerEvents`
