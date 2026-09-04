@@ -197,6 +197,22 @@ class PairingController {
     return session;
   }
 
+  /// Become connected, unless this pairing is not the kind this app can use.
+  ///
+  /// Every path that reaches [PairingConnected] goes through here — the QR redemption, the
+  /// password login, and the restore at launch. Three call sites checking this themselves
+  /// would be three places to forget it, and the one most likely to be forgotten is
+  /// `restoreSession`, where the wrong pairing arrives already stored and is never scanned
+  /// again.
+  void _connect(ServerIdentity identity, SessionInfo session) {
+    final refusal = scopeRefusal(session: session);
+    if (refusal != null) {
+      _emit(PairingFailed(refusal));
+      return;
+    }
+    _emit(PairingConnected(identity, session));
+  }
+
   void _emit(PairingState next) {
     _state = next;
     notifyListeners();
@@ -286,7 +302,7 @@ class PairingController {
     try {
       final session = await _probe(client);
       if (session.authenticated) {
-        _emit(PairingConnected(stored, session));
+        _connect(stored, session);
       } else {
         // The certificate is still trusted; only the session went. §5: prompt for the
         // password, do not re-pair.
@@ -458,7 +474,7 @@ class PairingController {
     final identity = await _persistIdentity(invite, fingerprint, provenance);
 
     if (session.authenticated) {
-      _emit(PairingConnected(identity, session));
+      _connect(identity, session);
       return;
     }
 
@@ -494,7 +510,7 @@ class PairingController {
         _emit(const PairingFailed('Signed in, but no paired PC is on record.'));
         return;
       }
-      _emit(PairingConnected(identity, session));
+      _connect(identity, session);
     } on NestwatchException catch (e) {
       final reason = switch (e.failure) {
         NestwatchFailure.badPassword => PasswordPrompt.wrongPassword,
@@ -575,4 +591,45 @@ class PairingController {
     _current = identity;
     return identity;
   }
+}
+
+/// Why a pairing cannot drive this app, or null when it can.
+///
+/// Pure, and top-level for the reason `screen_load.dart` gives about its own extraction:
+/// the decision lives on a path that needs a signed-in client and a live PC to reach, so
+/// left as a method it could only ever have been checked by a harness against a real
+/// server. Out here a plain test can hold it to every branch.
+///
+/// **Only asked of a server that reports scopes at all**, and that is read from the
+/// payload rather than inferred. A build older than 0.6.0 sends no `scope` key, so every
+/// session there would parse as null — and refusing those would lock this app out of every
+/// PC that has not upgraded, over a field they never claimed to send.
+///
+/// This asked `ContractCheck` whether that PC was *older* instead, which reconstructs from
+/// a version string a fact the server already states by sending the key or not. The
+/// mutation audit is what said so: widening that exemption from `serverOlder` to
+/// "anything but agreed" **survived**, because nothing distinguished a PC merely newer
+/// from one behind. [SessionInfo.reportsScopes] is the exact signal, and nestwatch
+/// documents making it answerable on purpose.
+///
+/// On a server that *does* report them, a null scope beside an authenticated session means
+/// a session minted before scopes existed, which `require_auth` refuses outright — so it is
+/// refused here too rather than read as permission. **Absence is not consent.**
+String? scopeRefusal({required SessionInfo session}) {
+  if (!session.authenticated) return null;
+  if (!session.reportsScopes) return null;
+  final scope = session.scope;
+  if (scope == null) {
+    // Present-and-null is distinguishable from absent only by the field being there,
+    // which is exactly the distinction nestwatch documents on `auth::me`.
+    return 'That sign-in is older than this PC\'s current rules and can no longer be '
+        'used. Pair again with a fresh code from `nestwatch pair` on that PC.';
+  }
+  if (scope.isDashboard) return null;
+  return 'That pairing code was not the parent one.\n\n'
+      'Both codes look identical, so this is easy to do — the difference is recorded on '
+      'that PC, not in the code itself. The one this app needs comes from '
+      '`nestwatch pair`. The code that was scanned belongs to an integration, an app that '
+      'pushes earned time, and it is allowed to do only that.\n\n'
+      'Run `nestwatch pair` on that PC and scan the code it prints.';
 }

@@ -37,10 +37,21 @@ void main() {
   /// When true, `/api/screenshot` answers as `AppError::Control` does.
   var captureFails = false;
 
-  /// When true, every path answers 403 — what `require_lan_peer` does to a phone that
-  /// has stopped looking like it is on the LAN. It gates the whole server, not one
-  /// route, so the stub refuses everything.
+  /// When true, every path answers 403 with an **empty body** — what `require_lan_peer`
+  /// does to a phone that has stopped looking like it is on the LAN. It gates the whole
+  /// server, not one route, so the stub refuses everything.
+  ///
+  /// The empty body is the load-bearing half: `security::require_lan_peer` returns a bare
+  /// `StatusCode::FORBIDDEN`, where the scope gate returns `AppError::Forbidden` and so
+  /// carries `{"error": ...}`. That difference is the only thing telling the two 403s
+  /// apart on the wire.
   var lanRefused = false;
+
+  /// When set, every path answers 403 carrying this in `{"error": ...}` — what the scope
+  /// gate does to an integration pairing reaching for a route it may not have.
+  ///
+  /// Copied from `auth::require_auth` in the pushed 0.6.0, not paraphrased.
+  String? scopeRefused;
 
   /// What the stub reports in `X-Shot-Tier`. `null` stands in for a server predating
   /// the header.
@@ -73,6 +84,7 @@ void main() {
     seen.clear();
     captureFails = false;
     lanRefused = false;
+    scopeRefused = null;
     servedTier = 'preview';
     curfewNote = null;
     alreadyResolved = false;
@@ -89,10 +101,19 @@ void main() {
       seen.add(request);
       final response = request.response;
       if (lanRefused) {
-        // Before auth, before routing: require_lan_peer is a layer, not a handler.
+        // Before auth, before routing: require_lan_peer is a layer, not a handler. And it
+        // writes **nothing** -- it is `Err(StatusCode::FORBIDDEN)`, with no `AppError` and
+        // so no body. The stub used to answer `{"error":"forbidden"}` here, which no
+        // nestwatch has ever sent, and which would now be read as a scope refusal.
+        response.statusCode = HttpStatus.forbidden;
+        await response.close();
+        return;
+      }
+      if (scopeRefused case final said?) {
+        // What `AppError::Forbidden` serialises to: the status, plus the reason.
         response
           ..statusCode = HttpStatus.forbidden
-          ..write('{"error":"forbidden"}');
+          ..write('{"error":${jsonEncode(said)}}');
         await response.close();
         return;
       }
@@ -357,6 +378,68 @@ void main() {
       final decision = await client.denyTimeRequest('r1');
       expect(decision.acted, isTrue);
       expect(decision.curfewNote, isNull);
+    });
+  });
+
+  group('the other 403, which is not about the network at all', () {
+    // An integration pairing may reach `POST /api/extra-time` and `GET /api/usage/today`,
+    // and gets 403 for everything else. Every 403 in this app used to be reported as
+    // "turn off your VPN" -- so a parent who scanned the wrong QR (the two are
+    // byte-identical in form) would have seen Today working normally beside three tabs
+    // blaming a VPN that was never on, and no amount of turning it off would have helped.
+    const said =
+        'this pairing may push earned time and read today\'s total, nothing else';
+
+    test('is told apart by its body, and names the real remedy', () async {
+      scopeRefused = said;
+      await expectLater(
+        client.timeRequests(),
+        throwsA(
+          isA<NestwatchException>()
+              .having(
+                (e) => e.failure,
+                'failure',
+                NestwatchFailure.notPermitted,
+              )
+              .having((e) => e.message, 'message', contains('nestwatch pair'))
+              .having((e) => e.message, 'message', contains(said)),
+        ),
+      );
+    });
+
+    test(
+      'and says nothing about the network, which is not the problem',
+      () async {
+        scopeRefused = said;
+        try {
+          await client.timeRequests();
+          fail('expected a refusal');
+        } on NestwatchException catch (e) {
+          expect(
+            e.message.toLowerCase(),
+            isNot(contains('vpn')),
+            reason:
+                'the old code sent every parent here to check a VPN setting',
+          );
+          expect(e.message.toLowerCase(), isNot(contains('home network')));
+        }
+      },
+    );
+
+    test('the empty-bodied 403 still reads as the LAN gate', () async {
+      // The control, and the reason the stub's body shape had to be corrected: with both
+      // 403s answering `{"error": ...}`, this pair could not be distinguished at all.
+      lanRefused = true;
+      await expectLater(
+        client.timeRequests(),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.notOnLan,
+          ),
+        ),
+      );
     });
   });
 

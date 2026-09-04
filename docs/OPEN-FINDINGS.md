@@ -125,6 +125,74 @@ and this app now depends on that field: `curfew_note` is still produced at both 
 in the pushed `src/api.rs` — the approve handler and `extra-time`. The `Decision` reader is
 safe, and it is now pinned on their side as well as tested on this one.
 
+### M26 · A version number stood in for a fact the server states outright
+
+**Fixed; kept because the *way* it was found is the reusable part.** The scope gate's
+exemption for old servers first keyed on `ContractCheck.serverOlder` — if that PC is behind,
+excuse a missing `scope`. It reads fine, it passed seven tests, and it was wrong in a way
+no test noticed.
+
+The mutation audit found it. Widening the exemption from `serverOlder` to "anything but
+`agreed`" **survived**, because every test in the file happened to use an *agreed* version
+or an *older* one; nothing distinguished a PC that is merely newer, or one whose version
+this app cannot parse. One test was even named *"and a newer PC sending nothing recognisable
+is still refused"* and passed `testedAgainst`, which is `agreed`. The name claimed a case the
+input never exercised.
+
+**The deeper fault was upstream of the test.** nestwatch sends `scope` on every answer from
+0.6.0 — an object or an explicit null — and documents making absence answerable on purpose:
+*"a client can tell 'this build has no scopes' (field absent) from 'your session predates
+them' (field present, null) — the second needs re-pairing and the first does not."*
+`SessionInfo` parsed only the value, collapsing the two, and then reconstructed the
+difference by inferring from a version string. A proxy for a fact already stated.
+
+`reportsScopes` now reads `json.containsKey('scope')`, the gate consults that, and
+`ContractCheck` is out of it entirely. Two mutations cover it — swapping the two meanings,
+and collapsing presence back into value — and both were watched to die.
+
+**The general shape, which is what makes this worth an entry.** A test whose *name* is
+broader than its *input* passes for the wrong reason and reads as coverage forever after.
+Nothing in a green suite can find that; the audit found it by changing the code until a
+claim stopped being defended. It is the same failure this repo has recorded twice before —
+`docs/OPEN-FINDINGS.md` M18 for a scanner that could not match its own needle, and the
+`_curfewNote` test that built its object by hand and never went through `fromJson`.
+
+### M25 · The contract moved four hours after CI last saw it, and nothing was watching
+
+Not a defect — a note about the shape of the gap, because it will happen again.
+
+`GET /session` gained `scope` at **23:42 on 2026-09-02**. The last CI run on this repo was
+`fa8b3f4` at **19:19** the same evening. So the goldens were correct when they were last
+checked and stale four hours later, and this repo had no way to know: the contract job runs
+**on push**, and there was nothing to push. A `schedule:` trigger would have caught it
+overnight; nothing else in the current setup can.
+
+**Found by the other side telling us.** The nestwatch session sent a message saying the
+session goldens were stale. That is a channel, and it worked — but it depends on somebody
+over there noticing and choosing to write, which is precisely the property
+`tool/check_golden.sh` exists to not depend on. The claim was verified here before it was
+acted on (`git archive origin/main`, then the gate), and it was correct.
+
+**Worth deciding, not urgent.** A nightly `schedule:` on the contract job would turn "we
+find out when we next push" into "we find out by morning". The cost is a daily run against
+a public repo and a red badge on a day nobody touched this one, which is a real cost for a
+repo with no release cadence — a red badge that means "the other side moved" reads exactly
+like a red badge that means "you broke it", and the whole value of this gate is that its
+failures are legible.
+
+**`check_findings.sh` has the same property as `check_golden.sh`, and it showed on the same
+day.** Run against `../nestwatch` on 2026-09-04 it reported `O10` and `O34` dangling; run
+against `git archive origin/main` it reported everything resolving. Both true — those ids
+live only in that checkout's *uncommitted* file, another session's work in progress. So the
+sentence `M20` records about the golden checker holds here word for word: it answers about
+whichever tree you point it at, and `NESTWATCH_REPO` defaults to a working tree.
+
+Unlike `check_golden.sh`, this one has **no unpushed-tree warning**. It is a smaller risk —
+a dangling reference is already documented as a notification rather than an error, and
+nothing gets vendored on the strength of it — but the two scripts giving different amounts
+of help about the same trap is the kind of asymmetry that gets rediscovered rather than
+remembered.
+
 ### M23 · Nothing survives leaving the house, and the obvious fix is a privacy change
 
 Screen data lives in `PolledScreenState.data` and nowhere else. Measured 2026-09-02:

@@ -74,6 +74,7 @@ PY
   if [ $? -ne 0 ]; then
     printf '  %-52s ANCHOR MISSING\n' "$name"
     broken=$((broken + 1))
+    verdicts+=("  ANCHOR MISSING $name")
     return
   fi
 
@@ -98,9 +99,31 @@ PY
   then printf '  %-52s NO-OP (hit a comment)\n' "$name"; return; fi
   if flutter test >/dev/null 2>&1; then
     printf '  %-52s SURVIVED\n' "$name"; survived=$((survived+1))
+    verdicts+=("  SURVIVED       $name")
   else
     printf '  %-52s killed\n' "$name"; killed=$((killed+1))
   fi
+}
+
+# Print the verdict lines LAST as well as inline, so a caller that pipes this through
+# `tail` still sees which mutation survived.
+#
+# Not hypothetical. On 2026-09-04 a run reported `survived=1` through `tail -8`, and the
+# name of the survivor had scrolled past -- so identifying it meant re-running four
+# mutations by hand. The obvious fix, piping through `grep -E "SURVIVED|killed="`, is worse
+# here than it looks: this machine rewrites a bare top-level `grep`, which turned a whole
+# audit's output into `error: unknown option '-G'`. A summary the script prints itself
+# needs no filter at the call site.
+declare -a verdicts=()
+
+summary() {
+  # `${verdicts[@]}` on an empty array is an *unbound variable* under `set -u` on bash 3.2,
+  # which is what macOS ships -- so the expansion is guarded rather than the caller trusted
+  # to only reach it when something was recorded.
+  [ "${#verdicts[@]}" -eq 0 ] && return
+  echo
+  echo "Not clean — the lines that matter, repeated so a truncated view still has them:"
+  printf '%s\n' "${verdicts[@]}"
 }
 
 echo "Mutation audit — does 'flutter test' defend what the comments claim?"
@@ -212,6 +235,44 @@ mutate "screenshot: the spoken label drops the time the frame was taken" \
   lib/src/ui/frame_label.dart \
   "    : 'A picture of the screen on that PC, taken at \${frameClock(frameAt)}.';" \
   "    : 'A picture of the screen on that PC.';"
+
+# An unknown scope kind is read as permission. Fails OPEN, which is the direction that
+# matters: a nestwatch inventing a third kind would be trusted by an app that predates it.
+mutate "scope: a kind this build cannot name is accepted anyway" \
+  lib/src/api/nestwatch_api.dart \
+  "    {'kind': _} => unrecognised," \
+  "    {'kind': _} => dashboard,"
+
+# Re-anchored 2026-09-04. The first version of this keyed the exemption on
+# `ContractCheck.serverOlder` and **survived** -- no test distinguished a PC merely newer
+# from one behind, because the version was a proxy for a fact the server states outright.
+# The fix reads the key's presence; this now inverts that, so a pre-0.6.0 PC is refused and
+# a lapsed session is accepted -- both directions wrong at once.
+mutate "scope: absent and present-and-null swap meanings" \
+  lib/src/pairing/pairing_controller.dart \
+  '  if (!session.reportsScopes) return null;' \
+  '  if (session.reportsScopes) return null;'
+
+# Presence collapses into value, which is the defect the audit found: the two answers
+# nestwatch deliberately made distinguishable become one again.
+mutate "scope: a missing key reads the same as an explicit null" \
+  lib/src/api/nestwatch_api.dart \
+  "    reportsScopes: json.containsKey('scope')," \
+  "    reportsScopes: json['scope'] != null,"
+
+# The gate stops rejecting anything: every pairing drives the app, including the
+# integration one that can only reach two routes.
+mutate "scope: an integration pairing is allowed to drive the app" \
+  lib/src/pairing/pairing_controller.dart \
+  '  if (scope.isDashboard) return null;' \
+  '  if (!scope.isDashboard) return null;'
+
+# The 403 body is ignored again, so a scope refusal is reported as a VPN problem -- one
+# working tab beside three blaming the network.
+mutate "403: the pairing refusal is reported as a network problem" \
+  lib/src/api/nestwatch_api.dart \
+  '      if (said.isNotEmpty) {' \
+  '      if (said.isEmpty) {'
 
 # The clock loses its padding, so 09:05:03 becomes 9:5:3 -- read aloud as "nine five three"
 # rather than a time, and shown that way to everyone else too.
@@ -485,6 +546,8 @@ echo "killed=$killed survived=$survived anchors-missing=$broken"
 # This is the same 0/1/2 the other checkers here use: 2 means "could not check", which is
 # exactly what a stale anchor is. Both are non-zero, so CI reds either way; the difference
 # is for whoever reads the status and has to decide which thing to go fix.
+summary
+
 if [ "$survived" -ne 0 ]; then
   echo
   echo "$survived mutation(s) SURVIVED — a comment argues for something no test defends."

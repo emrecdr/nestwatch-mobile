@@ -60,6 +60,30 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   route correctly. The callback is now `onSessionLost` and fires only for a lapsed
   session; a missing endpoint stops the stream and leaves the 60-second poll — which
   exists for exactly this — carrying the screens.
+- **Scanning the wrong QR code produced one working tab and three blaming a VPN.** nestwatch
+  0.6.0 can mint two kinds of pairing — the parent's, and a bounded one for an integration
+  that pushes earned time — and the two links are *byte-identical in form*, because the
+  scope is recorded on that PC and never in the URL. Handed the integration one, this app
+  paired successfully and then came apart pointing at the wrong thing: an integration
+  session may reach `GET /api/usage/today`, so Today showed real figures, while Requests,
+  Screen and Codes each got a 403 that this app reported as "turn off your VPN". Turning it
+  off would never have helped, and nothing on screen mentioned pairing.
+  <br>`GET /session` now reports `scope`, so the app reads it and refuses at pairing time
+  with the actual remedy — run `nestwatch pair` and scan that code instead. Every path that
+  reaches a connected state passes through one gate rather than three copies of a check,
+  because the path most likely to be forgotten is the restore at launch, where the wrong
+  pairing arrives already stored and is never scanned again.
+  <br>Unrecognised kinds and an explicit-null scope are refused too: on a server that
+  reports scopes, silence is a session minted before they existed, which that PC refuses
+  anyway. A server too old to send the field at all is exempt — refusing there would lock
+  the app out of every PC that has not upgraded, over a field it never claimed to send, and
+  `ContractCheck` already says that PC is behind.
+- **Two different 403s were reported as the same one.** `require_lan_peer` returns a bare
+  status with no body; the scope gate returns `{"error": ...}` naming what the pairing may
+  do. The app drained the body and assumed the first, so it could not have told them apart
+  even in principle. It reads the body now. Found while checking the first item — and the
+  test stub had the same fault, answering `{"error":"forbidden"}` for a LAN refusal, a shape
+  no nestwatch has ever sent.
 - **A screen reader was told the child's desktop was current when it could be hours old.**
   The screenshot's accessible label was built from a *relative* time — "just now" — computed
   once when the widget last rebuilt. That screen is the only one whose poller can be stopped
@@ -103,6 +127,18 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   whole tree rather than the mutated file, so an edit made mid-run is silently reverted from
   a snapshot taken before it — including in files the script never mutates. Found by losing
   one.
+- **`tool/mutate.sh` repeats survivors at the end**, so a caller that pipes it through
+  `tail` still learns *which* mutation survived. A run reported `survived=1` with the name
+  already scrolled past, and identifying it meant re-running four mutations by hand. The
+  obvious fix — piping through `grep` — is worse than it looks on this machine, where a
+  bare top-level `grep` gets rewritten and turned an entire audit's output into
+  `error: unknown option '-G'`. A summary the script prints itself needs no filter at the
+  call site. Guarded for bash 3.2, where `${arr[@]}` on an empty array is an unbound
+  variable under `set -u`, and watched to fire in both the empty and non-empty case.
+  <br>Found by breaking it: that change was made *while an audit was running*, which the
+  file's own header warns against because bash reads a script incrementally. The run died
+  on a variable declared in a line it had already passed. The `trap` restored `lib/` intact,
+  which is the half that mattered.
 - **The mutation audit caught a comment arguing for something no test defended — mine.**
   `Refusals.total` is taken as nestwatch sends it rather than re-added from the three parts,
   and a doc comment said so at length. Replacing it with a local sum **survived**: the test

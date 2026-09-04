@@ -82,25 +82,124 @@ class SessionInfo {
   final bool authenticated;
   final String version;
 
-  const SessionInfo({required this.authenticated, required this.version});
+  /// What this pairing is worth, from nestwatch 0.6.0's `scope`.
+  ///
+  /// Null both for a caller with no session and for a session minted before scopes
+  /// existed, which is why it is never read without [reportsScopes] beside it.
+  final PairingScope? scope;
+
+  /// Whether that PC sent a `scope` key **at all**.
+  ///
+  /// nestwatch went to deliberate trouble to make this answerable, and its reason is the
+  /// reason to carry it: *"Reported as null rather than omitted, so a client can tell
+  /// 'this build has no scopes' (field absent) from 'your session predates them' (field
+  /// present, null) — the second needs re-pairing and the first does not."*
+  ///
+  /// A reader that only looked at the value would collapse those two, and the app's first
+  /// version of this did — recovering the difference by asking `ContractCheck` whether that
+  /// PC was older, which is an *inference from a version string* standing in for a fact the
+  /// server states outright. The mutation audit found it: widening the version exemption
+  /// survived, because no test distinguished a PC that is merely newer from one that is
+  /// behind. Asking the payload is both simpler and exact.
+  final bool reportsScopes;
+
+  const SessionInfo({
+    required this.authenticated,
+    required this.version,
+    this.scope,
+    this.reportsScopes = false,
+  });
 
   static SessionInfo fromJson(Map<String, dynamic> json) => SessionInfo(
     authenticated: json['authenticated'] as bool? ?? false,
     version: json['version'] as String? ?? 'unknown',
+    scope: PairingScope.fromJson(json['scope']),
+    // Presence, not value. Every nestwatch from 0.6.0 sends the key on every answer —
+    // an object or an explicit null — so its absence identifies an older build exactly,
+    // where a version comparison only guesses at one.
+    reportsScopes: json.containsKey('scope'),
   );
 
   @override
   String toString() => 'SessionInfo(authenticated: $authenticated, $version)';
 }
 
+/// What a redeemed pairing is allowed to do, as that PC records it.
+///
+/// ## Why a phone has to look
+///
+/// A dashboard link and an integration link are **byte-identical in form** —
+/// `https://host:port/p/TOKEN#fp=…` — because the scope lives in that PC's `pairing.json`
+/// and never in the URL. So the two QR codes look the same, and a parent hands over
+/// whichever was on screen.
+///
+/// Handed an integration pairing, this app used to pair *successfully* and then come apart
+/// in a way that pointed at the wrong thing entirely. An integration session may reach
+/// `POST /api/extra-time` and `GET /api/usage/today` and nothing else, so **Today would
+/// work** while Requests, Screen and Codes each answered 403 — and every 403 in this app
+/// was reported as "turn off your VPN". A parent would have seen live figures on one tab
+/// and a network complaint on three, and no amount of turning the VPN off would have
+/// changed it.
+///
+/// nestwatch's own note is that this "defends against a mistake, not an attacker": nothing
+/// stops a client that declines to check, and the credential itself remains the guarantee —
+/// an integration pairing *cannot* reach the rest of the API whatever any client believes.
+/// What reading it buys is that an honest client can say which mistake was made.
+enum PairingScope {
+  /// Everything an authenticated parent can do. What `nestwatch pair` mints, what a
+  /// password login is worth, and what every screen in this app needs.
+  dashboard,
+
+  /// One integration, allowed to push earned time and read today's total. Not this app.
+  integration,
+
+  /// A `kind` this build has never heard of.
+  ///
+  /// Its own case rather than folded into `integration`, because "bounded in some way I
+  /// cannot name" and "bounded in the way I can" are different things to tell a parent —
+  /// and folding an unknown into the *narrower* of the two known kinds would be this app
+  /// inventing a bound the server never stated.
+  unrecognised;
+
+  /// `null` for absent, null, or a shape this cannot read.
+  ///
+  /// Absent means a server older than 0.6.0, and `null` means a session minted before
+  /// scopes existed — which `require_auth` refuses anyway. Both are "no authority
+  /// recorded", and neither may be read as permission.
+  static PairingScope? fromJson(Object? raw) => switch (raw) {
+    {'kind': 'dashboard'} => dashboard,
+    {'kind': 'integration'} => integration,
+    // A map that is a scope, carrying a kind this build cannot name.
+    {'kind': _} => unrecognised,
+    _ => null,
+  };
+
+  /// Whether this app can do its job with this pairing.
+  ///
+  /// Only [dashboard] qualifies, and `null` deliberately does **not**: on a 0.6.0 server a
+  /// null scope beside an authenticated session means a pre-scopes session that
+  /// `require_auth` refuses, so treating it as permission would be reading absence as
+  /// consent. The caller checks the server's version before consulting this — see
+  /// `PairingController._scopeRefusal`.
+  bool get isDashboard => this == PairingScope.dashboard;
+}
+
 enum NestwatchFailure {
   /// The handshake was refused: the certificate did not match the pin.
   pinMismatch,
 
-  /// `require_lan_peer` answered 403. PLAN.md §6 calls this out specifically: it is what
-  /// a VPN active on the phone looks like, and the message must say so rather than
-  /// "server unreachable".
+  /// `require_lan_peer` answered 403 with an empty body. PLAN.md §6 calls this out
+  /// specifically: it is what a VPN active on the phone looks like, and the message must
+  /// say so rather than "server unreachable".
   notOnLan,
+
+  /// 403 with an `{"error": ...}` body: the request was refused for what this *pairing* is
+  /// allowed to do, not for where the phone is.
+  ///
+  /// Separate from [notOnLan] because the remedy is the opposite kind of thing — re-pair
+  /// with the parent code, rather than change anything about the network. Sharing one
+  /// failure would mean sharing one sentence, and the sentence is the whole point.
+  notPermitted,
 
   /// The password was wrong (401 from `/login`).
   badPassword,
@@ -579,7 +678,28 @@ class NestwatchClient {
     _adoptFrom(response);
 
     if (response.statusCode == HttpStatus.forbidden) {
-      await response.drain<void>();
+      // Two different refusals share this status, and they are told apart by the body.
+      //
+      // `require_lan_peer` returns a bare `StatusCode::FORBIDDEN` with nothing in it. The
+      // scope gate returns `AppError::Forbidden`, which serialises as
+      // `{"error": "..."}`. This used to `drain` the body and report the LAN sentence
+      // either way — so an integration pairing, which may reach `usage/today` and nothing
+      // else, produced a working Today tab beside three tabs telling a parent to turn off
+      // a VPN that was never on.
+      //
+      // The body is read rather than the path inspected, because which paths an
+      // integration may reach is that PC's rule and not this app's to mirror.
+      final body = await response.transform(utf8.decoder).join();
+      final said = _errorFrom(body);
+      if (said.isNotEmpty) {
+        throw NestwatchException(
+          NestwatchFailure.notPermitted,
+          'That PC refused this request because of what the pairing on this phone is '
+          'allowed to do.\n\nIt said: "$said"\n\nThat is an integration pairing, not '
+          'the parent one. Run `nestwatch pair` on that PC and scan the code it prints.',
+          detail: said,
+        );
+      }
       throw const NestwatchException(
         NestwatchFailure.notOnLan,
         'That PC refused the connection because this phone does not look like it is '

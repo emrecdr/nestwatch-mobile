@@ -51,6 +51,22 @@ void main() {
         isFalse,
       );
     });
+
+    test('the scope says what the pairing is worth', () {
+      // nestwatch 0.6.0. A dashboard link and an integration link are byte-identical in
+      // form, so this field is the only way a client can tell which one it was handed.
+      final signedIn = SessionInfo.fromJson(object('session-signed-in'));
+      expect(signedIn.scope, PairingScope.dashboard);
+      expect(signedIn.scope!.isDashboard, isTrue);
+    });
+
+    test('signed out carries an explicit null, not an absent field', () {
+      // The distinction nestwatch documents on `auth::me`: absent means "this build has
+      // no scopes", present-and-null means "no authority recorded". The golden pins that
+      // the key is really there, which a `?? null` reader could never have told apart.
+      expect(object('session-signed-out').containsKey('scope'), isTrue);
+      expect(SessionInfo.fromJson(object('session-signed-out')).scope, isNull);
+    });
   });
 
   group('/api/time-requests', () {
