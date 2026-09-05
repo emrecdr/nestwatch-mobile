@@ -163,6 +163,26 @@ either.
 up. Cheaper and less irritating than a confirmation dialog, and it becomes necessary rather
 than nice if §1 lands and approval moves to the lock screen.
 
+**Correction, 2026-09-05: the fix above is not available in the shape it assumes, and this
+was never checked when it was written.** There is no un-grant on the server.
+`require_minutes` takes a `u32` and rejects zero, so no endpoint accepts a negative or
+zeroing grant, and there is no delete route for extra time — once minutes are in the day's
+budget the API offers no way to take them out. Verified by reading `src/api.rs`, not
+recalled.
+
+So an undo here can only be a **client-side delayed send** — hold the approve for a few
+seconds and cancel it locally — and that carries two costs the entry did not price: the
+child's request is not actually answered when the parent believes it was, and it does not
+exist at all on the notification-action path, which §1 made the primary way approvals
+happen and which has no SnackBar to hang it on.
+
+The lock control shipped the same day took the other road for the same reason — it asks
+*before* acting, because it also has no undo. If an undo is still wanted here, the honest
+place to raise it is with nestwatch: an idempotent "revoke this grant" is a server-side
+capability, and the two repositories already have a working channel for that kind of
+request. Not filed in `OPEN-FINDINGS.md`: this is where it was argued, so this is where the
+correction belongs — the same rule §3's withdrawn fingerprint claim follows.
+
 ## 7. The parent's app is English-only, while the child's page now speaks Dutch
 
 **Measured.** 76 capitalised string literals of fifteen characters or more in `lib/src/ui`,

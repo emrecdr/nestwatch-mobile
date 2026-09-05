@@ -27,6 +27,7 @@ import 'dart:io';
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/pairing/pair_invite.dart';
 import 'package:nestwatch_mobile/src/background/seen_requests.dart';
+import 'package:nestwatch_mobile/src/background/sign_in_notice.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
@@ -67,6 +68,7 @@ Future<void> main(List<String> argv) async {
     sessions: sessions,
 
     forgetAnnounced: InMemorySeenRequestStore().clear,
+    withdrawSignInNotice: SignInNotice.recording().lower,
   );
 
   // ------------------------------ 1. the old pin is refused, not trusted

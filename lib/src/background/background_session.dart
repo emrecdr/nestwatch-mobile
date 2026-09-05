@@ -34,6 +34,33 @@ import 'poll_logic.dart';
 /// paired and signed in.
 typedef BackgroundSession = ({ServerIdentity identity, NestwatchClient client});
 
+/// The one production wiring of the sign-in notice.
+///
+/// Named rather than built inline because it now has callers on both sides of the
+/// isolate boundary, and they must be the same object in every sense that matters: the
+/// same Keystore key, the same notification id, the same re-notify interval. Written out
+/// twice, the sign-in path could take a notice down that the poll had never put up — or,
+/// worse, fail to.
+///
+/// It lives here because this file already imports all three halves and already had this
+/// expression in it. `pairing/` cannot hold it: `PairingController` is deliberately
+/// Flutter-free, which is why it takes [withdrawSignInNotice] as a bare function instead.
+const SignInNotice signInNotice = SignInNotice(
+  store: SecureSignInNotice(),
+  announce: notifySignInNeeded,
+  withdraw: cancelSignInNeeded,
+);
+
+/// Take down any standing "sign in again" notice, because the parent just did.
+///
+/// The capability `PairingController` is given, in the shape `forgetAnnounced` already
+/// established there: name what is needed, not who provides it. Handing it the
+/// [SignInNotice] itself would mean `pairing/` importing `background/`, which closes a
+/// dependency cycle — four edges one way and one back — and would drag
+/// `flutter_secure_storage` into the part of this app that has to run under a plain
+/// `dart run`.
+Future<void> withdrawSignInNotice() => signInNotice.lower();
+
 /// Install the pin in *this* isolate and rebuild the session from secure storage.
 ///
 /// Returns `null` — rather than throwing — when there is nothing to do: no paired
@@ -109,11 +136,7 @@ Future<bool> pollPairedServer() async {
       store: const SecureSeenRequestStore(),
       notify: notifyTimeRequests,
       cancel: cancelForRequest,
-      signInNotice: const SignInNotice(
-        store: SecureSignInNotice(),
-        announce: notifySignInNeeded,
-        withdraw: cancelSignInNeeded,
-      ),
+      signInNotice: signInNotice,
     );
   } finally {
     // This client is built fresh for one poll and nothing outlives it, so the pooled

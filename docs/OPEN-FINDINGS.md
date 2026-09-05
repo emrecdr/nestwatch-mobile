@@ -75,6 +75,109 @@ Last audited against the tree on **2026-09-02**.
 
 ## Open
 
+### M28 · Android 17 turns local-network access into a permission, and a denial reads as being away from home
+
+> **Platform deadline** · rests on Android's published documentation, read 2026-09-05. Not
+> measured on hardware; the first step below *is* the measurement.
+
+Every byte this app sends goes to a private address on the LAN, and Android is closing that
+door. Local Network Protection was opt-in in Android 16; from **Android 17 it is mandatory
+and enforced for apps targeting Android 17 or higher**, guarded by a new runtime permission
+`android.permission.ACCESS_LOCAL_NETWORK` in the `NEARBY_DEVICES` group. It covers *all*
+networking APIs — plain sockets included, not only mDNS and `NsdManager`, which is how this
+first reads as somebody else's problem.
+
+Reaching it is not optional. Play requires new apps and updates to target an API level
+within one year of the latest major Android release, which is the same clock that turned
+`M21`'s target-36 item from an intention into a date.
+
+**The failure mode is the one this repository cares most about.** Android's own wording is
+that without the permission, *"TCP connections will typically result in a timeout error."*
+A timeout is exactly what `explainUnreachable` renders as *"you are away from home, nothing
+is wrong with that PC"* — so a parent who declines the permission, or has it auto-reset for
+disuse, gets an app confidently reporting the single most common ordinary state while the
+real cause is invisible and one settings toggle away. Same shape as the silent session
+lapse, on every request rather than on one.
+
+**Do not declare it yet.** Android is explicit that an app targeting SDK 36 or lower must
+*not* add `ACCESS_LOCAL_NETWORK` to its manifest or request it at runtime; local network
+access is implicitly granted by `INTERNET` there. `compileSdk` is already 37 (raised for
+`flutter_secure_storage` 11), so the constant is available to compile against whenever the
+work starts.
+
+**What would close it, in order.** Opt in on an Android 16 device using the temporary
+`NEARBY_WIFI_DEVICES` gate and find out empirically what stops working. Then teach the
+transport to *distinguish* a permission denial from an absent PC — that distinction is the
+actual deliverable, and the manifest line is the easy part. From the NDK the reason is
+readable via `android_getnetworkblockedreason()`; from Dart the cheaper route is to ask the
+permission state before blaming the network, which is the shape `whereAmI` already uses to
+ask the phone where it is before blaming that PC.
+
+**Worth naming: the iOS half is already done.** `NSLocalNetworkUsageDescription` is in
+`Info.plist` with copy written for a parent, and `M15` tracks the hardware verification
+still owed. The Android equivalent was unrepresented anywhere in this repository — no
+manifest entry, no runtime request, no test, no entry here — until this one.
+
+### M29 · Two pollers, one store, and no lock between them
+
+Measured 2026-09-05. `NotificationsSheet` offers two independent switches, and nothing
+stops the first while the second runs: `enableBackgroundPolling` registers the WorkManager
+task at fifteen minutes, `startWatching` runs a `dataSync` foreground service at sixty
+seconds. Both call `pollPairedServer` in their own isolate; both reach the same
+`SecureSeenRequestStore` key.
+
+`pollOnce` is *load → notify → save* with nothing locking the gap across isolates.
+Interleaved, two rounds can both see one request as fresh, and the later `save` can write a
+set computed before the other's write.
+
+**The half that reached a parent is closed.** A duplicate is a *replacement* rather than a
+second notification, because the id is `request.id.hashCode` — what it was not was silent.
+`onlyAlertOnce` now covers every alerting notification this app posts, held by
+`test/notification_alerts_test.dart` over a list a new channel has to be added to, and by a
+mutation. It also closes the two paths that were already known and priced: `pollOnce`
+announcing before it records, and WorkManager re-running a task on its own account.
+
+**What is left is waste, not a wrong answer.** During an opt-in thirty-minute watch
+session, at most two extra WorkManager rounds — a TLS handshake and a GET each, against a
+PC already being polled every sixty seconds.
+
+**The obvious fix was weighed and rejected, which is why this is an entry rather than a
+commit.** Suspending the periodic task while watching has to remember whether the parent
+had it switched on, because the thirty-minute self-stop happens in the service isolate,
+which does not know. That is a fifth stored item — and as of today
+`store_requirements_test.dart` requires every stored item to carry a sentence on the
+privacy screen. Spending a privacy-policy bullet to save two polls per opt-in half hour is
+the wrong trade, and the entry that made that rule (`M13`'s neighbour, and the second
+drift recorded in `privacy_screen.dart`) is a day old.
+
+The cheaper alternative is `FlutterForegroundTask.isRunningService`, read from the
+WorkManager isolate, which needs no storage at all. Plausible and **unverified**: it is a
+method-channel call from an isolate spawned by a different plugin, and this repository does
+not ship a platform claim it has not watched work. Whoever takes it should measure it on a
+device first.
+
+### M30 · The iOS integration test has never run anywhere but a developer's machine
+
+Measured 2026-09-05: no job in `.github/workflows/ci.yml` invokes `integration_test/`. The
+`build-ios` job compiles for device and stops, and says so — what it proves is that the
+project builds and its `Info.plist` is well-formed.
+
+`integration_test/pinning_on_ios_test.dart` is the only test that can answer an
+iOS-specific question about the pin. It runs *inside* the app sandbox, which is why it
+reads its certificates from `inlined_fixtures.dart` rather than `test/fixtures/` — a
+difference `test/support/tls_server.dart` documents at length so nobody unifies the two.
+
+**What would close it**: a step on `macos-latest` that boots a simulator
+(`xcrun simctl boot`) and runs `flutter test integration_test`. The runner already has
+Xcode and the job already has a Flutter toolchain, so the marginal cost is boot time.
+
+**Not added blind, deliberately.** It cannot be verified from a machine that is not the
+runner, and a new job that fails for setup reasons rather than for the property it checks
+is exactly the illegible red badge `M25` argues against — "a red badge that means *the
+other side moved* reads exactly like a red badge that means *you broke it*, and the whole
+value of this gate is that its failures are legible." The recipe is above; the first run
+wants watching by whoever adds it.
+
 ### M24 · The note now reaches the parent; the control it names is on the other device
 
 > **Cross-repo** · pairs with nestwatch (unfiled — see below)
@@ -340,10 +443,24 @@ updates must target API 36 or be rejected in Play Console, with extensions avail
 to 1 November. The code side is compliant; what this changes is that `M7` — store
 paperwork only a Play Console can finish — now has a date rather than an intention.
 
-**The structural item is Material leaving the SDK.** 3.47 ships `material_ui` and
-`cupertino_ui` as standalone packages and deprecates the in-SDK versions from November.
-Every screen here imports `package:flutter/material.dart`. Not urgent, not optional
-forever, and much cheaper while the UI is fourteen files than it will ever be again.
+**The structural item is Material leaving the SDK, and it now has dates rather than a
+season.** Re-checked 2026-09-05 against Flutter's own release notes: the standalone
+`material_ui` and `cupertino_ui` **1.0** packages shipped with 3.47 in August 2026 and are
+opt-in with no warnings; the in-SDK libraries are **formally deprecated in the November
+2026 stable**, at which point the analyzer starts warning; the old imports are **removed in
+2027**. Every screen here imports `package:flutter/material.dart`.
+
+Two things make it cheaper than it sounds, and both are worth knowing before it is
+scheduled: a migration tool rewrites the imports, and `MaterialUiCompatibilityBridge` lets
+an app move immediately while its dependencies still use the legacy SDK imports — which
+matters here, because `mobile_scanner`, `flutter_local_notifications` and
+`flutter_foreground_task` all ship Flutter UI.
+
+**The specific reason not to drift past November.** Deprecation turns every one of those
+imports into an analyzer warning, and CI runs `flutter analyze --fatal-infos
+--fatal-warnings`. The day the pinned `FLUTTER_VERSION` crosses that release, the fast gate
+goes red on twenty-odd files at once — in the job whose entire value is that its failures
+are legible.
 
 Two things land free on upgrade: 3.47 auto-detects Android high-contrast and colour
 inversion, which is on `M12`'s side of the ledger.

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'src/background/background_poll.dart';
+import 'src/background/background_session.dart';
 import 'src/background/notifications.dart';
 import 'src/pairing/pairing_controller.dart';
 import 'src/background/secure_seen_requests.dart';
@@ -49,6 +50,10 @@ Future<void> main() async {
     identities: const SecureServerIdentityStore(),
     sessions: const SecureSessionStore(),
     forgetAnnounced: const SecureSeenRequestStore().clear,
+    // Signing in, and forgetting the PC, are the two things a parent does that end the
+    // condition the background poll's notice describes. Neither of them is a poll, so
+    // until this was passed in, neither could take the notice down.
+    withdrawSignInNotice: withdrawSignInNotice,
   );
   // Re-apply the stored pin before the first frame, so the process is never briefly
   // unpinned while a previously-paired server is reachable. Keystore reads only.

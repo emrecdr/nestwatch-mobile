@@ -72,6 +72,13 @@ void main() {
   /// somebody has already resolved.
   var alreadyResolved = false;
 
+  /// When true, `/api/lock` answers as `AppError::Control` does.
+  ///
+  /// The realistic cause on that PC is `session::active_session_token` finding no
+  /// interactive session to lock — nobody signed in — which the handler cannot
+  /// distinguish from any other OS failure, so it arrives here as a bare 500.
+  var lockFails = false;
+
   /// Minimal JPEG: SOI, a stub SOF0 declaring 1x1, EOI. Enough for the client to hand
   /// back bytes; this file is about the request, not the image.
   final jpeg = <int>[
@@ -88,6 +95,7 @@ void main() {
     servedTier = 'preview';
     curfewNote = null;
     alreadyResolved = false;
+    lockFails = false;
     final context = SecurityContext()
       ..useCertificateChain('$dir/server.cert.pem')
       ..usePrivateKey('$dir/server.key.pem');
@@ -190,6 +198,18 @@ void main() {
               '{"curfew_note":${curfewNote == null ? 'null' : jsonEncode(curfewNote)},'
               '"minutes":30,"ok":true}',
             );
+        },
+
+        '/api/lock': () {
+          if (lockFails) {
+            response
+              ..statusCode = HttpStatus.internalServerError
+              ..write('{"error":"operation failed"}');
+            return;
+          }
+          response
+            ..statusCode = 200
+            ..write('{"ok":true}');
         },
 
         // A bare `{"ok":true}` — measured, and the reason `Decision.curfewNote` is
@@ -647,5 +667,126 @@ void main() {
         );
       },
     );
+  });
+
+  group('locking that PC\'s screen', () {
+    // The one control endpoint this app calls. `PLAN.md` §5 keeps configuration in the
+    // browser; this is not configuration, it is a single act whose whole point is that
+    // the parent is somewhere else — the same test the time-codes screen was admitted on.
+    test('it is a POST, to /api/lock, with no body', () async {
+      await client.lockScreen();
+
+      expect(seen, hasLength(1));
+      expect(seen.single.method, 'POST');
+      expect(seen.single.uri.path, '/api/lock');
+      expect(
+        seen.single.contentLength,
+        anyOf(0, -1),
+        reason:
+            'the handler takes no body, and sending one would be this app inventing '
+            'a parameter the server does not read',
+      );
+    });
+
+    test('a 200 is the whole answer; the body carries nothing to read', () async {
+      // `{"ok":true}` restates the status. A client that parsed it would be adding a
+      // second way for this call to fail, over a field that cannot disagree.
+      await expectLater(client.lockScreen(), completes);
+    });
+
+    test('a 500 says nobody is signed in, not "something went wrong"', () async {
+      lockFails = true;
+
+      await expectLater(
+        client.lockScreen(),
+        throwsA(
+          isA<NestwatchException>()
+              .having(
+                (e) => e.failure,
+                'failure',
+                NestwatchFailure.operationFailed,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('nobody is signed in'),
+              ),
+        ),
+        reason:
+            'the body is only ever "operation failed", so the call site is the one '
+            'place that knows what was attempted and can name the likely cause',
+      );
+    });
+
+    test('and does not claim a fault when the screen is already locked', () async {
+      // The same sentence, from the other side. A PC sitting at its sign-in screen
+      // answers 500 here, and telling a parent it "could not lock" would send them
+      // looking for a fault that is not there.
+      lockFails = true;
+      try {
+        await client.lockScreen();
+        fail('expected a failure');
+      } on NestwatchException catch (e) {
+        expect(
+          e.message,
+          contains('already showing the Windows sign-in screen'),
+        );
+      }
+    });
+
+    test(
+      'a 401 is a lapsed sign-in, so the app re-prompts rather than re-pairs',
+      () async {
+        lockFails = false;
+        final lapsed = NestwatchClient('127.0.0.1:${server.port}');
+        addTearDown(lapsed.close);
+        // `/api/unauthorized` is the stub's 401 path; the mapping under test belongs to
+        // `_requireOk`, which every `/api/*` call shares.
+        await expectLater(
+          lapsed.rawGetForTest('/api/unauthorized'),
+          throwsA(
+            isA<NestwatchException>().having(
+              (e) => e.failure,
+              'failure',
+              NestwatchFailure.sessionExpired,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('a LAN refusal reaches the parent as a LAN refusal', () async {
+      // Not as "that PC could not lock its screen". `require_lan_peer` answers before
+      // routing, so this must not be read as the control failing.
+      lanRefused = true;
+
+      await expectLater(
+        client.lockScreen(),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.notOnLan,
+          ),
+        ),
+      );
+    });
+
+    test('a scope refusal is refused as one, not as a broken PC', () async {
+      // An integration pairing cannot reach `/api/lock`. The sentence a parent gets has
+      // to send them to re-pair, not to their router.
+      scopeRefused = 'this pairing may not use that part of the API';
+
+      await expectLater(
+        client.lockScreen(),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.notPermitted,
+          ),
+        ),
+      );
+    });
   });
 }

@@ -610,6 +610,43 @@ class NestwatchClient {
     });
   }
 
+  /// `POST /api/lock` — lock that PC's screen.
+  ///
+  /// ## Why this endpoint and not the other three
+  ///
+  /// nestwatch publishes `lock`, `shutdown`, `processes/{pid}/kill` and `shutdown`'s
+  /// countdown, and this app deliberately reaches for exactly one of them. `PLAN.md` §5
+  /// keeps *configuration* in the browser — rules, routines, curfew, policy — on the
+  /// grounds that it is done rarely, at a desk. Locking is not configuration; it is a
+  /// single act taken in the moment, and the moment is defined by the parent not being at
+  /// the desk. That is the same test the time-codes screen was admitted on.
+  ///
+  /// The others fail it in the other direction. A shutdown discards whatever the child
+  /// had open and cannot be undone from here; killing a process needs a process list to
+  /// choose from, which is a screen. Locking interrupts without destroying anything —
+  /// the child's own password brings the session straight back, with their work intact —
+  /// so it is the one control on that list a phone can offer without also needing a way
+  /// to take it back.
+  ///
+  /// Answers `{"ok":true}`, which carries nothing this app does not already know, so the
+  /// body is dropped. A failure is the only thing worth reading, and it arrives as status.
+  Future<void> lockScreen() async {
+    final (response, _) = await _send('POST', '/api/lock');
+    _requireOk(
+      response,
+      // `AppError::Control`, and the first thing that can produce it is
+      // `session::active_session_token` failing because there is no interactive session
+      // to lock. Named rather than hedged: that case is not really a failure at all, and
+      // a parent who is told "could not lock" about a PC that is already at its login
+      // screen would go looking for a fault that is not there.
+      whenOperationFails:
+          'That PC could not lock its screen.\n\n'
+          'The usual reason is that nobody is signed in to it right now — in which '
+          'case it is already showing the Windows sign-in screen, and there is '
+          'nothing to lock.',
+    );
+  }
+
   /// Every `/api/*` path is behind `require_auth`, which answers 401 once the session
   /// lapses. §5 is explicit about what that means: re-prompt for the password, do NOT
   /// re-pair — the certificate is still trusted, only the session went.

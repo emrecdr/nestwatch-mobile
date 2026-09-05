@@ -18,6 +18,7 @@ library;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/session_cookie.dart';
 import 'package:nestwatch_mobile/src/background/seen_requests.dart';
+import 'package:nestwatch_mobile/src/background/sign_in_notice.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
@@ -52,6 +53,7 @@ void main() {
       identities: identities,
       sessions: sessions,
       forgetAnnounced: InMemorySeenRequestStore().clear,
+      withdrawSignInNotice: SignInNotice.recording().lower,
     );
   }
 
@@ -150,12 +152,21 @@ void main() {
     // It left a real trace too: those identifiers are what suppress a second
     // notification, so a re-paired phone would stay quiet about requests it had
     // "already announced" to a pairing that no longer exists.
+    // The name of this test used to stop at three, because three was all there was. When
+    // a fourth stored item arrived nothing widened it, and the privacy screen went on
+    // saying "All three" for a week. A name that enumerates is a name that has to be
+    // maintained; `store_requirements_test.dart` now holds the count itself, so the next
+    // one cannot be added in silence.
     test(
-      'the pin, the cookie, and the announced-request identifiers',
+      'the pin, the cookie, the announced ids, and the sign-in notice',
       () async {
         final identities = InMemoryServerIdentityStore();
         final sessions = InMemorySessionStore();
         final seen = InMemorySeenRequestStore();
+        final noticeLog = <String>[];
+        final notice = SignInNotice.recording(noticeLog);
+        await notice.raise();
+        noticeLog.clear();
         await identities.save(
           ServerIdentity(
             host: '192.168.1.42',
@@ -173,6 +184,7 @@ void main() {
           identities: identities,
           sessions: sessions,
           forgetAnnounced: seen.clear,
+          withdrawSignInNotice: notice.lower,
         );
         await controller.unpair();
 
@@ -182,6 +194,13 @@ void main() {
           await seen.load(),
           isEmpty,
           reason: 'the announced-request identifiers',
+        );
+        expect(
+          noticeLog,
+          [SignInNotice.lowered],
+          reason:
+              'a standing notice would otherwise point at a PC this app was just '
+              'told to forget, and its Keystore record would outlive the pairing',
         );
       },
     );

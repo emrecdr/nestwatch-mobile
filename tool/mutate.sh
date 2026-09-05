@@ -56,6 +56,29 @@ killed=0; survived=0; broken=0
 mutate() {
   local name="$1" file="$2" from="$3" to="$4"
   restore
+
+  # `ANCHORS_ONLY=1 bash tool/mutate.sh` checks every anchor and runs no tests.
+  #
+  # Added after a run spent twelve minutes to report two stale anchors, both broken by the
+  # same refactor an hour earlier: `store.announced()` became `store.announcedAt()`, and
+  # two mutations quoting the old shape silently stopped mutating anything. A stale anchor
+  # is the failure this script is *least* able to warn about cheaply, because finding it
+  # costs a full audit — so finding it must not cost a full audit.
+  #
+  # Deliberately not a substitute for the run. A matching anchor says the mutation will
+  # apply, and nothing whatever about whether a test would catch it.
+  if [ "${ANCHORS_ONLY:-0}" = "1" ]; then
+    if python3 -c 'import sys; sys.exit(0 if sys.argv[2] in open(sys.argv[1]).read() else 1)' \
+         "$file" "$from"; then
+      printf '  %-52s anchor ok\n' "$name"
+    else
+      printf '  %-52s ANCHOR MISSING\n' "$name"
+      broken=$((broken + 1))
+      verdicts+=("  ANCHOR MISSING $name")
+    fi
+    return
+  fi
+
   python3 - "$file" "$from" "$to" <<'PY'
 import sys
 path, frm, to = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -549,7 +572,7 @@ mutate "session: a transient failure alarms and a real lapse stays silent" \
 # The latch stops latching, so a lapse that lasts a week is 672 notifications.
 mutate "session: the parent is re-told every fifteen minutes" \
   lib/src/background/sign_in_notice.dart \
-  '    if (await store.announced()) return;' \
+  '    if (last != null && _alreadySaid(last, moment)) return;' \
   '    if (false) return;'
 
 # Recorded before announced. A notification that then fails to post is marked as sent,
@@ -558,8 +581,8 @@ mutate "session: the parent is re-told every fifteen minutes" \
 mutate "session: the notice is recorded as sent before it is sent" \
   lib/src/background/sign_in_notice.dart \
   '    await announce();
-    await store.markAnnounced();' \
-  '    await store.markAnnounced();
+    await store.markAnnounced(moment);' \
+  '    await store.markAnnounced(moment);
     await announce();'
 
 # Cleared before withdrawn, so a failed withdrawal strands a notice on screen with the
@@ -594,6 +617,131 @@ mutate "watch: a rejected session still reads as signed in" \
   lib/src/background/poll_logic.dart \
   '      return false;' \
   '      return true;'
+
+# The sign-in notice was raised by the poll and lowered by the poll, and by nothing else.
+# That loop cannot close: `lower()` is reached only after a request SUCCEEDS, and a request
+# cannot succeed while the session is the broken thing. Both mutations below restore a
+# version of that: the parent signs in, and is still being told to sign in.
+mutate "session: signing in leaves the notice standing" \
+  lib/src/pairing/pairing_controller.dart \
+  '      await _withdrawSignInNotice();
+    } on Object catch (_) {' \
+  '      await Future<void>.value();
+    } on Object catch (_) {'
+
+# Withdrawing on ANY authenticated answer rather than on a usable one. An integration
+# pairing signs in and still cannot read time requests, so the notice -- "this phone can no
+# longer tell you when your child asks" -- is still true, and taking it down is a lie told
+# to a parent whose phone is about to go on being useless.
+mutate "session: a pairing this app cannot drive takes the notice down anyway" \
+  lib/src/pairing/pairing_controller.dart \
+  '    if (refusal != null) {
+      _emit(PairingFailed(refusal));' \
+  '    if (refusal != null) {
+      await _withdrawSignInNotice();
+      _emit(PairingFailed(refusal));'
+
+# "Forget this PC" left the fourth stored item behind, and could leave a notification on
+# screen naming a PC this app had just been told to forget.
+mutate "unpair: the sign-in notice outlives the pairing" \
+  lib/src/pairing/pairing_controller.dart \
+  '    await _withdrawSignInNotice();
+    _current = null;' \
+  '    _current = null;'
+
+# The backwards-clock guard. `elapsed < renotifyAfter` is true of every NEGATIVE duration,
+# so without the first half a phone whose clock moved back goes silent for as long as it
+# stays behind -- about the one thing it cannot afford to be silent about.
+mutate "session: a clock that moved backwards silences the notice" \
+  lib/src/background/sign_in_notice.dart \
+  '    return !elapsed.isNegative && elapsed < renotifyAfter;' \
+  '    return elapsed < renotifyAfter;'
+
+# The interval that turns "told once, ever" back on. A parent who swipes the notice away
+# without acting is then never told again, for as long as the lapse lasts.
+# Survived once, and the mutation was right -- the TEST was wrong. It advanced its clock by
+# `SignInNotice.renotifyAfter`, so a mutated constant moved the clock too and the assertion
+# went on passing. A test whose input is derived from the thing under test cannot see it
+# change. Same shape as `M26`, one file over. The tests now use literal durations, and a
+# separate one pins the constant itself.
+mutate "session: the notice is never repeated" \
+  lib/src/background/sign_in_notice.dart \
+  '  static const Duration renotifyAfter = Duration(days: 1);' \
+  '  static const Duration renotifyAfter = Duration(days: 36500);'
+
+# And the other direction: back to nagging. A notice every poll is the fifteen-minute alarm
+# `notifications.dart` says "teaches a parent to dismiss it unread".
+mutate "session: the notice goes back to every fifteen minutes" \
+  lib/src/background/sign_in_notice.dart \
+  '  static const Duration renotifyAfter = Duration(days: 1);' \
+  '  static const Duration renotifyAfter = Duration.zero;'
+
+# Two isolates poll the same PC against one store with no lock between load and save, so a
+# request can be announced twice. The id makes the second one a REPLACEMENT; this flag is
+# what stops the replacement buzzing a parent about a request they have already seen.
+mutate "notification: a replaced request alerts a second time" \
+  lib/src/background/notifications.dart \
+  '    onlyAlertOnce: true,
+    // Answer without opening anything.' \
+  '    onlyAlertOnce: false,
+    // Answer without opening anything.'
+
+# The privacy screen listed three stored items when there were four, and promised "Forget
+# this PC" deleted all of them. That is a false statement about data handling in the
+# document Play requires to be truthful -- and it is the SECOND time this list has drifted.
+# Survived once, as written: it changed a bullet's WORDS, and the tripwire counts bullets.
+# That is a fair result rather than a gap -- `store_requirements_test.dart` says in as many
+# words that it cannot judge whether the sentences are honest. These two invert what it does
+# claim: one stored item, one bullet, and a summary sentence that names the same number.
+mutate "privacy: a stored item loses the bullet naming it" \
+  lib/src/ui/privacy_screen.dart \
+  "            _bullet(
+              theme,
+              'The time this app last told you it needs signing in again, so '
+              'that it reminds you about once a day rather than every fifteen '
+              'minutes.',
+            )," \
+  ""
+
+# The count word and the bullets can disagree in the other direction, and the sentence that
+# carries the number is also the one promising encryption, backup exclusion and deletion by
+# "Forget this PC" -- so a wrong number there is wrong about four claims at once.
+mutate "privacy: the summary counts fewer items than it lists" \
+  lib/src/ui/privacy_screen.dart \
+  "'All four are held in Android\\'s encrypted store, under a key that cannot '" \
+  "'All three are held in Android\\'s encrypted store, under a key that cannot '"
+
+# A state-changing control must not be reachable by a GET. nestwatch routes `/api/lock` as
+# a POST, so this does not merely change a verb -- it stops the lock happening at all,
+# while the app reports success.
+mutate "lock: the screen lock is sent as a GET" \
+  lib/src/api/nestwatch_api.dart \
+  "    final (response, _) = await _send('POST', '/api/lock');" \
+  "    final (response, _) = await _send('GET', '/api/lock');"
+
+# The 500 body is only ever "operation failed", so the call site is the one place that
+# knows what was attempted. Falling back to the generic sentence tells a parent whose PC is
+# simply sitting at its sign-in screen that something went wrong with it.
+# Survived once, because it replaced only the first line of a multi-line string and the
+# tests assert on the second. The decision being inverted is "this call site knows what was
+# attempted, so it says more than the generic sentence" -- so the whole argument goes, and
+# what is left is exactly what `_requireOk` falls back to.
+mutate "lock: a failure stops naming the reason there is one" \
+  lib/src/api/nestwatch_api.dart \
+  "      whenOperationFails:
+          'That PC could not lock its screen.\\n\\n'
+          'The usual reason is that nobody is signed in to it right now — in which '
+          'case it is already showing the Windows sign-in screen, and there is '
+          'nothing to lock.'," \
+  "      whenOperationFails: 'That PC could not carry out the request.',"
+
+# Locking has no undo on this side -- nestwatch publishes no "unlock", deliberately, because
+# a machine is unlocked by the person sitting at it. Acting on a cancelled dialog takes a
+# child's screen away on a tap the parent explicitly withdrew.
+mutate "lock: cancelling the confirmation locks the screen anyway" \
+  lib/src/ui/screenshot_screen.dart \
+  '    if (confirmed != true || !mounted) return;' \
+  '    if (!mounted) return;'
 
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"

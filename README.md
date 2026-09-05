@@ -234,7 +234,7 @@ is abstract for the same reason — the Keystore-backed implementation lives apa
 |---|---|---|
 | Requests | `GET /api/time-requests`, `POST …/approve`, `…/deny` | 60 s |
 | Today | `GET /api/usage/today` | 60 s |
-| Screen | `GET /api/screenshot?tier=preview` | 5 s, **off by default** |
+| Screen | `GET /api/screenshot?tier=preview`, `POST /api/lock` | 5 s, **off by default** |
 | Codes | `GET`/`POST /api/time-codes` | 60 s |
 
 PLAN §5 said "three, and only three", keeping rules, routines and curfew in the browser as
@@ -246,6 +246,18 @@ and no internet at redemption. §7 calls away-from-home support impossible, whic
 *notification* but not for this: nestwatch already solved it offline (`src/timecode.rs` —
 "Useful when the parent is away (leave a code) or the network is down") and the app was
 simply not surfacing it.
+
+**Lock is on the Screen tab for the same reason, and it is the only control endpoint this
+app calls.** nestwatch publishes lock, shutdown, and process kill. Locking passes §5's test
+— a single act, taken in the moment, and the moment is defined by not being at the desk —
+where the other two fail it in the other direction: a shutdown discards whatever the child
+had open and cannot be taken back from a phone, and a kill needs a process list to choose
+from, which is another screen to keep in step with 24 routes forever. Locking interrupts
+without destroying anything, because the child's own password brings the session back with
+their work intact. It sits below a divider rather than beside "One frame": those two read,
+this one reaches into the child's session, and a mis-tap between them should not be one
+pixel wide. There is no undo on this side — nestwatch publishes no "unlock", deliberately,
+since a machine is unlocked by the person sitting at it — so it asks first.
 
 The code is treated as a secret, because it is one: it grants screen time to whoever types
 it, and nestwatch keeps it out of the audit log for that reason. Codes are hidden behind a
@@ -575,12 +587,21 @@ halves of that were watched to fire.
 ## Mutation audit
 
 ```bash
-./tool/mutate.sh    # breaks one behaviour at a time, checks the suite notices
+./tool/mutate.sh                       # breaks one behaviour at a time, checks the suite notices
+ANCHORS_ONLY=1 ./tool/mutate.sh        # just: does every mutation still match its target?
 ```
 
 A green suite says nothing about whether it *would* go red. Each mutation is a real defect
 this codebase argues against somewhere in its comments; a `SURVIVED` line means the
 argument is not defended by a test.
+
+`ANCHORS_ONLY=1` runs no tests and answers in about a second. It exists because a stale
+anchor — a mutation whose target text has been renamed, so it silently mutates nothing —
+is the failure this script is *least* able to warn about cheaply: finding one costs a full
+audit. On 2026-09-05 a twelve-minute run reported two, both broken an hour earlier by one
+refactor (`store.announced()` became `store.announcedAt()`). Now that is a second, before
+the run rather than after it. It is not a substitute for the audit: a matching anchor says
+the mutation will apply, and nothing at all about whether a test would catch it.
 
 The run ends with `killed=N survived=N anchors-missing=N` and exits non-zero unless the
 last two are zero. That count is not repeated here on purpose. This file used to say
@@ -589,10 +610,13 @@ prose with nothing checking the copy, which is the exact failure the rest of thi
 document is about, one layer up. The commands print the current figures; nothing here
 can drift from them if nothing here restates them.
 
-It has found six genuine gaps so far, each now closed:
+It has found nine genuine gaps so far, each now closed:
 
 | mutation that survived | why it mattered |
 |---|---|
+| a test that advanced its clock **by the constant under test** | widening `renotifyAfter` to a century moved the clock a century too, so five tests about a one-day interval could not see it change |
+| the privacy-screen tripwire counted bullets, not their words | a fair limit rather than a gap — the mutation was rewritten to invert what the test actually claims |
+| only the first line of a multi-line failure sentence replaced | the tests asserted on the second line, so the mutation changed nothing they read |
 | `?tier=preview` deleted | trap 4 — a valid 200 JPEG at the expensive tier, shredding the audit log |
 | unknown stored provenance read as **verified** | a storage-format change silently promoting trust-on-first-use |
 | a `401` from `/api` read as an unexpected answer | sends a parent back through pairing when only the session lapsed |

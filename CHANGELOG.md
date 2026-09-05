@@ -11,6 +11,31 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
 
 ### Added
 
+- **Lock that PC's screen, from the phone.** The first control endpoint this app calls, and
+  the only one on nestwatch's list it takes. `PLAN.md` §5 keeps *configuration* in the
+  browser — rules, routines, curfew, policy — because it is done rarely, at a desk. Locking
+  is not configuration; it is a single act whose whole point is that the parent is
+  somewhere else, which is the same test the time-codes screen was admitted on.
+  <br>Shutdown, and killing a process, fail that test in the other direction: a shutdown
+  discards whatever the child had open and cannot be taken back from here, and a kill needs
+  a process list to choose from, which is a screen. Locking interrupts without destroying
+  anything — the child's own password brings the session back with their work intact — so
+  it is the one control a phone can offer without also needing a way to undo it. That is
+  also why it sits below a divider rather than beside "One frame": those two read, this one
+  reaches into the child's session.
+  <br>Behind a confirmation, because there is no undo on this side. nestwatch publishes no
+  "unlock", deliberately — a machine is unlocked by the person sitting at it. A 500 names
+  the likely cause rather than hedging: the first thing that can fail is finding an
+  interactive session to lock, so the sentence says nobody is signed in and that the PC is
+  therefore already showing its sign-in screen, instead of reporting a fault that is not
+  there. `test/lock_screen_test.dart` is this suite's first widget test to drive a real
+  request through a screen, and it exists for the cancel path.
+- **A tripwire tying what this app stores to what the privacy screen says it stores.**
+  `store_requirements_test.dart` counts the Keystore keys under `lib/` and the bullets on
+  the privacy screen and fails when they disagree, and separately checks that the sentence
+  which counts them says the same number. It cannot judge whether the words are honest;
+  what it makes impossible is adding a key in silence. See Fixed, below, for why.
+
 - Pairing by QR code and by trust-on-first-use, both ending pinned to the PC's certificate.
 - Certificate pinning through `HttpOverrides.global`, with the pin as the sole authority:
   a fingerprint match admits the connection and nothing else is consulted.
@@ -61,6 +86,63 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   the mistake worth guarding against.
 
 ### Fixed
+
+- **The "sign in again" notice could only be taken down by the one thing that could not
+  run.** It is raised by the background poll when that PC rejects the session, and it was
+  lowered by the background poll and by nothing else — but `pollOnce` reaches `lower()`
+  only *after* a request has succeeded, and a request cannot succeed while the session is
+  the broken thing. So a parent who opened the app from the launcher and signed in was left
+  with "Sign in to nestwatch again" on the shade, telling them to do a thing they had just
+  done; and `unpair()` left it standing, pointing at a PC this app had been told to forget.
+  <br>`PairingController` now takes a `withdrawSignInNotice` capability, in the same shape
+  and for the same reason as `forgetAnnounced`: naming what is needed rather than who
+  provides it keeps `flutter_secure_storage` and `flutter_local_notifications` out of the
+  part of this app that decides what to trust and has to run under a plain `dart run`. Four
+  harnesses stopped compiling the moment the parameter was made required, which is what
+  they are for. It fires on connection and on unpair, never on a scope refusal — an
+  integration pairing signs in and still cannot read time requests, so the notice is still
+  true.
+- **A notice the parent swiped away was never given again.** The record was a bare bit, so
+  "already told" was permanent until a poll succeeded — which, again, it could not. The
+  anti-nagging argument was always right about fifteen minutes and was never an argument
+  for *once, ever*. The store now keeps a time and the notice repeats at most once a day,
+  and a clock that has moved **backwards** re-announces rather than going quiet: elapsed
+  time is negative there, and `elapsed < renotifyAfter` is true of every negative duration,
+  so the naive comparison would have gone silent for as long as the clock stayed behind.
+- **The privacy screen listed three stored items when there were four, and "Forget this PC"
+  deleted three.** `SecureSignInNotice` added a Keystore key one cycle ago and nothing —
+  not the screen, not `unpair()`, not any test — learned about it. That is a false statement
+  about data handling in the document Play requires to be truthful, and it is the *second*
+  time this list has drifted; `unpair`'s own comment records the first. Both halves are
+  fixed, and the tripwire above is there because twice is a pattern and a pattern is not
+  fixed by being more careful.
+- **A request replaced on the notification shade buzzed a second time.** Everything here is
+  posted under an id that makes a repeat a replacement, and three paths produce one: the
+  poll announcing before it records, WorkManager re-running a task, and — the one that is
+  not a rare crash — the fifteen-minute tier and the "watch now" service polling the same
+  PC from two isolates against one store with no lock between load and save. `onlyAlertOnce`
+  now covers every alerting notification, asserted over a list rather than one at a time. It
+  does not silence anything the parent has dismissed: Android skips the sound only while the
+  notification is already showing. The remaining overlap is filed as `M29`, including why
+  suspending one tier while the other runs was rejected.
+
+### Security
+
+- **Every GitHub Actions reference is pinned to a full commit SHA**, with the tag it came
+  from kept as a trailing comment — which is what the existing `dependabot.yml` reads to
+  move a SHA and its tag together, so that entry gets more valuable rather than needing to
+  change. A tag is a mutable pointer: whoever owns an action can move `v4` to different
+  code, and
+  every workflow naming the tag runs it on the next run with no diff anywhere here —
+  `tj-actions/changed-files` (CVE-2025-30066) was compromised exactly that way, and
+  `subosito/flutter-action` is third-party. It matters more here than in most repositories
+  because this workflow is the only thing that builds the APK a parent installs, and the
+  Gradle build already refuses to sign a bundle with the debug key on the grounds that such
+  an artifact "looks exactly like a finished one". A repointed tag reaches the same artifact
+  one layer up. Dependabot is the other half and was already configured for actions: a
+  pinned SHA with nothing updating it is a dependency frozen at whatever was current the day
+  somebody pinned it, security fixes included — so that entry gained a note on why it is
+  worth more under SHAs than it was under tags, and nothing else about it changed.
 
 - **Signing in now ends on a fixed date, and this app used to meet that in silence.**
   nestwatch 0.7.0 added `SESSION_MAX_DAYS`: a ceiling measured from when a device signed

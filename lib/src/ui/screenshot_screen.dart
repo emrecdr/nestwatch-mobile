@@ -243,10 +243,94 @@ class _ScreenshotScreenState extends State<ScreenshotScreen> {
                 style: theme.textTheme.bodySmall,
                 textAlign: TextAlign.center,
               ),
+              // Below a divider rather than beside the two buttons above, because it is a
+              // different kind of act. Those read; this one reaches into the child's
+              // session and interrupts them. Putting it in the same row would make a
+              // mis-tap between "show me a frame" and "take the screen away from them"
+              // one pixel wide.
+              const Divider(height: 28),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _locking ? null : _confirmLock,
+                  icon: const Icon(Icons.lock_outline, size: 18),
+                  label: Text(_locking ? 'Locking…' : 'Lock this screen'),
+                ),
+              ),
             ],
           ),
         ),
       ],
     );
   }
+
+  /// A lock in flight. Debounced for the reason the approve buttons are: the server is
+  /// safe under a repeat, and the second tap still costs a round trip and a second audit
+  /// row for one decision.
+  bool _locking = false;
+
+  /// Ask first, because there is no undo on this side.
+  ///
+  /// nestwatch publishes no "unlock", and that is right rather than an omission: a
+  /// machine is unlocked by the person sitting at it, with their own password. So the
+  /// only way back is through the child, which makes this the one control in this app
+  /// whose consequence a parent cannot take back by tapping again.
+  ///
+  /// The copy says what the act actually does, in both directions. "Nothing they had open
+  /// is closed" is the fact that separates this from the shutdown endpoint this app
+  /// deliberately does not call, and it is the difference between interrupting a child
+  /// and destroying their homework.
+  Future<void> _confirmLock() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Lock this screen?'),
+        content: const Text(
+          'Your child sees the Windows sign-in screen straight away. Nothing they '
+          'had open is closed, and their own password brings it all back — so this '
+          'interrupts them rather than shutting them out.\n\n'
+          'That PC records it in its audit log, the same as it records you watching.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Lock screen'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await _lock();
+  }
+
+  Future<void> _lock() async {
+    if (_locking) return;
+    setState(() => _locking = true);
+    try {
+      await widget.client.lockScreen();
+      if (!mounted) return;
+      _snack('Locked. Your child can sign back in with their own password.');
+    } on NestwatchException catch (e) {
+      if (!mounted) return;
+      // A lapsed session is not a failed lock; it is the whole app needing a password
+      // again, and it is handled one level up so every screen answers it the same way.
+      if (e.failure == NestwatchFailure.sessionExpired) {
+        widget.onFailure(e);
+        return;
+      }
+      // Everything else already carries a sentence written for a parent — the 500 says
+      // that nobody is signed in to that PC, a 403 says which kind of refusal it was.
+      // Nothing here rewrites them.
+      _snack(e.message);
+    } finally {
+      if (mounted) setState(() => _locking = false);
+    }
+  }
+
+  void _snack(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 }

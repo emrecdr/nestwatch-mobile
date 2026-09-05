@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/background/seen_requests.dart';
+import 'package:nestwatch_mobile/src/background/sign_in_notice.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
@@ -163,6 +164,7 @@ final _subjects = <_Subject>[
         identities: InMemoryServerIdentityStore(),
         sessions: InMemorySessionStore(),
         forgetAnnounced: InMemorySeenRequestStore().clear,
+        withdrawSignInNotice: SignInNotice.recording().lower,
       ),
     ),
     mustShow: 'nestwatch',

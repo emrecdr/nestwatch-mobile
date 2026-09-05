@@ -106,30 +106,58 @@ Future<bool> notificationsEnabled() async {
   return await android?.areNotificationsEnabled() ?? false;
 }
 
+/// What every time-request notification is posted with.
+///
+/// Top-level rather than a local inside [notifyTimeRequests] so a plain test can hold the
+/// real object. The alternative was reading this file's text for the word `onlyAlertOnce`,
+/// which proves that a string is present rather than that a notification carries a flag —
+/// a distinction `docs/OPEN-FINDINGS.md` M18 records this repo getting wrong once, in a
+/// scanner that could not match its own needle. Source-scraping is right for the manifest
+/// and the `Info.plist`, where there is no runtime handle at all. Here there is one.
+const NotificationDetails timeRequestDetails = NotificationDetails(
+  iOS: DarwinNotificationDetails(categoryIdentifier: timeRequestCategoryId),
+  android: AndroidNotificationDetails(
+    _channelId,
+    _channelName,
+    channelDescription: _channelDescription,
+    importance: Importance.high,
+    priority: Priority.high,
+    // The parent acts in the app; the notification is the prompt, not the record.
+    autoCancel: true,
+    // A re-post of a request already on screen updates in silence.
+    //
+    // Two paths reach one, and both were already known and priced. `pollOnce`
+    // announces before it records, so a round that dies in between announces again —
+    // its comment calls that "one re-alert on a single notification" and accepts it,
+    // correctly, as the cheaper half of an at-least-once trade. And WorkManager may
+    // re-run a task on its own account.
+    //
+    // What made it worth closing is a third path that is not a rare crash: the
+    // fifteen-minute tier and the opt-in "watch now" service poll the same PC from two
+    // isolates against one `SecureSeenRequestStore`, with no lock between load and
+    // save. Interleaved, both can see the same request as fresh. The dedup that makes
+    // that harmless is the shared id — Android replaces rather than stacks — and this
+    // is what stops the replacement buzzing a second time.
+    //
+    // It does NOT suppress an alert for a notification the parent has dismissed:
+    // Android only skips the sound when the notification is already showing, which is
+    // precisely the case where they have been told. See the register entry on why the
+    // two tiers are not made mutually exclusive instead.
+    onlyAlertOnce: true,
+    // Answer without opening anything. The work happens in a background isolate that
+    // installs the pin for itself — see notification_actions.dart, including why every
+    // path that does not end in the change being made says so out loud.
+    actions: <AndroidNotificationAction>[
+      AndroidNotificationAction(approveActionId, 'Approve'),
+      AndroidNotificationAction(denyActionId, 'Deny'),
+    ],
+  ),
+);
+
 /// Post one notification per newly-seen request.
 Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
   if (requests.isEmpty) return;
   await initNotifications();
-
-  const details = NotificationDetails(
-    iOS: DarwinNotificationDetails(categoryIdentifier: timeRequestCategoryId),
-    android: AndroidNotificationDetails(
-      _channelId,
-      _channelName,
-      channelDescription: _channelDescription,
-      importance: Importance.high,
-      priority: Priority.high,
-      // The parent acts in the app; the notification is the prompt, not the record.
-      autoCancel: true,
-      // Answer without opening anything. The work happens in a background isolate that
-      // installs the pin for itself — see notification_actions.dart, including why every
-      // path that does not end in the change being made says so out loud.
-      actions: <AndroidNotificationAction>[
-        AndroidNotificationAction(approveActionId, 'Approve'),
-        AndroidNotificationAction(denyActionId, 'Deny'),
-      ],
-    ),
-  );
 
   for (final request in requests) {
     await _plugin.show(
@@ -142,7 +170,7 @@ Future<void> notifyTimeRequests(List<TimeRequest> requests) async {
       body: request.reason.isEmpty
           ? 'Your child asked for more screen time.'
           : request.reason,
-      notificationDetails: details,
+      notificationDetails: timeRequestDetails,
     );
   }
 }
@@ -209,6 +237,26 @@ Future<void> notifyAboutAnswer(
 /// No action buttons. A body tap opens the app, which is where the password is typed —
 /// and `onNotificationAction` ignores everything that is not an action tap, so this
 /// cannot be misread as answering a request.
+const NotificationDetails signInNoticeDetails = NotificationDetails(
+  iOS: DarwinNotificationDetails(),
+  android: AndroidNotificationDetails(
+    _signInChannelId,
+    _signInChannelName,
+    channelDescription: _signInChannelDescription,
+    importance: Importance.high,
+    priority: Priority.high,
+    // Dismissable: a parent who has seen it and cannot act right now should be able
+    // to clear it. The store, not the notification, is what remembers — and since the
+    // store began keeping a *time* rather than a bit, remembering no longer means
+    // forever. See `sign_in_notice.dart`.
+    autoCancel: true,
+    // Belt and braces with [SignInNoticeStore]. If a re-post ever does happen —
+    // a store that failed to write, a reinstall, the once-a-day repeat landing on a
+    // notice still on screen — it updates in place in silence rather than sounding again.
+    onlyAlertOnce: true,
+  ),
+);
+
 Future<void> notifySignInNeeded() async {
   await initNotifications();
   await _plugin.show(
@@ -219,23 +267,7 @@ Future<void> notifySignInNeeded() async {
     body:
         'This phone\'s sign-in has ended, so it can no longer tell you when your '
         'child asks for more screen time. Open nestwatch to sign in.',
-    notificationDetails: const NotificationDetails(
-      iOS: DarwinNotificationDetails(),
-      android: AndroidNotificationDetails(
-        _signInChannelId,
-        _signInChannelName,
-        channelDescription: _signInChannelDescription,
-        importance: Importance.high,
-        priority: Priority.high,
-        // Dismissable: a parent who has seen it and cannot act right now should be able
-        // to clear it. The store, not the notification, is what remembers.
-        autoCancel: true,
-        // Belt and braces with [SignInNoticeStore]. If a re-post ever does happen —
-        // a store that failed to write, a reinstall — it updates in place in silence
-        // rather than sounding again.
-        onlyAlertOnce: true,
-      ),
-    ),
+    notificationDetails: signInNoticeDetails,
   );
 }
 

@@ -135,6 +135,28 @@ class PairingController {
   /// the part of this app that must run under a plain `dart run`. Four harnesses stopped
   /// compiling the moment that import appeared, which is what they are for.
   final Future<void> Function() _forgetAnnounced;
+
+  /// Take down any standing "sign in to nestwatch again" notice.
+  ///
+  /// The second capability injected here, for the same reason and in the same shape as
+  /// [_forgetAnnounced]: naming what is needed rather than who provides it keeps
+  /// `background/` out of this file, and with it `flutter_secure_storage` and
+  /// `flutter_local_notifications` — neither of which may appear in the part of this app
+  /// that decides what to trust and has to run under a plain `dart run`.
+  ///
+  /// **Why this exists at all.** The notice was raised by the background poll and lowered
+  /// by the background poll, and by nothing else. That is a loop that cannot close: the
+  /// only path to `lower()` ran *after* a request had succeeded, and a request cannot
+  /// succeed while the session is the thing that is broken. So the two ways a parent
+  /// actually ends the condition — signing in, or forgetting the PC — both left the
+  /// notification standing and the record set, telling them to do a thing they had just
+  /// done.
+  ///
+  /// **Required, with no default**, exactly as [_forgetAnnounced] is. A default would
+  /// have to name the real one, which is the import this parameter exists to avoid; and a
+  /// no-op default would let a new call site opt out of the fix in silence.
+  final Future<void> Function() _withdrawSignInNotice;
+
   final DateTime Function() _now;
 
   PairingState _state = const PairingIdle();
@@ -152,14 +174,21 @@ class PairingController {
     required this._identities,
     required this._sessions,
     required Future<void> Function() forgetAnnounced,
+    required Future<void> Function() withdrawSignInNotice,
     DateTime Function()? now,
-    // The parameter is public while the field is private, so callers write
-    // `forgetAnnounced:` rather than `_forgetAnnounced:`. An initializing formal would
-    // put the private name in the public constructor. The ignore sits on its own line
-    // because `dart format` splits the assignment and a trailing comment would land on
-    // the wrong one -- which is how it stopped suppressing anything once already.
+    // Both capability parameters are public while their fields are private, so callers
+    // write `forgetAnnounced:` rather than `_forgetAnnounced:`. An initializing formal
+    // would put the private name in the public constructor.
+    //
+    // Each ignore sits on its own line, immediately above the assignment it suppresses.
+    // `dart format` splits these onto separate lines, so a trailing comment lands on the
+    // wrong one -- which is how this stopped suppressing anything once already -- and one
+    // ignore does NOT cover the line below it, which is how the second capability arrived
+    // with a fresh lint the moment it was added.
     // ignore: prefer_initializing_formals
   }) : _forgetAnnounced = forgetAnnounced,
+       // ignore: prefer_initializing_formals
+       _withdrawSignInNotice = withdrawSignInNotice,
        _now = now ?? DateTime.now;
 
   void addListener(void Function() listener) => _listeners.add(listener);
@@ -204,13 +233,32 @@ class PairingController {
   /// would be three places to forget it, and the one most likely to be forgotten is
   /// `restoreSession`, where the wrong pairing arrives already stored and is never scanned
   /// again.
-  void _connect(ServerIdentity identity, SessionInfo session) {
+  Future<void> _connect(ServerIdentity identity, SessionInfo session) async {
     final refusal = scopeRefusal(session: session);
     if (refusal != null) {
       _emit(PairingFailed(refusal));
       return;
     }
     _emit(PairingConnected(identity, session));
+
+    // The parent has just done the thing the notice asks for, so the notice has stopped
+    // being true. Only here, and not on the refusal path above: a pairing this app cannot
+    // drive still cannot tell them about a request, which is what the notice says.
+    //
+    // After the state, never before it, and never allowed to prevent it. Signing in is
+    // the parent's business; a notification channel is this app's housekeeping, and a
+    // phone that cannot reach the channel — a revoked notification permission is the
+    // ordinary case — must still be able to sign in.
+    //
+    // Swallowing is safe *by construction* rather than by hope: `SignInNotice.lower`
+    // clears its record only once the withdrawal has actually returned, so a failure here
+    // leaves the record standing and the next successful background poll tries again.
+    // That is why this is the one place in this file where an error is dropped.
+    try {
+      await _withdrawSignInNotice();
+    } on Object catch (_) {
+      // Deliberately nothing. See above.
+    }
   }
 
   void _emit(PairingState next) {
@@ -302,7 +350,7 @@ class PairingController {
     try {
       final session = await _probe(client);
       if (session.authenticated) {
-        _connect(stored, session);
+        await _connect(stored, session);
       } else {
         // The certificate is still trusted; only the session went. §5: prompt for the
         // password, do not re-pair.
@@ -474,7 +522,7 @@ class PairingController {
     final identity = await _persistIdentity(invite, fingerprint, provenance);
 
     if (session.authenticated) {
-      _connect(identity, session);
+      await _connect(identity, session);
       return;
     }
 
@@ -510,7 +558,7 @@ class PairingController {
         _emit(const PairingFailed('Signed in, but no paired PC is on record.'));
         return;
       }
-      _connect(identity, session);
+      await _connect(identity, session);
     } on NestwatchException catch (e) {
       final reason = switch (e.failure) {
         NestwatchFailure.badPassword => PasswordPrompt.wrongPassword,
@@ -566,6 +614,13 @@ class PairingController {
     // notification, so a re-paired phone would stay silent about requests it "already
     // announced" to a pairing that no longer exists.
     await _forgetAnnounced();
+    // The fourth, and it is the same mistake one cycle later. When the notice above was
+    // written it added a Keystore key and nothing here learned about it — so "Forget this
+    // PC" left a record behind, and could leave a notification on screen telling a parent
+    // to sign in to a PC this app had just been told to forget. `store_requirements_test`
+    // now fails if a fifth key is added without the privacy screen naming it, because
+    // this list has drifted twice and a comment is not a check.
+    await _withdrawSignInNotice();
     _current = null;
     _client?.close();
     _client = null;
