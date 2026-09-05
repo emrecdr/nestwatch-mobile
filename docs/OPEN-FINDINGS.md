@@ -434,9 +434,20 @@ Measured 2026-09-02.
 |---|---|---|---|
 | Flutter | 3.44.6 | 3.47.1 | three minors behind; pinned in CI as `FLUTTER_VERSION` |
 | Dart | 3.12.2 | 3.13.1 | `sdk: ^3.12.2` already admits it |
-| iOS deployment | 14.0 | 15.0 floor | 3.47 lifts the floor 13 → 15; this **must** move |
+| iOS deployment | ~~14.0~~ **15.0** | 15.0 floor | **Done 2026-09-06.** Moved ahead of the upgrade, while it costs nobody anything |
 | Play target API | 36 | 36 | compliant — `flutter.targetSdkVersion` is 36 |
 | AGP / Kotlin | 9.0.1 / 2.3.20 | 9.1.0 / 2.4.0 | below 3.47's verified pair |
+
+**The iOS floor is done, and was the one row here that could move on its own.** Raised to
+15.0 on 2026-09-06, ahead of the upgrade rather than during it, because this app has never
+been released — which is the only moment dropping a supported OS version costs nobody
+anything, and that moment ends at `M7`. `test/ios_config_test.dart` now holds it: the Xcode
+project states the number once per build configuration, three copies with nothing keeping
+them in step, and a person raising it in the Xcode UI changes whichever one is selected.
+Both halves of that check were watched to fail — one configuration disagreeing, and all
+three agreeing below the floor. It cannot be mutation-audited: `tool/mutate.sh` snapshots
+and restores `lib/` only, so a mutation aimed at `ios/` would apply and never be put back.
+That constraint is now stated in the script.
 
 **The Play clock has run out rather than being close.** Since 31 August 2026 new apps and
 updates must target API 36 or be rejected in Play Console, with extensions available only

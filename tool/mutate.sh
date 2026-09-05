@@ -48,6 +48,18 @@ cp -R lib "$BACKUP/lib"
 #
 # `test/`, `tool/` and `docs/` are untouched and safe to edit — except this file itself,
 # which bash reads incrementally as it runs.
+#
+# **And the mirror of that rule: a mutation may only target a file under `lib/`.** The
+# snapshot is `lib/` and so is the restore, so a mutation pointed at `android/`, `ios/` or
+# a manifest would apply and never be put back — the tree is left broken, silently, and the
+# `EXIT` trap would report a clean finish over the top of it.
+#
+# It comes up more than it sounds, because several tests here read source that is not Dart:
+# `flag_secure_test.dart` reads Kotlin, `ios_config_test.dart` reads `Info.plist` and the
+# Xcode project, `store_requirements_test.dart` reads the Android manifest. Those checks
+# are worth having and none of them can be mutation-audited from here. Prove them the way
+# the ones already in this repository were proved — break the file by hand, watch the test
+# go red, restore it — and say in the commit that you did.
 restore() { rm -rf lib; cp -R "$BACKUP/lib" lib; }
 trap 'restore; rm -rf "$BACKUP"' EXIT
 

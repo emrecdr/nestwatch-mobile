@@ -19,6 +19,7 @@ import 'support/source.dart';
 
 void main() {
   const plistPath = 'ios/Runner/Info.plist';
+  const pbxprojPath = 'ios/Runner.xcodeproj/project.pbxproj';
   const dartPath = 'lib/src/background/background_poll.dart';
 
   String plist() => readSourceOrFail(
@@ -125,4 +126,65 @@ void main() {
       );
     },
   );
+
+  group('the minimum iOS this app claims to run on', () {
+    // **Three copies of one number, with nothing holding them together.** Xcode writes
+    // `IPHONEOS_DEPLOYMENT_TARGET` once per build configuration — Debug, Release, Profile —
+    // and a person raising it in the Xcode UI changes whichever one is selected. Two
+    // agreeing and one not is a build that works locally and fails, or silently ships a
+    // different floor, from whichever configuration CI happens to use.
+    //
+    // Nothing else in this repository checks it, and nothing about running the app would
+    // reveal it: an app declaring iOS 14 simply installs on an iOS 14 device and crashes
+    // there, or does not appear in the store listing for devices it should support.
+
+    /// Every deployment target the Xcode project states.
+    List<String> targets() {
+      final source = readSourceOrFail(
+        pbxprojPath,
+        why:
+            'it carries the minimum iOS version, once per build configuration.',
+      );
+      return RegExp(
+        r'IPHONEOS_DEPLOYMENT_TARGET = ([0-9.]+);',
+      ).allMatches(source).map((m) => m.group(1)!).toList();
+    }
+
+    test('there are some, so the checks below are not vacuous', () {
+      // The control. An empty list satisfies "they all agree" perfectly.
+      expect(
+        targets(),
+        isNotEmpty,
+        reason:
+            'if this is empty the setting was renamed or removed, and the rest of '
+            'this group is agreeing about nothing',
+      );
+    });
+
+    test('every build configuration states the same one', () {
+      final found = targets();
+      expect(
+        found.toSet(),
+        hasLength(1),
+        reason:
+            'Debug, Release and Profile disagreeing means the floor depends on '
+            'which configuration built the artifact: $found',
+      );
+    });
+
+    test('and it is at least 15.0, which Flutter 3.47 requires', () {
+      // `docs/OPEN-FINDINGS.md` M21: 3.47 lifts the SDK's own floor from 13 to 15, so this
+      // has to move before that upgrade rather than during it. Raised while this app has
+      // never been released, which is the only moment dropping a supported OS version
+      // costs nobody anything.
+      final stated = double.parse(targets().first);
+      expect(
+        stated,
+        greaterThanOrEqualTo(15.0),
+        reason:
+            'below 15.0 the Flutter 3.47 upgrade fails at build time, and the fix '
+            'is here rather than in whatever error it produces',
+      );
+    });
+  });
 }

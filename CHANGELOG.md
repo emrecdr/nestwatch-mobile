@@ -145,6 +145,20 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   notification is already showing. The remaining overlap is filed as `M29`, including why
   suspending one tier while the other runs was rejected.
 
+### Changed
+
+- **The minimum iOS is 15.0, up from 14.0.** Flutter 3.47 lifts the SDK's own floor from 13
+  to 15, so this had to move before that upgrade rather than during it — and it moved now
+  because this app has never been released, which is the only moment dropping a supported OS
+  version costs nobody anything. `test/ios_config_test.dart` holds it, and holds the part
+  that actually goes wrong: the Xcode project states the number once per *build
+  configuration*, three copies with nothing keeping them in step, and somebody raising it in
+  the Xcode UI changes whichever one happens to be selected. Two agreeing and one not is a
+  floor that depends on which configuration built the artifact. Both halves were watched to
+  fail before being trusted. It carries no mutation, because `tool/mutate.sh` snapshots and
+  restores `lib/` only — a mutation aimed at `ios/` would apply and never be put back, and
+  that constraint is now written into the script for the next source-reading test.
+
 ### Security
 
 - **Every GitHub Actions reference is pinned to a full commit SHA**, with the tag it came
