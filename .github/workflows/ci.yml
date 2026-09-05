@@ -16,6 +16,25 @@ concurrency:
 permissions:
   contents: read
 
+# Every `uses:` below is pinned to a full commit SHA, with the tag it was resolved from
+# kept as a trailing comment. A tag is a mutable pointer: whoever owns the action can move
+# `v4` to a different commit, and every workflow that names the tag runs the new code on
+# its next run, with no diff anywhere in this repository. That is not hypothetical —
+# `tj-actions/changed-files` (CVE-2025-30066) was compromised exactly that way, and
+# OpenSSF Scorecard's Pinned-Dependencies check asks for SHAs on first- and third-party
+# actions alike. `subosito/flutter-action` is third-party.
+#
+# It matters more here than in most repositories, because this workflow is the only thing
+# that builds the APK a parent installs. `android/app/build.gradle.kts` already refuses to
+# produce a bundle signed with the debug key, on the grounds that such an artifact "looks
+# exactly like a finished one" -- a repointed tag reaches the same artifact one layer up,
+# in the one part of the pipeline nothing here was watching.
+#
+# The tag comments are load-bearing rather than decorative: Dependabot reads them to know
+# which release a SHA came from, and updates both together. See .github/dependabot.yml --
+# a pinned SHA with nothing updating it is a dependency frozen at whatever was current on
+# the day somebody pinned it, security fixes included.
+
 env:
   # Pinned, not floating. `stable` moves, and a gate that changes underneath you reports on
   # a toolchain nobody chose. Matches the version this repo is developed against.
@@ -29,8 +48,8 @@ jobs:
     name: analyze · format · test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: subosito/flutter-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -57,13 +76,13 @@ jobs:
     name: versions · dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `git describe --exact-match` needs the tags, and checkout does not fetch them
           # by default -- without this every run reports "not tagged", including the
           # tagged ones, which is the failure mode this checker exists to avoid.
           fetch-depth: 0
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -95,12 +114,12 @@ jobs:
       run:
         working-directory: nestwatch-mobile
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: nestwatch-mobile
 
       - name: Check out the server this app is a client of
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: emrecdr/nestwatch
           path: nestwatch
@@ -153,12 +172,12 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -187,7 +206,7 @@ jobs:
       # reject them, which is the intended state until M7. The artifact name says so, so
       # that nobody has to read this comment to find out.
       - name: Keep the installable APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: nestwatch-mobile-DEBUG-SIGNED-apk-${{ github.run_number }}
           # x86_64 is deliberately not among these: it is emulator-only, and it is the
@@ -207,8 +226,8 @@ jobs:
     needs: check
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: subosito/flutter-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
@@ -238,8 +257,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
-      - uses: subosito/flutter-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable

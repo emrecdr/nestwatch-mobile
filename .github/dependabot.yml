@@ -4,6 +4,13 @@ updates:
   # reports on a toolchain nobody chose). Pinning without a way to move the pin is how a
   # repository ends up on an action that no longer receives fixes, so this proposes the
   # moves as pull requests that CI has to pass.
+  #
+  # As of 2026-09-05 those pins are full commit SHAs rather than tags, and that raises what
+  # this entry is worth rather than changing what it does. A tag at least moved when its
+  # owner shipped a fix; a SHA never moves at all, so without this the actions would sit at
+  # whatever was current the day somebody pinned them, security fixes included. The tag is
+  # kept beside each SHA as a comment because that is what Dependabot reads to know which
+  # release it is moving from, and it updates the two together.
   - package-ecosystem: github-actions
     directory: /
     schedule:
