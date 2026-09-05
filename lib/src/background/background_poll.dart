@@ -56,8 +56,11 @@ void callbackDispatcher() {
 Future<bool> runBackgroundPoll() async {
   // Installs the pin in THIS isolate. See background_session.dart — statics do not
   // cross isolates, so without this the poll would run unpinned.
-  // Not paired or not signed in is nothing to do, and not an error — so the result is
-  // discarded here, where both answers mean the same thing.
+  // Not paired, not signed in, or signed out by that PC is nothing to do and not an
+  // error — so the result is discarded here, where every answer means the same thing.
+  // This tier has no foreground service to stop, and it must keep its schedule either
+  // way: a session that has lapsed is fixed by typing a password, and the poll has to be
+  // running already for the round after that to notice.
   await pollPairedServer();
 
   // Always true, and stated here rather than inside `pollOnce` because this is the only

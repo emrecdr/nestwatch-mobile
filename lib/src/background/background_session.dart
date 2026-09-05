@@ -89,6 +89,14 @@ Future<BackgroundSession?> openBackgroundSession({
 /// The fifteen-minute round treats it as an ordinary quiet result; the foreground service
 /// stops itself, rather than leave a persistent notification claiming to watch nothing.
 ///
+/// **"Signed out" means both ways of being signed out.** It used to mean only the first:
+/// no cookie in storage. A cookie that PC *rejects* returned true, because `pollOnce`
+/// swallowed the 401 and answered the same as a successful round — so the watch service
+/// went on claiming to watch a server that had signed it out. Since nestwatch 0.7.0 that
+/// stopped being a corner case: `SESSION_MAX_DAYS` ends every session one month after
+/// pairing whatever the phone does. An unreachable PC still answers true, because the
+/// phone being out of the house is not a reason to tear anything down.
+///
 /// The wiring below is the point. Written out per tier, the store, the notifier and the
 /// canceller were two places to keep in step and one to forget — and the tier that
 /// forgot would go on polling while announcing nothing.
@@ -96,7 +104,7 @@ Future<bool> pollPairedServer() async {
   final session = await openBackgroundSession();
   if (session == null) return false;
   try {
-    await pollOnce(
+    return await pollOnce(
       client: session.client,
       store: const SecureSeenRequestStore(),
       notify: notifyTimeRequests,
@@ -107,7 +115,6 @@ Future<bool> pollPairedServer() async {
         withdraw: cancelSignInNeeded,
       ),
     );
-    return true;
   } finally {
     // This client is built fresh for one poll and nothing outlives it, so the pooled
     // connection it leaves behind is held open for the full 30-second idleTimeout for

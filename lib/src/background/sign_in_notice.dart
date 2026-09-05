@@ -20,7 +20,7 @@
 ///   * the 0.7.0 absolute age cap calls `session.flush()`, which does clear it;
 ///   * a session revoked from the *Signed-in devices* card does not go through that path;
 ///   * an idle expiry drops the record on that side, not this one;
-///   * a pre-0.6.0 unscoped session is refused by `require_auth` with no flush at all —
+///   * a pre-0.7.0 unscoped session is refused by `require_auth` with no flush at all —
 ///     it 401s forever while this phone holds a cookie it will never stop sending.
 ///
 /// Three of the four keep polling, so the free latch would have been a latch on one case

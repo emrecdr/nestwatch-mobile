@@ -601,7 +601,7 @@ class PairingController {
 /// server. Out here a plain test can hold it to every branch.
 ///
 /// **Only asked of a server that reports scopes at all**, and that is read from the
-/// payload rather than inferred. A build older than 0.6.0 sends no `scope` key, so every
+/// payload rather than inferred. A build older than 0.7.0 sends no `scope` key, so every
 /// session there would parse as null — and refusing those would lock this app out of every
 /// PC that has not upgraded, over a field they never claimed to send.
 ///

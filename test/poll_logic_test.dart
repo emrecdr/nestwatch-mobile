@@ -248,6 +248,42 @@ void main() {
       },
     );
 
+    test('a rejected session is reported, so the watch service can stop', () async {
+      // `watch_now` holds a foreground service showing a persistent "watching"
+      // notification and stops it when this answers false. Before the answer existed it
+      // could not: every failure looked alike from outside, so a phone that PC had signed
+      // out went on displaying a notification claiming to watch it.
+      status = 401;
+      body = '';
+
+      final stillSignedIn = await pollOnce(
+        client: client,
+        store: InMemorySeenRequestStore(),
+        notify: (_) async {},
+        cancel: (_) async {},
+        signInNotice: SignInNotice.recording(),
+      );
+
+      expect(stillSignedIn, isFalse);
+    });
+
+    test('but an unreachable PC is not, because it is not signed out', () async {
+      // The distinction the return value exists to carry. A phone out of the house must
+      // not tear down a watch session it can resume on the walk home.
+      status = 403;
+      body = '';
+
+      final stillSignedIn = await pollOnce(
+        client: client,
+        store: InMemorySeenRequestStore(),
+        notify: (_) async {},
+        cancel: (_) async {},
+        signInNotice: SignInNotice.recording(),
+      );
+
+      expect(stillSignedIn, isTrue);
+    });
+
     test('a bare 403 -- not on the LAN -- stays silent', () async {
       // `require_lan_peer` answers a bare 403 with an empty body, which is what being at
       // work looks like from here. Distinct from the unreachable case above: that one is

@@ -83,7 +83,7 @@ class SessionInfo {
   final bool authenticated;
   final String version;
 
-  /// What this pairing is worth, from nestwatch 0.6.0's `scope`.
+  /// What this pairing is worth, from nestwatch 0.7.0's `scope`.
   ///
   /// Null both for a caller with no session and for a session minted before scopes
   /// existed, which is why it is never read without [reportsScopes] beside it.
@@ -115,7 +115,7 @@ class SessionInfo {
     authenticated: json['authenticated'] as bool? ?? false,
     version: json['version'] as String? ?? 'unknown',
     scope: PairingScope.fromJson(json['scope']),
-    // Presence, not value. Every nestwatch from 0.6.0 sends the key on every answer —
+    // Presence, not value. Every nestwatch from 0.7.0 sends the key on every answer —
     // an object or an explicit null — so its absence identifies an older build exactly,
     // where a version comparison only guesses at one.
     reportsScopes: json.containsKey('scope'),
@@ -164,7 +164,7 @@ enum PairingScope {
 
   /// `null` for absent, null, or a shape this cannot read.
   ///
-  /// Absent means a server older than 0.6.0, and `null` means a session minted before
+  /// Absent means a server older than 0.7.0, and `null` means a session minted before
   /// scopes existed — which `require_auth` refuses anyway. Both are "no authority
   /// recorded", and neither may be read as permission.
   static PairingScope? fromJson(Object? raw) => switch (raw) {
@@ -177,7 +177,7 @@ enum PairingScope {
 
   /// Whether this app can do its job with this pairing.
   ///
-  /// Only [dashboard] qualifies, and `null` deliberately does **not**: on a 0.6.0 server a
+  /// Only [dashboard] qualifies, and `null` deliberately does **not**: on a 0.7.0 server a
   /// null scope beside an authenticated session means a pre-scopes session that
   /// `require_auth` refuses, so treating it as permission would be reading absence as
   /// consent. The caller checks the server's version before consulting this — see

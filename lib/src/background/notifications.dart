@@ -196,7 +196,7 @@ Future<void> notifyAboutAnswer(
 ///
 /// It does not say "expired". Since nestwatch 0.7.0 a 401 has four causes — the sliding
 /// idle window, the new absolute one-month cap, a session revoked from the parent's
-/// *Signed-in devices* card, and a pre-0.6.0 session refused for carrying no scope — and
+/// *Signed-in devices* card, and a pre-0.7.0 session refused for carrying no scope — and
 /// they are indistinguishable on the wire, all four arriving as a bare 401. "Expired" is
 /// false for the revoked one, and a parent who has just signed this phone out from their
 /// dashboard being told its sign-in "expired" is being told something they know is wrong.

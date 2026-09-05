@@ -53,7 +53,7 @@ void main() {
     });
 
     test('the scope says what the pairing is worth', () {
-      // nestwatch 0.6.0. A dashboard link and an integration link are byte-identical in
+      // nestwatch 0.7.0. A dashboard link and an integration link are byte-identical in
       // form, so this field is the only way a client can tell which one it was handed.
       final signedIn = SessionInfo.fromJson(object('session-signed-in'));
       expect(signedIn.scope, PairingScope.dashboard);

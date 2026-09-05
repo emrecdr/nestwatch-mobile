@@ -81,9 +81,22 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   as a poll succeeds again. An unreachable PC and a phone off the LAN keep the old silence.
   It says the sign-in has *ended* rather than *expired*, because since 0.7.0 a 401 has four
   causes — the idle window, the new ceiling, a device revoked from that card, and a
-  pre-0.6.0 session refused for carrying no scope — and they are indistinguishable on the
+  pre-0.7.0 session refused for carrying no scope — and they are indistinguishable on the
   wire. "Expired" is false for the revoked one, and a parent who has just signed this phone
   out themselves should not be told something they know is wrong.
+
+- **"Watch now" kept claiming to watch a PC that had signed it out.** The foreground
+  service polls every 60 seconds and stops itself when there is nothing left to watch —
+  its own words: *"Unpaired or signed out — watching cannot mean anything. Stop rather than
+  leaving a persistent notification claiming to watch nothing."* It could not act on that,
+  because "signed out" was only ever detected as *no stored cookie*: a cookie that PC
+  **rejected** was swallowed and reported the same as a successful round. So the service
+  stayed up, with its persistent notification, watching a server that had signed it out.
+  <br>Harmless while sessions renewed themselves indefinitely, and not harmless once
+  `SESSION_MAX_DAYS` guaranteed the rejection. A poll now answers whether this phone is
+  still *signed in* rather than whether the poll *succeeded* — an unreachable PC still
+  answers yes, because being out of the house is not a reason to tear down a session that
+  will work again on the walk home.
 
 - **A PC running a nestwatch older than 0.4.0 signed the parent out, in a loop.**
   `/api/events` arrived in 0.4.0, so an older PC answers 404 forever. `ServerEvents`
@@ -95,7 +108,7 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   session; a missing endpoint stops the stream and leaves the 60-second poll — which
   exists for exactly this — carrying the screens.
 - **Scanning the wrong QR code produced one working tab and three blaming a VPN.** nestwatch
-  0.6.0 can mint two kinds of pairing — the parent's, and a bounded one for an integration
+  0.7.0 can mint two kinds of pairing — the parent's, and a bounded one for an integration
   that pushes earned time — and the two links are *byte-identical in form*, because the
   scope is recorded on that PC and never in the URL. Handed the integration one, this app
   paired successfully and then came apart pointing at the wrong thing: an integration
@@ -194,11 +207,22 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   marker header once the sink's own certificate was pinned.
 - ATS does not govern `dart:io`, settled inside a running iOS app rather than from
   documentation.
-- Alignment with nestwatch **0.6.0**: nine golden files byte-identical, 11 contract checks,
-  and all eight live harnesses green as of 0.5.1. `testedAgainst` moved to `0.6.0` **with**
-  the files, which is the rule that constant exists under — the goldens were taken from
-  `git archive origin/main`, not from the sibling working tree, which was three commits
-  past what CI can see and moved twice more while this was written.
+- Alignment with nestwatch **0.7.0**: nine golden files byte-identical, 11 contract checks,
+  and all eight live harnesses green as of 0.5.1. `testedAgainst` moved to `0.7.0` **with**
+  the files, which is the rule that constant exists under.
+  <br>**This entry said `0.6.0`, and the goldens it described were never in a 0.6.0.** They
+  were taken from `git archive origin/main` — correctly, because that is the tree CI clones
+  and the sibling working tree was three commits past it. But `origin/main` was then *past
+  the v0.6.0 tag*, carrying the unreleased `scope` work, while `testedAgainst` was set from
+  `Cargo.toml`, which holds the last **released** version throughout development. So the
+  constant named 0.6.0 and the files came from something later, and `tool/check_golden.sh`
+  compared the two and agreed — it was comparing a version to itself. Checked against the
+  tags rather than inferred: `git show v0.6.0:tests/golden/session-signed-in.json` has no
+  `scope` key at all; `v0.7.0` has it. Every comment in this repo dating scopes to 0.6.0 was
+  wrong for the same reason and has been corrected. The behaviour was not: `scopeRefusal`
+  reads the key's *presence* and never the version, which is why nothing was mis-decided —
+  and that is only true because a surviving mutation forced it off the version in the first
+  place. See M27.
 - **`curfew_note` observed on the wire, with a control.** A dev nestwatch 0.5.1 was
   installed on a throwaway port on 2026-09-02, a request submitted through `POST
   /time-request` and approved twice. With bedtime off the reply was

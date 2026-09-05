@@ -50,7 +50,7 @@ void main() {
   /// When set, every path answers 403 carrying this in `{"error": ...}` — what the scope
   /// gate does to an integration pairing reaching for a route it may not have.
   ///
-  /// Copied from `auth::require_auth` in the pushed 0.6.0, not paraphrased.
+  /// Copied from `auth::require_auth` in the released 0.7.0, not paraphrased.
   String? scopeRefused;
 
   /// What the stub reports in `X-Shot-Tier`. `null` stands in for a server predating

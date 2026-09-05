@@ -34,10 +34,10 @@ import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
 /// A session exactly as `GET /session` put it on the wire.
 ///
 /// `scope` is given as the raw JSON value, and omitted entirely when [withScopeKey] is
-/// false — which is the only way to model a pre-0.6.0 answer honestly.
+/// false — which is the only way to model a pre-0.7.0 answer honestly.
 SessionInfo _session({
   bool authenticated = true,
-  String version = '0.6.0',
+  String version = '0.7.0',
   Object? scope,
   bool withScopeKey = true,
 }) => SessionInfo.fromJson({
@@ -86,7 +86,7 @@ void main() {
   });
 
   group('absent and null are different answers', () {
-    test('no scope key at all is a pre-0.6.0 PC, and is left alone', () {
+    test('no scope key at all is a pre-0.7.0 PC, and is left alone', () {
       // The load-bearing exemption. Refusing here would lock this app out of every PC that
       // has not upgraded, over a field those builds never claimed to send -- and such a
       // build has no integration pairings to be handed, because the feature did not exist.
@@ -112,7 +112,7 @@ void main() {
       // different path from an agreed one -- a distinction no test made, which is why
       // widening it survived. Presence is now the whole rule, and these four say so: the
       // version moves across the entire range and changes nothing.
-      for (final version in ['0.4.0', '0.6.0', '9.9.9', 'not-a-version']) {
+      for (final version in ['0.4.0', '0.7.0', '9.9.9', 'not-a-version']) {
         expect(
           scopeRefusal(session: _session(version: version, scope: null)),
           isNotNull,

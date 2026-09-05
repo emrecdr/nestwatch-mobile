@@ -246,7 +246,7 @@ mutate "scope: a kind this build cannot name is accepted anyway" \
 # Re-anchored 2026-09-04. The first version of this keyed the exemption on
 # `ContractCheck.serverOlder` and **survived** -- no test distinguished a PC merely newer
 # from one behind, because the version was a proxy for a fact the server states outright.
-# The fix reads the key's presence; this now inverts that, so a pre-0.6.0 PC is refused and
+# The fix reads the key's presence; this now inverts that, so a pre-0.7.0 PC is refused and
 # a lapsed session is accepted -- both directions wrong at once.
 mutate "scope: absent and present-and-null swap meanings" \
   lib/src/pairing/pairing_controller.dart \
@@ -531,21 +531,6 @@ mutate "unpair: the announced-request identifiers survive" \
   "    await _forgetAnnounced();" \
   "    // not forgotten"
 
-echo
-echo "killed=$killed survived=$survived anchors-missing=$broken"
-
-# The exit status has to mean something, and it did not: this script reported survivors
-# and exited 0, so nothing could gate on it. A surviving mutant is an undefended claim; a
-# missing anchor is a claim nobody even attempted. Both are failures of the audit.
-# Both are failures, and they are not the same failure, so they do not share a status.
-#
-#   1  a mutation SURVIVED — a claim the tests do not defend. The code is the problem.
-#   2  an anchor is MISSING — the mutation never ran. The harness is the problem, and
-#      nothing was learned about the code either way.
-#
-# This is the same 0/1/2 the other checkers here use: 2 means "could not check", which is
-# exactly what a stale anchor is. Both are non-zero, so CI reds either way; the difference
-# is for whoever reads the status and has to decide which thing to go fix.
 # --- nestwatch 0.7.0: the absolute session cap ---------------------------------------
 #
 # 0.7.0 added `SESSION_MAX_DAYS`, a ceiling measured from `first_seen` that activity does
@@ -601,6 +586,30 @@ mutate "identity: the user agent stops naming this app" \
   lib/src/api/client_identity.dart \
   "    'nestwatch-mobile/\$appVersion (\$operatingSystem)';" \
   "    'Dart/3.12 (dart:io)';"
+
+# The watch service stops on a false answer. Reporting a rejected session as "still signed
+# in" leaves a foreground service, and a persistent notification, claiming to watch a PC
+# that has signed this phone out.
+mutate "watch: a rejected session still reads as signed in" \
+  lib/src/background/poll_logic.dart \
+  '      return false;' \
+  '      return true;'
+
+echo
+echo "killed=$killed survived=$survived anchors-missing=$broken"
+
+# The exit status has to mean something, and it did not: this script reported survivors
+# and exited 0, so nothing could gate on it. A surviving mutant is an undefended claim; a
+# missing anchor is a claim nobody even attempted. Both are failures of the audit.
+# Both are failures, and they are not the same failure, so they do not share a status.
+#
+#   1  a mutation SURVIVED — a claim the tests do not defend. The code is the problem.
+#   2  an anchor is MISSING — the mutation never ran. The harness is the problem, and
+#      nothing was learned about the code either way.
+#
+# This is the same 0/1/2 the other checkers here use: 2 means "could not check", which is
+# exactly what a stale anchor is. Both are non-zero, so CI reds either way; the difference
+# is for whoever reads the status and has to decide which thing to go fix.
 
 summary
 

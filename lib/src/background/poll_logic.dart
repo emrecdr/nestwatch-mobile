@@ -22,7 +22,23 @@ const Duration pollInterval = Duration(minutes: 15);
 /// WorkManager and without a notification channel — [notify] and [cancel] are platform
 /// calls that need an Android binding, and everything interesting here is the logic
 /// around them.
-Future<void> pollOnce({
+///
+/// ## The return value answers "is this phone still signed in?"
+///
+/// Not "did the poll succeed", and the difference is the whole point of it. An
+/// unreachable PC answers **true**: the phone is out of the house, the session is not
+/// known to be bad, and it will work again on the walk home. Only that PC actually
+/// *rejecting* the session answers false.
+///
+/// The fifteen-minute tier discards it — there is nothing for it to stop, and it must
+/// keep its schedule so polling resumes the moment the parent signs in again.
+/// `watch_now` is the caller that needs it: it holds a foreground service showing a
+/// persistent "watching" notification, and its own comment says that being signed out
+/// means "watching cannot mean anything. Stop rather than leaving a persistent
+/// notification claiming to watch nothing." Until this was reported it could not act on
+/// that: every failure looked alike from outside, so a rejected session left the service
+/// running and the notification claiming to watch a PC it could no longer see.
+Future<bool> pollOnce({
   required NestwatchClient client,
   required SeenRequestStore store,
   required Future<void> Function(List<TimeRequest>) notify,
@@ -57,8 +73,11 @@ Future<void> pollOnce({
     // on screen by `scopeRefusal` at pairing time, not by a notification at 3am.
     if (e.failure == NestwatchFailure.sessionExpired) {
       await signInNotice.raise();
+      return false;
     }
-    return;
+    // Transient, so the session is not known to be bad and nothing should be torn down
+    // on the strength of it.
+    return true;
   }
 
   // The session answered, so a notice about it has stopped being true.
@@ -101,4 +120,5 @@ Future<void> pollOnce({
   // Reached only once the announcement succeeded. A throw above leaves the store
   // untouched, which is what makes the next round a retry rather than a loss.
   await store.save(diff.next);
+  return true;
 }
