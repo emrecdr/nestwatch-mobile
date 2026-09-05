@@ -34,6 +34,13 @@ void main() {
   /// Every request the server saw, most recent last.
   final seen = <HttpRequest>[];
 
+  /// The body of the most recent request, as text.
+  ///
+  /// Drained for every path rather than only where a test reads it: a stub that consumes
+  /// the body on some routes and not others behaves differently depending on which one
+  /// was hit, and an empty GET body costs nothing to read.
+  var lastBody = '';
+
   /// When true, `/api/screenshot` answers as `AppError::Control` does.
   var captureFails = false;
 
@@ -72,6 +79,19 @@ void main() {
   /// somebody has already resolved.
   var alreadyResolved = false;
 
+  /// What the stub puts in `budget_note` on a curfew extension.
+  ///
+  /// The mirror of [curfewNote], and its shape comes from the same place: `extend_curfew`
+  /// in the released 0.7.0, re-read 2026-09-06. It answers
+  /// `{"ok","minutes","until":"HH:MM","budget_note"}`, and `until` is formatted `%H:%M`
+  /// from that PC's trusted clock via `unwrap_or_default()` — so an empty string is a
+  /// shape the server really can produce, and is exercised below.
+  String? budgetNote;
+
+  /// What the stub reports as the new bedtime. Empty stands in for the
+  /// `unwrap_or_default()` case.
+  String extendUntil = '23:30';
+
   /// When true, `/api/lock` answers as `AppError::Control` does.
   ///
   /// The realistic cause on that PC is `session::active_session_token` finding no
@@ -96,6 +116,9 @@ void main() {
     curfewNote = null;
     alreadyResolved = false;
     lockFails = false;
+    lastBody = '';
+    budgetNote = null;
+    extendUntil = '23:30';
     final context = SecurityContext()
       ..useCertificateChain('$dir/server.cert.pem')
       ..usePrivateKey('$dir/server.key.pem');
@@ -107,6 +130,7 @@ void main() {
     );
     server.listen((request) async {
       seen.add(request);
+      lastBody = await utf8.decoder.bind(request).join();
       final response = request.response;
       if (lanRefused) {
         // Before auth, before routing: require_lan_peer is a layer, not a handler. And it
@@ -199,6 +223,14 @@ void main() {
               '"minutes":30,"ok":true}',
             );
         },
+
+        '/api/curfew/extend': () => response
+          ..statusCode = 200
+          ..write(
+            '{"ok":true,"minutes":30,"until":${jsonEncode(extendUntil)},'
+            '"budget_note":'
+            '${budgetNote == null ? 'null' : jsonEncode(budgetNote)}}',
+          ),
 
         '/api/lock': () {
           if (lockFails) {
@@ -629,6 +661,92 @@ void main() {
           reason: 'a status code is not an explanation a parent can act on',
         );
       }
+    });
+  });
+
+  group('pushing bedtime back', () {
+    // `curfew_note` already tells a parent to "Use \"Later bedtime tonight\" on the Curfew
+    // card" — a true sentence pointing at a device they may not be near. M24 argues the fix
+    // is to make it true here rather than to paraphrase a verdict that PC computed against
+    // its own trusted clock.
+    test('it is a POST carrying the minutes as JSON', () async {
+      await client.extendCurfew(30);
+
+      expect(seen, hasLength(1));
+      expect(seen.single.method, 'POST');
+      expect(seen.single.uri.path, '/api/curfew/extend');
+      expect(
+        seen.single.headers.contentType?.mimeType,
+        'application/json',
+        reason:
+            'the handler takes `Json(body)`, so a form encoding earns a 400',
+      );
+      expect(
+        jsonDecode(lastBody),
+        {'minutes': 30},
+        reason:
+            'the number the parent chose is the whole request; asserting the path '
+            'and the verb without it would pass just as well for a call that always '
+            'asked for the same thing',
+      );
+    });
+
+    test('the new bedtime is read as the server formatted it', () async {
+      final extension = await client.extendCurfew(30);
+
+      expect(extension.until, '23:30');
+      expect(
+        extension.minutes,
+        30,
+        reason:
+            'echoed back rather than assumed from the request, so a server that '
+            'clamped differently is not reported as having done what was asked',
+      );
+    });
+
+    test('an empty `until` reads as nothing said, not as a time', () async {
+      // `unwrap_or_default()` on the server means blank is reachable. A phone must not
+      // render "Bedtime is  tonight." — and must not fill the gap by computing now+30,
+      // which would be this app disagreeing with the clock that enforces bedtime.
+      extendUntil = '';
+      final extension = await client.extendCurfew(30);
+
+      expect(extension.until, isNull);
+    });
+
+    test('a budget note is carried, because it is the point', () async {
+      // nestwatch's own comment: this endpoint shipped "with the opposite hole" from
+      // `curfew_note` — a parent whose child has no screen time left can push bedtime back,
+      // be told it worked, and watch the PC lock anyway. Dropping this field would
+      // reproduce exactly that.
+      budgetNote =
+          'Screen time runs out before then, so the PC will still lock. '
+          'Grant more minutes as well if you mean them to keep going.';
+      final extension = await client.extendCurfew(30);
+
+      expect(extension.budgetNote, budgetNote);
+    });
+
+    test('and its absence is not turned into a warning', () async {
+      // Null means nothing is in the way, or that PC could not load the tally and declined
+      // to guess. Neither may become a sentence this app invented.
+      final extension = await client.extendCurfew(30);
+
+      expect(extension.budgetNote, isNull);
+    });
+
+    test('a lapsed sign-in is a lapsed sign-in', () async {
+      lanRefused = true;
+      await expectLater(
+        client.extendCurfew(30),
+        throwsA(
+          isA<NestwatchException>().having(
+            (e) => e.failure,
+            'failure',
+            NestwatchFailure.notOnLan,
+          ),
+        ),
+      );
     });
   });
 

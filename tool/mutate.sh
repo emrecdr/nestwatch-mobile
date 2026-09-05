@@ -743,6 +743,58 @@ mutate "lock: cancelling the confirmation locks the screen anyway" \
   '    if (confirmed != true || !mounted) return;' \
   '    if (!mounted) return;'
 
+# `curfew_note` ends "Use \"Later bedtime tonight\" on the Curfew card to move bedtime
+# itself." The control is named by a sentence written in the other repository, so its label
+# is not this app's copy to choose -- a parent reads the instruction and then looks for the
+# thing it named.
+mutate "bedtime: the control stops answering to the name the server gives it" \
+  lib/src/ui/time_requests_screen.dart \
+  "const String laterBedtimeLabel = 'Later bedtime tonight';" \
+  "const String laterBedtimeLabel = 'Extend bedtime';"
+
+# That PC formats the new bedtime from its own trusted clock, and `unwrap_or_default()`
+# means it can send nothing. Taking the branch away renders "Bedtime is null tonight." --
+# and the fix a reader reaches for next is to compute now+30 here, which is a phone
+# disagreeing with the clock that actually enforces bedtime.
+mutate "bedtime: a time the server did not send is rendered anyway" \
+  lib/src/ui/time_requests_screen.dart \
+  'String bedtimeConfirmation(CurfewExtension extension) => extension.until == null' \
+  'String bedtimeConfirmation(CurfewExtension extension) => false' \
+
+# The debounce, inverted rather than removed: this endpoint is NOT idempotent. `extra_until`
+# accumulates -- each call adds to the live extension rather than replacing it -- so two
+# taps really are two hours of bedtime.
+mutate "bedtime: the control is tappable only while it is already working" \
+  lib/src/ui/time_requests_screen.dart \
+  '                onPressed: _extending ? null : _askLaterBedtime,' \
+  '                onPressed: _extending ? _askLaterBedtime : null,'
+
+# The whole reason this app is allowed to offer the control. nestwatch computes
+# `budget_note` because this endpoint shipped "with the opposite hole" from `curfew_note`:
+# a parent whose child has no screen time left pushes bedtime back, is told it worked, and
+# watches the PC lock anyway.
+mutate "bedtime: the budget note is dropped, restoring the hole it was written to close" \
+  lib/src/ui/time_requests_screen.dart \
+  '        _bedtimeNote = extension.budgetNote;' \
+  '        _bedtimeNote = null;'
+
+# The note said bedtime would take the minutes back. Once bedtime has moved that has stopped
+# being true, and leaving it up argues with the confirmation beside it.
+mutate "bedtime: the note that was acted on is left standing" \
+  lib/src/ui/time_requests_screen.dart \
+  '        _curfewNote = null;
+' \
+  ''
+
+# The number the parent chose IS the request. A path and a verb assert just as well for a
+# call that always asks for the same thing.
+mutate "bedtime: the minutes chosen are not the minutes sent" \
+  lib/src/api/nestwatch_api.dart \
+  "      '/api/curfew/extend',
+      jsonBody: {'minutes': minutes}," \
+  "      '/api/curfew/extend',
+      jsonBody: {'minutes': 1},"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 

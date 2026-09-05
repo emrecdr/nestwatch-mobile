@@ -333,6 +333,50 @@ class TimeCode {
   String toString() => 'TimeCode($minutes min, code redacted)';
 }
 
+/// What `POST /api/curfew/extend` answered: bedtime moved, and what that is worth.
+///
+/// The mirror of [Decision], and it exists for the mirror-image reason. `curfew_note`
+/// stops a parent believing a *grant* took effect when bedtime will swallow it;
+/// `budget_note` stops them believing a *later bedtime* took effect when the screen-time
+/// budget is already spent. nestwatch's own comment on the second one says it shipped
+/// "with the opposite hole" from the first — "a parent whose child has no screen time left
+/// can push bedtime back, be told 'Bedtime pushed back 30 min', and watch the PC lock
+/// anyway. Same two independent limits, same silent broken promise, now on the button the
+/// parent burned by it once will reach for first."
+///
+/// So reading [budgetNote] is not optional polish. It is the whole reason this app is
+/// allowed to offer the control at all.
+class CurfewExtension {
+  /// What the server applied. Echoed back rather than assumed from the request: this app
+  /// asks in presets, and a server that clamped or refused differently would otherwise be
+  /// reported to a parent as having done what they asked.
+  final int minutes;
+
+  /// `"HH:MM"`, formatted by that PC from its **own trusted clock** — the same reading
+  /// curfew enforces against, so it cannot disagree with the enforcer.
+  ///
+  /// Kept exactly as sent and never re-derived here. A phone computing "now + 30 min"
+  /// would be a fifth reader of a rule that lives on that PC, and a child who changed the
+  /// time zone is precisely the case the trusted clock exists for. Null when the server
+  /// sent nothing readable — `unwrap_or_default()` there means an empty string is possible.
+  final String? until;
+
+  /// `budget_note`: set when the screen-time budget will swallow the later bedtime.
+  ///
+  /// Null in the same three ways [Decision.curfewNote] is, and read the same way: nothing
+  /// is in the way, or that PC could not load the tally and correctly declined to guess,
+  /// or it predates the field. None of the three may become a warning this app invented.
+  final String? budgetNote;
+
+  const CurfewExtension({required this.minutes, this.until, this.budgetNote});
+
+  static CurfewExtension fromJson(Map<String, dynamic> json) => CurfewExtension(
+    minutes: (json['minutes'] as num?)?.toInt() ?? 0,
+    until: nonEmptyString(json['until']),
+    budgetNote: nonEmptyString(json['budget_note']),
+  );
+}
+
 /// Limits from nestwatch `src/timecode.rs`, mirrored so the UI can refuse locally
 /// instead of round-tripping to a 400.
 /// What that PC does to a phone guessing the control password.

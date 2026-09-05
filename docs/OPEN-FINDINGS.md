@@ -69,7 +69,7 @@ checked *before* a commit; and the eight `tool/prove_*.dart` harnesses need a li
 on the LAN, which no runner has. For those, "the suite covers it" still means "when somebody
 runs it".
 
-Last audited against the tree on **2026-09-02**.
+Last audited against the tree on **2026-09-06**.
 
 ---
 
@@ -178,55 +178,55 @@ other side moved* reads exactly like a red badge that means *you broke it*, and 
 value of this gate is that its failures are legible." The recipe is above; the first run
 wants watching by whoever adds it.
 
-### M24 · The note now reaches the parent; the control it names is on the other device
+### M24 · The control shipped; two things it depends on still live in prose
 
-> **Cross-repo** · pairs with nestwatch (unfiled — see below)
+> **Cross-repo** · pairs with nestwatch (still unfiled there — see below)
 
-`curfew_note` is read and shown as of 2026-09-02. Its second sentence is
-*"Use \"Later bedtime tonight\" on the Curfew card to move bedtime itself."* — and there
-is no Curfew card on the phone, because `PLAN.md` §5 kept curfew in the browser. So the app
-now tells a parent something true and points them at a device they may not be near.
+**Rewritten 2026-09-06, because most of this entry is done.** `curfew_note` told a parent
+*"Use \"Later bedtime tonight\" on the Curfew card to move bedtime itself."* — true, and
+pointing at a device they may not be near. `POST /api/curfew/extend` is now reachable from
+the phone, attached to the note that names it, offering presets rather than a free-entry
+field. What is left is the part this repository cannot fix on its own.
 
-**Passing it through verbatim is still right.** The alternative is this app paraphrasing a
-verdict computed against that PC's trusted clock, which is the comparison `M6` and
-`nestwatch#O72` exist to stop clients making. The fix is to make the sentence true here
-rather than to rewrite it: `POST /api/curfew/extend` is published, takes `{"minutes":N}`,
-and answers `{"ok","minutes","until":"HH:MM","budget_note"}` — **measured on the wire
-2026-09-02** against 0.5.1. A control labelled exactly "Later bedtime tonight" would make
-the server's own instruction correct on this screen.
+**1. The label is quoted from someone else's sentence, and nothing on that side knows.**
+The button says exactly `Later bedtime tonight` because the note tells a parent to look for
+a control by that name. `laterBedtimeLabel` holds it once, and
+`test/later_bedtime_test.dart` asserts it appears inside a `curfew_note` **captured off the
+wire** — so a rewording over there breaks a test here rather than leaving a parent reading
+an instruction and hunting for a control that no longer matches it. That is a tripwire, not
+a fix: it reports the drift, it cannot prevent it.
 
-**Not done in the same pass, for one specific reason.** The endpoint validates against
-`MAX_REQUEST_MINUTES`, and `limits.json` does not publish it — checked: the vendored file
-carries `code_len`, `login_lockout_secs`, `login_max_fails`, `max_active_codes` and
-`max_code_minutes`, and nothing else. A free-entry control would therefore need this app to
-hold its own copy of a constant that lives in nestwatch's Rust, which is precisely the
-fifth reader `M6` is open in order to delete. Preset choices well inside any plausible cap
-need no copy and are the way in; that is a design decision worth making deliberately rather
-than alongside a bug fix.
+The underlying request stands, and is sharper now than when it was first written: the note
+mixes a **fact** with a **dashboard-specific instruction**. The fact travels to any client.
+"on the Curfew card" does not — there is no card here, and the phrase is now wrong on the
+one surface that *does* have the control. Splitting the two, or dropping the second
+sentence, would make the field portable. There are three clients, not two.
 
-**Two things to raise with nestwatch, neither filed there.** That repository has no
-`FINDINGS-INBOX.md`, and its working tree has been dirty with another session's changes
-every time this was checked — writing into `docs/OPEN-FINDINGS.md` under those conditions
-is the exact deadlock this repo's inbox protocol was invented to end. Recorded here
-instead:
+**2. `MAX_REQUEST_MINUTES` still is not published.** Re-measured 2026-09-06 against the
+pushed `tests/golden/limits.json`: it carries `code_len`, `login_lockout_secs`,
+`login_max_fails`, `max_active_codes` and `max_code_minutes`, and nothing else.
+`timereq::MAX_REQUEST_MINUTES` is 240 in the Rust and validates both `/api/extra-time` and
+`/api/curfew/extend`.
 
-1. `curfew_note` mixes a fact with a **dashboard-specific instruction**. The fact travels
-   to any client; the instruction does not. Splitting them, or dropping the second
-   sentence, would make the field portable — and there are now three clients, not two.
-2. `MAX_REQUEST_MINUTES` belongs in `limits.json` for the same reason `max_code_minutes`
-   already is. Still absent from the pushed file, re-checked at 0.6.0.
+Presets are what let the control ship without it — 15, 30 and 60 sit well inside any
+plausible cap and need no copy — and that is a way *around* the gap rather than a way to
+close it. A free-entry field, or a "custom" option, still needs this app to hold a copy of a
+constant that lives in nestwatch's Rust, which is the fifth reader `M6` is open in order to
+delete. It belongs in `limits.json` for exactly the reason `max_code_minutes` already is.
 
-A third item stood here — that `tests/golden/` covered no mutating response — and it is
-gone because it is done, not because it was dropped. `cdf6630` asserts the exact key set of
-both `/api/extra-time` bodies, and their reason for a Rust test over a golden file is worth
-carrying: a field-by-field check passes when a field is *added*, and adding one is the
-change most likely to be made without thinking about who else reads it. The trigger was a
-third consumer — Voortgang, in the `studygo` repository — rather than this app. Same hole.
+**Neither is filed on the nestwatch side.** That repository has no `FINDINGS-INBOX.md`, and
+its working tree has been dirty with another session's changes every time this was checked —
+writing into its `docs/OPEN-FINDINGS.md` under those conditions is the deadlock this repo's
+inbox protocol was invented to end. Recorded here instead, and re-verified rather than
+carried forward: both were checked against the pushed tree today.
 
-**Re-measured against 0.6.0 on 2026-09-02**, because a minor bump can move the wire format
-and this app now depends on that field: `curfew_note` is still produced at both call sites
-in the pushed `src/api.rs` — the approve handler and `extra-time`. The `Decision` reader is
-safe, and it is now pinned on their side as well as tested on this one.
+**A third item is still open and is this repository's own.** The control is reachable only
+from the note, which is deliberate — a button offering to move bedtime with no sentence
+beside it explaining why would be a Curfew card, and `PLAN.md` §5 left those in the browser.
+The cost is that a parent who wants a later bedtime at 21:50 with no pending request cannot
+ask for one here. Whether that is a gap or the correct boundary is a product decision, not
+an engineering one, and it has not been made.
+
 
 ### M27 · `testedAgainst` names a release; the golden files come from a branch
 

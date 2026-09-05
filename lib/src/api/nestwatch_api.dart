@@ -610,6 +610,48 @@ class NestwatchClient {
     });
   }
 
+  /// `POST /api/curfew/extend` — push tonight's bedtime back by [minutes].
+  ///
+  /// ## Why this one, when curfew itself stays in the browser
+  ///
+  /// `PLAN.md` §5 keeps curfew *configuration* on the dashboard, and this does not move
+  /// it: nestwatch treats `extra_until` as transient state rather than a setting, and says
+  /// so where `set_curfew` goes out of its way to preserve it across a save — "it is
+  /// transient state, not a setting". Tonight's extension is an act, and it expires on its
+  /// own at midnight.
+  ///
+  /// ## The reason it had to come to the phone
+  ///
+  /// `curfew_note` — which this app already shows after an approve — ends with the
+  /// sentence *"Use \"Later bedtime tonight\" on the Curfew card to move bedtime itself."*
+  /// That was true and unreachable: there is no Curfew card on a phone, so the app was
+  /// telling a parent something correct and pointing them at a device they may not be
+  /// near. `docs/OPEN-FINDINGS.md` M24 argues the fix is to make the sentence true here
+  /// rather than to paraphrase a verdict computed against that PC's trusted clock.
+  ///
+  /// ## Presets, and the constant this app deliberately does not hold
+  ///
+  /// The handler validates against `timereq::MAX_REQUEST_MINUTES` (240), and
+  /// `limits.json` does **not** publish it — re-checked 2026-09-06, the vendored file
+  /// carries `code_len`, `login_lockout_secs`, `login_max_fails`, `max_active_codes` and
+  /// `max_code_minutes`, and nothing else. A free-entry control would therefore need a
+  /// copy of a number that lives in someone else's Rust, which is the fifth reader `M6`
+  /// is open in order to delete. Preset choices sit well inside any plausible cap and need
+  /// no copy, so the caller offers those and this takes whatever it is given.
+  Future<CurfewExtension> extendCurfew(int minutes) async {
+    final (response, body) = await _send(
+      'POST',
+      '/api/curfew/extend',
+      jsonBody: {'minutes': minutes},
+    );
+    // A 400 here means this app sent a number the server refuses, which the presets make
+    // unreachable — so it is a defect in this client rather than anything a parent can
+    // act on, and it falls through to `unexpectedResponse` deliberately rather than
+    // acquiring a reassuring sentence that would hide it.
+    _requireOk(response);
+    return CurfewExtension.fromJson(jsonDecode(body) as Map<String, dynamic>);
+  }
+
   /// `POST /api/lock` — lock that PC's screen.
   ///
   /// ## Why this endpoint and not the other three

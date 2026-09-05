@@ -9,6 +9,45 @@ import 'notice.dart';
 import 'polled_screen.dart';
 import 'relative_time.dart';
 
+/// The label on the control, quoted from the sentence that names it.
+///
+/// `curfew_note` ends *"Use \"Later bedtime tonight\" on the Curfew card to move bedtime
+/// itself."* — so these four words are not this app's copy to choose. A parent reads the
+/// server's instruction and then looks for the thing it named; a button called anything
+/// else leaves them still looking.
+///
+/// Held as a constant so the coupling is greppable from both ends, and asserted against a
+/// note captured off the wire in `test/later_bedtime_test.dart`. If nestwatch ever
+/// rewrites that sentence, that test is where it surfaces — filed as the cross-repo half
+/// of `M24`.
+const String laterBedtimeLabel = 'Later bedtime tonight';
+
+/// How much later, offered as choices rather than typed.
+///
+/// The endpoint validates against `timereq::MAX_REQUEST_MINUTES` (240) and `limits.json`
+/// does not publish it, so a free-entry field would need this app to hold a copy of a
+/// constant that lives in nestwatch's Rust — the fifth reader `M6` exists to delete. These
+/// three sit well inside any plausible cap and need no copy at all. They are a product
+/// choice, not a mirror of a limit, which is the same footing the time-code presets are on.
+const List<int> laterBedtimeChoices = [15, 30, 60];
+
+/// What to tell a parent once bedtime has moved.
+///
+/// Pure, and top-level, for the reason `screen_load.dart` and `refusal_lines.dart` give
+/// about their own extractions: the interesting half is the branch, and a branch reachable
+/// only through a widget is one a test has to stand up a screen to see. Here the branch is
+/// [CurfewExtension.until] being null — a shape the server really can produce, because it
+/// formats the time with `unwrap_or_default()` — and it is the branch a widget test is
+/// least likely to exercise, since the ordinary payload has a time in it.
+///
+/// **Nothing here computes a time.** When that PC did not say when, this says how much
+/// rather than inventing "now + 30". A phone adding minutes to its own clock would be a
+/// fifth reader of a rule enforced against nestwatch's trusted clock, and a child who
+/// changed the time zone is exactly the case that clock exists for.
+String bedtimeConfirmation(CurfewExtension extension) => extension.until == null
+    ? 'Bedtime moved back ${extension.minutes} minutes tonight.'
+    : 'Bedtime is ${extension.until} tonight.';
+
 class TimeRequestsScreen extends PolledScreen {
   final NestwatchClient client;
   @override
@@ -50,6 +89,22 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
   /// and the row it happened to is gone from the list by the time this renders, so there
   /// is nothing on screen that would otherwise carry the caveat.
   String? _curfewNote;
+
+  /// What that PC said about the *extension* — the mirror of [_curfewNote].
+  ///
+  /// Held separately rather than reusing the field above, because they are opposite
+  /// statements and only one can be true at a time. `curfew_note` says bedtime will
+  /// swallow the minutes; `budget_note` says the screen-time budget will swallow the later
+  /// bedtime. Showing both at once would leave a parent to work out which limit they are
+  /// now up against, which is the confusion both sentences exist to prevent.
+  String? _bedtimeNote;
+
+  /// An extension in flight, so the control cannot be double-tapped.
+  ///
+  /// Unlike an approve, this endpoint is **not** idempotent: `extra_until` accumulates —
+  /// each call adds its minutes to the previous extension rather than replacing it, which
+  /// is deliberate on that side and means two taps really are two hours.
+  bool _extending = false;
 
   Future<void> _decide(TimeRequest request, {required bool approve}) async {
     if (!_deciding.add(request.id)) return;
@@ -109,7 +164,7 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
     // scrolled away from the thing it is about.
     return Column(
       children: [
-        if (_curfewNote case final note?)
+        if (_curfewNote case final note?) ...[
           Notice(
             note,
             tone: NoticeTone.warning,
@@ -117,9 +172,103 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
             margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
             onDismiss: () => setState(() => _curfewNote = null),
           ),
+          // Directly under the sentence that names it, and nowhere else in this app.
+          // The note is what makes this control legible — it explains why bedtime is
+          // about to take back the minutes just granted — and a button offering to move
+          // bedtime with no such explanation beside it would be a Curfew card, which §5
+          // deliberately left in the browser.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonalIcon(
+                onPressed: _extending ? null : _askLaterBedtime,
+                icon: const Icon(Icons.nightlight_outlined, size: 18),
+                label: Text(_extending ? 'Moving…' : laterBedtimeLabel),
+              ),
+            ),
+          ),
+        ] else if (_bedtimeNote case final note?)
+          Notice(
+            note,
+            tone: NoticeTone.warning,
+            icon: Icons.timelapse,
+            margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            onDismiss: () => setState(() => _bedtimeNote = null),
+          ),
         Expanded(child: _list(requests)),
       ],
     );
+  }
+
+  /// Which extension, offered as choices. See [laterBedtimeChoices].
+  Future<void> _askLaterBedtime() async {
+    final minutes = await showModalBottomSheet<int>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                laterBedtimeLabel,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Moves bedtime itself, for tonight only. It goes back to normal '
+                'tomorrow, and this is separate from screen time — moving bedtime '
+                'does not add any minutes.',
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final minutes in laterBedtimeChoices)
+                    FilledButton.tonal(
+                      onPressed: () => Navigator.of(context).pop(minutes),
+                      child: Text('$minutes min'),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (minutes == null || !mounted) return;
+    await _extendBedtime(minutes);
+  }
+
+  Future<void> _extendBedtime(int minutes) async {
+    if (_extending) return;
+    setState(() => _extending = true);
+    try {
+      final extension = await widget.client.extendCurfew(minutes);
+      if (!mounted) return;
+      setState(() {
+        // The note that prompted this said bedtime would take the minutes back. It has
+        // been acted on, so it has stopped being the current state of things — leaving it
+        // up would argue with the confirmation below.
+        _curfewNote = null;
+        // And if the budget will swallow the later bedtime, that is the new true caveat.
+        // Null clears rather than keeps: a fresh answer saying nothing is in the way is
+        // positive evidence, the same reading `_curfewNote` takes from an approve.
+        _bedtimeNote = extension.budgetNote;
+      });
+      _snack(bedtimeConfirmation(extension));
+    } on NestwatchException catch (e) {
+      if (!mounted) return;
+      if (e.failure == NestwatchFailure.sessionExpired) {
+        widget.onFailure(e);
+        return;
+      }
+      _snack(e.message);
+    } finally {
+      if (mounted) setState(() => _extending = false);
+    }
   }
 
   Widget _list(List<TimeRequest> requests) {

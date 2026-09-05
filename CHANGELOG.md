@@ -11,6 +11,25 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
 
 ### Added
 
+- **"Later bedtime tonight", where the sentence that names it already was.** After an
+  approve, `curfew_note` can arrive saying bedtime will swallow the minutes just granted,
+  and it ends by telling the parent to *"Use \"Later bedtime tonight\" on the Curfew card to
+  move bedtime itself."* Every word of that was true and none of it was reachable: there is
+  no Curfew card on a phone, so the app was giving a parent a correct instruction and
+  pointing them at a device they may not be near.
+  <br>The control now sits directly under the note, labelled with those exact four words —
+  held as one constant and asserted against a `curfew_note` captured off the wire, so a
+  rewording upstream breaks a test here rather than leaving somebody hunting for a button.
+  It offers 15/30/60 rather than a typed number, because the endpoint validates against
+  `MAX_REQUEST_MINUTES` and `limits.json` still does not publish it; presets sit well inside
+  any plausible cap and need no copy of a constant that lives in nestwatch's Rust.
+  <br>Reachable **only** from the note, deliberately — a button offering to move bedtime
+  with nothing beside it explaining why would be a Curfew card, which §5 kept in the browser.
+  The reply's `budget_note` is shown, and that is the reason this is safe to offer at all:
+  nestwatch wrote that field because this endpoint shipped "with the opposite hole" from
+  `curfew_note`, where a parent whose child has no screen time left pushes bedtime back, is
+  told it worked, and watches the PC lock anyway. `M24` is rewritten to the two cross-repo
+  items that remain.
 - **Lock that PC's screen, from the phone.** The first control endpoint this app calls, and
   the only one on nestwatch's list it takes. `PLAN.md` §5 keeps *configuration* in the
   browser — rules, routines, curfew, policy — because it is done rarely, at a desk. Locking

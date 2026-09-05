@@ -232,7 +232,7 @@ is abstract for the same reason — the Keystore-backed implementation lives apa
 
 | screen | endpoint | cadence |
 |---|---|---|
-| Requests | `GET /api/time-requests`, `POST …/approve`, `…/deny` | 60 s |
+| Requests | `GET /api/time-requests`, `POST …/approve`, `…/deny`, `POST /api/curfew/extend` | 60 s |
 | Today | `GET /api/usage/today` | 60 s |
 | Screen | `GET /api/screenshot?tier=preview`, `POST /api/lock` | 5 s, **off by default** |
 | Codes | `GET`/`POST /api/time-codes` | 60 s |
@@ -247,7 +247,21 @@ and no internet at redemption. §7 calls away-from-home support impossible, whic
 "Useful when the parent is away (leave a code) or the network is down") and the app was
 simply not surfacing it.
 
-**Lock is on the Screen tab for the same reason, and it is the only control endpoint this
+**"Later bedtime tonight" is on the Requests tab, attached to the sentence that names it.**
+After an approve, `curfew_note` may arrive saying bedtime will take the minutes back — and
+its last sentence tells the parent to *"Use \"Later bedtime tonight\" on the Curfew card"*.
+That was true and unreachable: there is no Curfew card on a phone. The control now sits
+directly under the note, labelled with those exact words, offering 15/30/60 rather than a
+free-entry field — because the endpoint validates against `MAX_REQUEST_MINUTES` and
+`limits.json` does not publish it, so a typed number would need this app to hold a copy of
+someone else's constant. It is reachable *only* from the note, deliberately: a button
+offering to move bedtime with no explanation beside it would be a Curfew card, which §5 kept
+in the browser. The reply's `budget_note` is shown for the mirror of the reason
+`curfew_note` is — nestwatch wrote it because this endpoint shipped with the opposite hole,
+where a parent whose child has no screen time left pushes bedtime back, is told it worked,
+and watches the PC lock anyway.
+
+**Lock is on the Screen tab for the same reason, and it is the only *control* endpoint this
 app calls.** nestwatch publishes lock, shutdown, and process kill. Locking passes §5's test
 — a single act, taken in the moment, and the moment is defined by not being at the desk —
 where the other two fail it in the other direction: a shutdown discards whatever the child
