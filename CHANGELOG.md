@@ -159,6 +159,24 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   restores `lib/` only — a mutation aimed at `ios/` would apply and never be put back, and
   that constraint is now written into the script for the next source-reading test.
 
+- **`tool/check_golden.sh` can tell an unpublished golden from a missing one.** It globs a
+  *directory* on the sibling checkout, so a file sitting there uncommitted was compared as
+  though nestwatch had published it. Found by the script itself on 2026-09-06: it reported
+  `1 of 12 drifted` and exited 1 because `session-integration.json` was untracked over
+  there. Its existing unpushed-work warning stayed correctly silent — that one asks whether
+  `HEAD` has been pushed, and `HEAD` *was* `origin/main`; what it cannot see is the working
+  tree sitting on top. Acting on that report means vendoring a golden no released nestwatch
+  sends, which is precisely the failure the warning was written to prevent, reached through
+  the one path it did not cover.
+  <br>It now warns when the sibling's `tests/golden/` is dirty, names the files, and reports
+  such a golden as `NOT PUBLISHED` rather than counting it as drift — the same way
+  `check_findings.sh` surfaces a cross-repo notification instead of failing on it, because
+  failing here reds a gate over somebody else having an editor open. Both controls were run:
+  a *published* golden missing from this repo is still `MISSING HERE` and still exits 1, and
+  a genuinely drifted one is still `DRIFTED`. Filed as `M31`: when that golden is pushed it
+  should be vendored, because `scope_refusal_test.dart` currently builds the integration
+  payload by hand.
+
 ### Security
 
 - **Every GitHub Actions reference is pinned to a full commit SHA**, with the tag it came

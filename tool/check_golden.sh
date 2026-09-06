@@ -50,13 +50,39 @@ echo "Comparing $MINE against $SRC/tests/golden (${src_sha:-unknown commit})"
 # Read from the local remote-tracking ref rather than the network, so this still works
 # offline. That ref can be stale, so this can warn about work that IS pushed; it cannot
 # stay silent about work that is not, which is the direction that matters.
+has_origin=0
 if [ -n "$src_sha" ] && (cd "$SRC" && git rev-parse --verify -q origin/main >/dev/null); then
+  has_origin=1
   if ! (cd "$SRC" && git merge-base --is-ancestor HEAD origin/main 2>/dev/null); then
     echo
     echo "  NOTE: $src_sha is not in that checkout's origin/main. You are comparing"
     echo "  against local work. CI clones the pushed branch and will see something else —"
     echo "  do not vendor golden files from here without checking which tree they came from."
     echo "  (If origin/main is merely stale, fetch and re-run.)"
+  fi
+fi
+
+# **And the half the check above cannot see: an uncommitted file.**
+#
+# That test asks whether `HEAD` has been pushed. It answers nothing about the working tree
+# sitting on top of it, and the loop below globs a *directory* rather than a commit — so a
+# golden that exists on disk and in no commit anywhere is compared as though nestwatch
+# published it.
+#
+# Found on 2026-09-06, by this script, reporting `1 of 12 drifted` and exiting 1 because
+# `session-integration.json` was untracked in the sibling checkout. `HEAD` was exactly
+# `origin/main`, so the warning above stayed correctly silent, and the report was
+# confident and wrong. Acting on it means vendoring a golden no published nestwatch has —
+# which is the 2026-09-02 failure the warning above was written to prevent, arriving
+# through the one path it does not cover.
+if [ "$has_origin" = 1 ]; then
+  dirty=$(cd "$SRC" && git status --porcelain -- tests/golden/ 2>/dev/null)
+  if [ -n "$dirty" ]; then
+    echo
+    echo "  NOTE: that checkout has uncommitted changes under tests/golden/:"
+    echo "$dirty" | sed 's/^/        /'
+    echo "  These are in no commit, so CI will not see them. Anything below that rests on"
+    echo "  one of these files describes somebody's working tree, not a published server."
   fi
 fi
 echo
@@ -89,14 +115,34 @@ compare() {
 
 drift=0
 checked=0
+# Goldens that exist only in the sibling's working tree. Reported, never counted as
+# drift -- see the loop below for why the two want opposite actions.
+unpublished=0
 
 for theirs in "$SRC"/tests/golden/*.json; do
   name=$(basename "$theirs")
   mine="$MINE/$name"
   checked=$((checked + 1))
   if [ ! -f "$mine" ]; then
-    echo "  MISSING HERE  $name — nestwatch has a shape this app never parses"
-    drift=$((drift + 1))
+    # Two different situations wearing one message, and they want opposite actions.
+    #
+    # A golden nestwatch has **published** and this app does not vendor is drift: a shape
+    # is on the wire that nothing here parses, and the remedy is to vendor it and decide
+    # what reads it.
+    #
+    # A golden that exists only in that checkout's working tree is not drift at all. It is
+    # work in progress, it is in no commit, and vendoring it copies a shape no released
+    # server sends. The remedy is to wait. Reported rather than counted, the same way
+    # `check_findings.sh` surfaces a cross-repo notification instead of failing on it --
+    # failing here would red a gate because somebody else has an editor open.
+    if [ "$has_origin" = 1 ] &&
+       ! (cd "$SRC" && git cat-file -e "origin/main:tests/golden/$name" 2>/dev/null); then
+      echo "  NOT PUBLISHED $name — exists only in that working tree; nothing to vendor yet"
+      unpublished=$((unpublished + 1))
+    else
+      echo "  MISSING HERE  $name — nestwatch has a shape this app never parses"
+      drift=$((drift + 1))
+    fi
   elif ! diff -q "$theirs" "$mine" >/dev/null; then
     echo "  DRIFTED       $name"
     diff -u "$mine" "$theirs" | sed 's/^/                /'
@@ -149,6 +195,14 @@ compare "renew warning (days)" "$theirs_warn" "$mine_warn" \
   "A parent would get two answers to the same question."
 
 echo
+# Said before the verdict, so it is read whichever way the verdict goes. A reader who sees
+# "nothing drifted" and does not know a file was skipped has been told half the answer.
+if [ "$unpublished" -ne 0 ]; then
+  echo "$unpublished golden(s) exist only in that working tree and were not compared."
+  echo "Nothing to do until they are pushed. Vendoring one now copies a shape no released"
+  echo "nestwatch sends -- which is the mistake this script already has a warning about."
+  echo
+fi
 if [ "$drift" -eq 0 ]; then
   echo "$checked checks, nothing drifted."
   exit 0

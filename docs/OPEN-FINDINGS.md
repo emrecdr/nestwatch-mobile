@@ -75,6 +75,38 @@ Last audited against the tree on **2026-09-06**.
 
 ## Open
 
+### M31 · The integration session golden is coming, and the test that needs it builds its payload by hand
+
+> **Cross-repo** · pairs with nestwatch (their work, not yet committed)
+
+Seen 2026-09-06 in the sibling checkout as an **untracked** file —
+`tests/golden/session-integration.json`, carrying a new `provider` object beside an
+integration `scope`. It is in no commit, so nothing needs doing yet; `check_golden.sh` now
+says so in as many words rather than counting it as drift.
+
+**When it is pushed, this repo should vendor it, and the reason is not completeness.**
+`check_golden.sh` calls a golden this app lacks "a shape this app never parses", and for
+this one that is wrong. This app parses an integration session *deliberately*, in order to
+refuse it: `scopeRefusal` is the whole reason `PairingScope.integration` exists, and the
+refusal exists because a dashboard link and an integration link are byte-identical in form,
+so a parent hands over whichever was on screen.
+
+And `test/scope_refusal_test.dart` builds that payload **by hand**. Its own header records
+that an earlier version of it could not tell an absent `scope` from a null one and leaned
+on `ContractCheck` to guess — a defect the mutation audit found. A hand-built fixture is the
+`M26` shape exactly: the test cannot be wrong about a payload it invented, which is a
+different thing from being right about the one the server sends. Vendoring the golden and
+parsing *it* closes that.
+
+The `provider` object is a second reason. It is a field this app will ignore, and ignoring
+a field correctly is a claim worth one assertion — `SessionInfo.fromJson` reads named keys,
+so an unknown sibling is harmless, and that is exactly the sort of thing that is obviously
+true until someone adds a strict decoder.
+
+**Wait for the push.** Vendoring from a working tree is the 2026-09-02 failure this repo
+already had once, and the entry above it in this file is the checker change that makes the
+distinction visible instead of leaving it to whoever is reading.
+
 ### M28 · Android 17 turns local-network access into a permission, and a denial reads as being away from home
 
 > **Platform deadline** · rests on Android's published documentation, read 2026-09-05. Not
