@@ -323,10 +323,23 @@ HttpClient pinned(List<int> pinnedDerSha256) {
 Install as `HttpOverrides.global` in `main()` before `runApp()`. `cert.der` is the same bytes
 `src/cert.rs:134` hashes.
 
-A consequence worth selling: because the pin replaces hostname verification entirely, **the app is
-immune to the SAN/DHCP problem that breaks the browser today**. The cert bakes in IP addresses at
-install time (`src/cert.rs:37-39`), so a lease change makes Safari error out — and is invisible to a
-pinned client.
+A consequence worth selling, with the half it does not cover named — this said "immune to the
+SAN/DHCP problem that breaks the browser today" until 2026-09-08, and that sentence is what made the
+problem look solved.
+
+The **TLS** half is genuinely gone. The pin replaces hostname verification entirely; the cert bakes
+IP addresses in at install time (`src/cert.rs:37-39`), so a lease change makes Safari error out on a
+name a pinned client never evaluates.
+
+The **addressing** half is untouched, and here this app is no better off than the browser — arguably
+worse. `ServerIdentity` stores `host` and `port` and nothing ever revisits them, so after a lease
+change there is simply nothing at the address it remembers. It does not error out; it times out, and
+`explainUnreachable` renders a timeout as *"you are away from home, nothing is wrong with that PC"*.
+Safari fails specifically and visibly. This fails by confidently reporting the single most common
+ordinary state, which is not a trade anybody made on purpose.
+
+`M22` holds the fix and the reason it is cheap: the certificate already carries the machine hostname
+as a SAN, and `cert.rs` calls that "the *stable* half" for exactly this situation.
 
 ### Pairing state machine
 

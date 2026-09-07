@@ -382,41 +382,52 @@ Worth knowing before deciding: pending requests must **not** be cached under any
 stale queue invites a parent to approve something already resolved, and the 400 that comes
 back is the good case.
 
-### M22 · A moved PC needs an eyeball, for a certificate the app already holds
+### M22 · A moved PC still has to be found by a person
 
-`ServerIdentity` stores `host` and `port`, and nothing revisits them. Measured 2026-09-02:
-no mDNS, Bonjour, multicast or NSD anywhere in `lib/`, `ios/`, `android/`, or in the whole
-nestwatch tree. When DHCP moves that PC, the pin is still valid and the app can no longer
-find what it is pinned to.
+`ServerIdentity` stores `host` and `port`, and nothing revisits them. Measured 2026-09-02,
+re-checked 2026-09-08: no mDNS, Bonjour, multicast or NSD anywhere in `lib/`, `ios/`,
+`android/`, or in the whole nestwatch tree. When DHCP moves that PC, the pin is still valid
+and the app cannot find what it is pinned to.
 
-Recovery is "Type the address instead", which carries no fingerprint — so `begin()` takes
-the `_observeForFirstUse` branch, calls `_overrides.distrust()`, and asks the parent to
-compare 64 hex characters against a Windows console. The stored fingerprint has exactly
-three readers (`restorePin`, the background isolate, and two display sites) and is **never**
-compared against one observed at a new address, though it would settle the question with no
-human involved. `_persistIdentity` then writes `trustedOnFirstUse`, so a PC originally
-verified from a QR code is permanently relabelled.
+**Rewritten 2026-09-08, because the recovery half is done and only discovery is left.**
+Typing the new address used to drop the pin, ask the parent to compare 64 hex characters
+against a Windows console for a certificate the app was already holding, and then relabel a
+QR-verified PC as merely trusted-on-first-use — permanently, for the offence of moving
+house. `_observeForFirstUse` now compares the observed certificate against the stored
+fingerprint before it asks anybody anything: a match reconnects with the provenance, the
+pairing date and the session cookie carried over; a non-match still stops and asks, because
+"that PC rotated its certificate" and "you typed a different PC's address" are genuinely
+indistinguishable from here. Five mutations hold it, including the one-character inversion
+of the comparison itself, which is both halves of the old bug at once.
 
-**Three situations share one mechanism**, and two of them should not: first pairing
-(verified, correct), same certificate at a new address (provable without a human), and a
-genuinely new certificate after `--new-cert` (needs a human, correct). Conflating the
-middle case with the last is how a parent gets trained to click through fingerprint
-comparisons — the habit `PLAN.md` §5 quotes nestwatch on depending upon them not having.
+The sentence a parent reads on the way there also named three causes when there were four —
+all three meaning *go and look at that PC*, while the missing one means *find the new
+address and type it*. `explainUnreachable` now names it.
+
+**What is left is discovery, and it is the whole of it.** A parent still has to notice the
+PC moved, get the new address off the PC or the router, and type it. Nothing in this app
+looks.
 
 **`PLAN.md` §7 deferred the sweep "once pinning exists". Pinning exists**, and has since
 `prove_pin` observed 0 application bytes against a wrong certificate. The item never moved
-into this register because §7 is a plan document, so nothing re-reads it. Two cautions
-before building it: on iOS a subnet sweep is the "network scanning" that raises
-local-network privacy, which `M15` records as unproven on hardware and *silently denied*
-in the background while undetermined; and the smaller fix needs neither a sweep nor a
-permission, because the certificate already carries the machine hostname as a SAN and
-`cert.rs` calls it "the *stable* half" for exactly this reason. Storing both costs one
-field. It does interact with `whereAmI`, which returns `cannotTell` for a non-numeric host.
+into this register because §7 is a plan document, so nothing re-reads it.
 
-**`PLAN.md` §5 is half wrong where it says so, and should be corrected in place.** It
-claims the app is "immune to the SAN/DHCP problem that breaks the browser today". It is
-immune to the TLS half and equally broken on the addressing half, and that sentence is what
-makes the problem look solved.
+**The cheap version needs neither a sweep nor a permission.** The certificate already
+carries the machine hostname as a SAN, and `cert.rs` calls it "the *stable* half" for
+exactly this situation. Storing it costs one field on `ServerIdentity`.
+
+**But it is a platform claim, and this repo does not ship those unmeasured.** Whether a
+phone can resolve that name on a home LAN has different answers on the two platforms —
+`.local` goes through the system resolver on iOS, and historically does not on Android
+without `NsdManager`, which is the same shape as `M29`'s `isRunningService` idea and gets
+the same treatment: measure it on a device before building on it. It also interacts with
+`whereAmI`, which returns `cannotTell` for a non-numeric host — so a PC addressed by name
+would silently lose the "you are on the right network" judgement that makes the failure
+sentence useful, which is a regression hiding inside an improvement.
+
+The sweep itself carries the other caution: on iOS a subnet scan is the "network scanning"
+that raises local-network privacy, which `M15` records as unproven on hardware and
+*silently denied* in the background while undetermined.
 
 ### M21 · Three platform clocks, one already past
 

@@ -17,9 +17,18 @@ void main() {
 
     test('same /24 stops blaming the network and starts believing the PC', () {
       expect(at('192.168.1.42', ['192.168.1.105']), Whereabouts.looksLikeHome);
+      final said = explainUnreachable(
+        Whereabouts.looksLikeHome,
+        '192.168.1.42:8443',
+      );
+      expect(said, contains('switched off'));
       expect(
-        explainUnreachable(Whereabouts.looksLikeHome, '192.168.1.42:8443'),
-        contains('switched off'),
+        said,
+        contains('address on this network has changed'),
+        reason:
+            'the three causes this listed all mean "go and look at that PC". A DHCP '
+            'lease change means "find the new address and type it", which is a '
+            'different errand and was the one cause not named. M22.',
       );
     });
 

@@ -29,6 +29,14 @@ class TestTlsServer {
   /// assertion that matters in most of these tests.
   bool handlerRan = false;
 
+  /// The `cookie` header of every request that arrived, in order.
+  ///
+  /// A client that never sends the session and one that sends it are indistinguishable
+  /// from a server answering the same body either way — so a test asserting "no password
+  /// was asked for" can pass while the cookie was quietly dropped. This is the wire, which
+  /// is the only place that question has an answer.
+  final List<String?> cookiesSeen = [];
+
   TestTlsServer._(this._server, this.pin);
 
   int get port => _server.port;
@@ -57,6 +65,7 @@ class TestTlsServer {
     );
     server.listen((request) async {
       running.handlerRan = true;
+      running.cookiesSeen.add(request.headers.value('cookie'));
       request.response
         ..statusCode = status
         ..write(body);

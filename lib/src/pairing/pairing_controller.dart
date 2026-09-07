@@ -452,7 +452,76 @@ class PairingController {
         _emit(const PairingFailed("Could not read that PC's certificate."));
         return;
       }
+
+      // The app may already be holding the answer to the question it is about to ask.
+      final known = _current;
+      if (known != null && known.fingerprint == observed) {
+        await _reconnectKnownServer(invite, known);
+        return;
+      }
+
       _emit(PairingNeedsFingerprintCheck(invite, observed));
+    }
+  }
+
+  /// The certificate at this address is the one already pinned, so nobody needs to be
+  /// asked anything.
+  ///
+  /// ## Why this is not a shortcut
+  ///
+  /// Three situations reach [_observeForFirstUse] and only two of them need a human:
+  /// first pairing, the same PC at a new address, and a genuinely different certificate.
+  /// The middle one is what happens when DHCP moves that PC — `ServerIdentity` stores
+  /// `host` and `port` and nothing ever revisits them, so the recovery a parent is offered
+  /// is "Type the address instead", which carries no fingerprint and lands here.
+  ///
+  /// Until 2026-09-08 that meant being asked to compare 64 hex characters against a
+  /// Windows console for a certificate this app already had on file. **A matching
+  /// fingerprint is not weaker evidence than the parent's comparison; it is the same
+  /// evidence, read by something that does not get bored.** The handshake proves whoever
+  /// answered holds the private key for that certificate, which is the entire content of
+  /// the pin. `Fingerprint.matches` is constant-time, so forcing this comparison by
+  /// answering a handshake leaks nothing about the stored value.
+  ///
+  /// The cost of asking anyway was not zero. `PLAN.md` §5 quotes nestwatch on depending on
+  /// parents *not* having the habit of clicking through fingerprint comparisons, and a
+  /// prompt that fires on an ordinary lease change is exactly how that habit is taught.
+  ///
+  /// ## What carries over, and why each one
+  ///
+  /// **The provenance.** `_persistIdentity` wrote `trustedOnFirstUse` here, so a PC
+  /// originally verified from a QR code was permanently relabelled as the weaker kind by
+  /// the act of moving house. Nothing about the trust changed, so neither does its label —
+  /// and it is not upgraded either: whatever it was, it stays.
+  ///
+  /// **`pairedAt`.** The pairing was not re-established, only re-addressed. Nothing in
+  /// `lib/` reads this today, which is precisely when a stored fact drifts quietly.
+  ///
+  /// **The session cookie.** Same server, so the cookie is still that server's. Without
+  /// it a lease change costs the parent the control password, which is the *silent session
+  /// lapse* shape again — the app asking them to fix something that is not broken. If it
+  /// has genuinely lapsed, [_establishSession] gets `authenticated: false` and asks for the
+  /// password, which is the same place this ended up before.
+  ///
+  /// The pin is deliberately **not** dropped if the reconnect fails. It is the stored one,
+  /// which `restorePin` re-applies at every launch; discarding it because a request failed
+  /// would leave the process unpinned over a network blip.
+  Future<void> _reconnectKnownServer(
+    PairInvite invite,
+    ServerIdentity known,
+  ) async {
+    _emit(PairingBusy('Reconnecting to ${invite.authority}…'));
+    _overrides.trust(known.fingerprint);
+    try {
+      await _establishSession(
+        invite,
+        known.fingerprint,
+        known.provenance,
+        cookie: await _sessions.load(),
+        pairedAt: known.pairedAt,
+      );
+    } on NestwatchException catch (e) {
+      _emit(PairingFailed(e.message));
     }
   }
 
@@ -505,9 +574,13 @@ class PairingController {
   Future<void> _establishSession(
     PairInvite invite,
     Fingerprint fingerprint,
-    PinProvenance provenance,
-  ) async {
-    final client = _clientFor(invite.authority);
+    PinProvenance provenance, {
+
+    /// Only [_reconnectKnownServer] passes these, and its own comment argues both.
+    SessionCookie? cookie,
+    DateTime? pairedAt,
+  }) async {
+    final client = _clientFor(invite.authority, cookie: cookie);
 
     // Probe first: unauthenticated, LAN-gated, and it settles the pin before a token is
     // spent on a server that might not be the right one.
@@ -519,7 +592,12 @@ class PairingController {
       session = await _probe(client);
     }
 
-    final identity = await _persistIdentity(invite, fingerprint, provenance);
+    final identity = await _persistIdentity(
+      invite,
+      fingerprint,
+      provenance,
+      pairedAt: pairedAt,
+    );
 
     if (session.authenticated) {
       await _connect(identity, session);
@@ -633,14 +711,16 @@ class PairingController {
   Future<ServerIdentity> _persistIdentity(
     PairInvite invite,
     Fingerprint fingerprint,
-    PinProvenance provenance,
-  ) async {
+    PinProvenance provenance, {
+    DateTime? pairedAt,
+  }) async {
     final identity = ServerIdentity(
       host: invite.host,
       port: invite.port,
       fingerprint: fingerprint,
       provenance: provenance,
-      pairedAt: _now(),
+      // Every path but a re-address is a pairing happening now.
+      pairedAt: pairedAt ?? _now(),
     );
     await _identities.save(identity);
     _current = identity;

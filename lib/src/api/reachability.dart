@@ -86,10 +86,17 @@ String explainUnreachable(
         'Nestwatch only works on your home Wi-Fi — it never goes through the '
         'internet, which is the point of it. Nothing here can reach that PC from '
         'somewhere else.',
+  // The fourth cause is the one this app can do something about, and it was missing.
+  // `ServerIdentity` stores the address it was paired at and nothing revisits it, so a
+  // DHCP lease change leaves the app knocking at a door that moved — and the three causes
+  // this used to list all mean "go and look at the PC", while this one means "find the new
+  // address and type it". `M22`. Since 2026-09-08 that is a cheap thing to be sent to do:
+  // typing it reconnects against the stored certificate without asking anything.
   Whereabouts.looksLikeHome =>
     'This phone looks like it is on the right network, but $authority did not '
         'answer. That usually means the PC is switched off, asleep, or nestwatch is '
-        'not running on it.',
+        'not running on it — or that its address on this network has changed since '
+        'you paired.',
   Whereabouts.cannotTell =>
     'Could not reach $authority. If you are away from home, that is expected — '
         'Nestwatch only works on your own network.',

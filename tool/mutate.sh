@@ -524,6 +524,16 @@ mutate "whereabouts: no network reads as a different network" \
   "  if (usable.isEmpty) return Whereabouts.offline;" \
   "  if (usable.isEmpty) return Whereabouts.looksElsewhere;"
 
+# Three of the four causes named there mean "go and look at that PC"; the fourth means
+# "find the new address and type it", which is a different errand. Putting the sentence
+# back the way it was leaves a parent whose PC moved reading a list that excludes what
+# actually happened -- the shape this repository keeps finding.
+mutate "whereabouts: the moved-address cause goes unmentioned again" \
+  lib/src/api/reachability.dart \
+  "        'not running on it — or that its address on this network has changed since '
+        'you paired.'," \
+  "        'not running on it.',"
+
 # The two defects deep validation found in this feature, held so they cannot return.
 mutate "notification: a body tap counts as an answer" \
   lib/src/background/notification_actions.dart \
@@ -846,6 +856,51 @@ mutate "sessions: an absent was_current is read as yourself" \
   lib/src/api/nestwatch_api.dart \
   "          (jsonDecode(body) as Map<String, dynamic>)['was_current'] == true," \
   "          (jsonDecode(body) as Map<String, dynamic>)['was_current'] != true,"
+
+# ------------------------------------------------------------------- a PC that moved
+#
+# The whole fix is one comparison, and inverting it is both halves of the bug at once:
+# reconnect silently to a certificate that does NOT match, and stop to ask a human about
+# one that does. The first is the security claim, the second is the reason M22 was filed.
+mutate "moved PC: a certificate that does not match is the one we reconnect to" \
+  lib/src/pairing/pairing_controller.dart \
+  "      if (known != null && known.fingerprint == observed) {" \
+  "      if (known != null && known.fingerprint != observed) {"
+
+# The old behaviour, which is what makes this worth defending: seeing the same certificate
+# at a new address relabelled a QR-verified PC as merely trusted-on-first-use, permanently.
+mutate "moved PC: re-addressing downgrades the trust that was already established" \
+  lib/src/pairing/pairing_controller.dart \
+  "        known.provenance," \
+  "        PinProvenance.trustedOnFirstUse,"
+
+# Same server, so the cookie is still its cookie. Dropping it turns a lease change into a
+# password prompt -- the app asking a parent to fix something that is not broken.
+mutate "moved PC: the session is dropped, so the move costs the control password" \
+  lib/src/pairing/pairing_controller.dart \
+  "        cookie: await _sessions.load()," \
+  "        cookie: null,"
+
+# The pairing did not happen again; only the address changed. Nothing in lib/ reads
+# `pairedAt` today, which is exactly the condition under which a stored fact rots.
+mutate "moved PC: a change of address is recorded as a fresh pairing" \
+  lib/src/pairing/pairing_controller.dart \
+  "      pairedAt: pairedAt ?? _now()," \
+  "      pairedAt: _now(),"
+
+# `restorePin` runs once per launch, so a pin dropped here stays dropped until the app is
+# restarted -- over a failed request, for a certificate nothing has cast doubt on.
+mutate "moved PC: a failed reconnect throws away the pin it already had" \
+  lib/src/pairing/pairing_controller.dart \
+  "        pairedAt: known.pairedAt,
+      );
+    } on NestwatchException catch (e) {
+      _emit(PairingFailed(e.message));" \
+  "        pairedAt: known.pairedAt,
+      );
+    } on NestwatchException catch (e) {
+      _overrides.distrust();
+      _emit(PairingFailed(e.message));"
 
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
