@@ -260,48 +260,6 @@ ask for one here. Whether that is a gap or the correct boundary is a product dec
 an engineering one, and it has not been made.
 
 
-### M27 · `testedAgainst` names a release; the golden files come from a branch
-
-**Corrected in the prose, unfixed in the mechanism, which is why this is an entry.**
-
-`tool/check_golden.sh` compares two numbers and calls them the same fact. They are not:
-
-* the golden files are vendored from `git archive origin/main`, which is right — CI clones
-  the pushed branch, and taking them from the sibling *working tree* produced a repo that
-  passed locally and failed in CI on 2026-09-02;
-* `ContractCheck.testedAgainst` is set from that checkout's `Cargo.toml`, which holds the
-  **last released** version for the whole of the next development cycle.
-
-Between a tag and the release after it, those name different trees, and the checker compares
-`testedAgainst` *to `Cargo.toml`* — so it is comparing a version to itself and agrees no
-matter how far `main` has moved past the tag. It cannot detect this. It is not a bug in the
-comparison; it is a missing third fact.
-
-**It already happened, undetected, for three days.** On 2026-09-02 the goldens were taken
-from `origin/main`, which was past `v0.6.0` and carrying the unreleased `scope` work.
-`testedAgainst` was set to `0.6.0`. Both were individually defensible, the checker agreed,
-CI was green, and the pair described a nestwatch that has never existed as a release: no
-0.6.0 sends `scope`. Verified against the tags rather than argued —
-`git show v0.6.0:tests/golden/session-signed-in.json` carries no `scope` key; `v0.7.0` does.
-
-Roughly a dozen comments across `lib/`, `test/`, `docs/` and `CHANGELOG.md` then dated
-scopes to 0.6.0, and would have told a maintainer that a 0.6.0 PC sends them. All corrected
-on 2026-09-05 with the bump to 0.7.0, which made the original pairing accidentally true.
-
-**Nothing was mis-*decided*, and that is not luck.** `scopeRefusal` reads
-`json.containsKey('scope')` and never consults the version — so a wrongly-dated comment
-could not become a wrong refusal. It reads presence only because a surviving mutation forced
-it off the version first; had M26 not been caught, this would have been a wrong comment
-feeding a version-keyed decision. Two findings, one root, and the order they were found in
-is the only reason the second one was harmless.
-
-**What would actually close it.** Record the *commit* the goldens came from, not just a
-version — `git archive` already knows it — and have `check_golden.sh` compare that against
-the sibling's `HEAD`, which is a fact neither side can restate. Deferred rather than done:
-it is a change to the checker's contract and to what `testedAgainst` means, and this cycle
-had a live defect to fix first. The cost of leaving it is bounded and now understood — a
-constant that is right at every release and can be wrong between two of them.
-
 ### M26 · A version number stood in for a fact the server states outright
 
 **Fixed; kept because the *way* it was found is the reusable part.** The scope gate's

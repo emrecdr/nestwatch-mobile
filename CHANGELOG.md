@@ -185,6 +185,29 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
   restores `lib/` only — a mutation aimed at `ios/` would apply and never be put back, and
   that constraint is now written into the script for the next source-reading test.
 
+- **`tool/check_golden.sh` checks the release its goldens claim to come from (`M27`, closed).**
+  It compared nestwatch's `Cargo.toml` version against `ContractCheck.testedAgainst` and
+  called that a check. Both name *the last release*, so they agree however far `main` has
+  moved past the tag — one fact held against itself. It missed exactly that for three days
+  in September: goldens vendored from `origin/main` past `v0.6.0`, carrying the unreleased
+  `scope` work, paired with `testedAgainst = 0.6.0`. Both defensible, the checker agreed, CI
+  green, and together they described a nestwatch that has never existed as a release.
+  <br>It now asks the question neither number can: it reads the goldens out of the
+  `v<testedAgainst>` tag and diffs them against the vendored copies. Silent on every
+  ordinary day — being past a tag is the normal state of a development cycle, and warning
+  about that would be the noise `M25` argues against — and loud at the one moment
+  `testedAgainst` starts naming a release these files do not describe. A tag that is not in
+  the checkout reads as UNREADABLE rather than agreement. Proven by reproducing the original
+  failure: setting `testedAgainst` back to `0.6.0` names the two session goldens as
+  differing from that release, which is precisely the `scope` key they gained afterwards.
+- **And an inconsistency that fix exposed one branch away.** An *untracked* golden on the
+  sibling side was already reported as "not published yet" rather than counted, because
+  failing would red a gate over somebody else having an editor open. A *modified* one was
+  still counted as drift — the same argument reaching the opposite verdict two branches
+  apart. Both are now measured against what is **pushed**: a file that differs only in that
+  working tree is shown as `UNCOMMITTED`, with its diff, and not counted. A vendored file
+  that genuinely differs from the pushed copy is still `DRIFTED` and still exits 1, watched
+  to prove it.
 - **`tool/check_golden.sh` can tell an unpublished golden from a missing one.** It globs a
   *directory* on the sibling checkout, so a file sitting there uncommitted was compared as
   though nestwatch had published it. Found by the script itself on 2026-09-06: it reported

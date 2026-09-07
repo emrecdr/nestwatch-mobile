@@ -144,9 +144,28 @@ for theirs in "$SRC"/tests/golden/*.json; do
       drift=$((drift + 1))
     fi
   elif ! diff -q "$theirs" "$mine" >/dev/null; then
-    echo "  DRIFTED       $name"
-    diff -u "$mine" "$theirs" | sed 's/^/                /'
-    drift=$((drift + 1))
+    # It differs from that working tree. The question this script exists to answer is
+    # whether it differs from what is **published**, because that is the tree CI clones and
+    # the only one a released nestwatch corresponds to.
+    #
+    # Consistency with the untracked case above, which is what forced this: an untracked
+    # golden was already reported as "not published yet" rather than counted, on the
+    # grounds that failing would red a gate because somebody else has an editor open. A
+    # *modified* golden is the same situation and was still counted as drift, which is the
+    # same argument reaching the opposite verdict two branches apart.
+    if [ "$has_origin" = 1 ] &&
+       (cd "$SRC" && git show "origin/main:tests/golden/$name" 2>/dev/null) |
+         diff -q - "$mine" >/dev/null 2>&1; then
+      echo "  UNCOMMITTED   $name — differs only in that working tree; what is pushed matches"
+      # Shown anyway. It is not drift, but it is the shape that is coming, and seeing it
+      # early is most of why anybody points this at a working tree in the first place.
+      diff -u "$mine" "$theirs" | sed 's/^/                /'
+      unpublished=$((unpublished + 1))
+    else
+      echo "  DRIFTED       $name"
+      diff -u "$mine" "$theirs" | sed 's/^/                /'
+      drift=$((drift + 1))
+    fi
   else
     echo "  same          $name"
   fi
@@ -181,6 +200,65 @@ echo
 compare "version" "${theirs_version%.*}" "${mine_version%.*}" \
   "The app will tell a parent the two disagree. If these golden files are current, bump testedAgainst with them."
 
+# The third fact — the one the two comparisons above cannot supply between them.
+#
+# The comparison above puts nestwatch's `Cargo.toml` version beside `testedAgainst`. Both
+# name **the last release**, so they agree no matter how far `main` has moved past the tag —
+# it is one fact checked against itself, and it cannot see the thing it looks like it is
+# checking.
+#
+# It missed exactly that on 2026-09-02, for three days. The goldens were vendored from
+# `origin/main`, which was past `v0.6.0` and carrying the unreleased `scope` work.
+# `testedAgainst` was set to `0.6.0`. Both were individually defensible, this script agreed,
+# CI was green, and the pair described a nestwatch that has never existed as a release: no
+# 0.6.0 sends `scope`.
+#
+# So ask the question neither number can answer — **does the release `testedAgainst` names
+# actually produce these files?** — by reading the goldens out of that tag and diffing them
+# against the vendored copies. Silent whenever the answer is yes, which is every ordinary
+# day including the whole of a development cycle: being past a tag is normal, and warning
+# about it would be the noise `M25` argues against. It speaks only when the tag's files and
+# these files genuinely differ, which is the moment `testedAgainst` starts lying.
+tag="v$mine_version"
+if [ -z "$mine_version" ]; then
+  echo "  UNREADABLE    testedAgainst: could not read it from server_contract.dart"
+  echo "                Nothing was compared against a release."
+  drift=$((drift + 1))
+elif ! (cd "$SRC" && git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1); then
+  # Third outcome, spelled out rather than folded into agreement: a tag that is not in the
+  # checkout may simply not have been fetched, and "could not look" is not "they match".
+  echo "  UNREADABLE    release $tag: no such tag in that checkout"
+  echo "                Nothing was compared against a release. \`git fetch --tags\` there,"
+  echo "                or the tag does not exist and testedAgainst names nothing."
+  drift=$((drift + 1))
+else
+  released_drift=0
+  for mine in "$MINE"/*.json; do
+    name=$(basename "$mine")
+    if ! (cd "$SRC" && git cat-file -e "$tag:tests/golden/$name" 2>/dev/null); then
+      echo "  DRIFTED       release $tag has no $name"
+      echo "                These files include a shape that release never produced, so"
+      echo "                testedAgainst names the wrong one."
+      released_drift=$((released_drift + 1))
+      continue
+    fi
+    if ! (cd "$SRC" && git show "$tag:tests/golden/$name") | diff -q - "$mine" >/dev/null; then
+      echo "  DRIFTED       $name differs from release $tag"
+      released_drift=$((released_drift + 1))
+    fi
+  done
+  if [ "$released_drift" -eq 0 ]; then
+    echo "  same          release ($tag produces these golden files)"
+    checked=$((checked + 1))
+  else
+    echo "                testedAgainst says $mine_version, and $released_drift file(s) here do not"
+    echo "                match that release. Either these came from an unreleased tree, or"
+    echo "                testedAgainst is behind. The app tells a parent which nestwatch it"
+    echo "                was built against, so this is a claim it makes on screen."
+    drift=$((drift + released_drift))
+  fi
+fi
+
 # The renewal threshold the phone warns at, which must be the one nestwatch warns at.
 #
 # nestwatch's own comment says RENEW_WARN_DAYS is `pub` so that `doctor` "nags at the same
@@ -198,9 +276,10 @@ echo
 # Said before the verdict, so it is read whichever way the verdict goes. A reader who sees
 # "nothing drifted" and does not know a file was skipped has been told half the answer.
 if [ "$unpublished" -ne 0 ]; then
-  echo "$unpublished golden(s) exist only in that working tree and were not compared."
-  echo "Nothing to do until they are pushed. Vendoring one now copies a shape no released"
-  echo "nestwatch sends -- which is the mistake this script already has a warning about."
+  echo "$unpublished golden(s) are uncommitted on that side and were not counted:"
+  echo "either absent from every commit, or edited on top of a pushed copy that still"
+  echo "matches these. Nothing to do until they are pushed. Vendoring one now copies a"
+  echo "shape no released nestwatch sends -- the mistake this script warns about above."
   echo
 fi
 if [ "$drift" -eq 0 ]; then
