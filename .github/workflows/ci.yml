@@ -264,12 +264,42 @@ jobs:
     # Gated on the fast gate for the same reason as the two build jobs.
     needs: check
     runs-on: macos-latest
-    # Measured on a developer's Mac 2026-09-08: 68s of Xcode build, then 1s of tests. The
-    # runner is slower and colder; this is a backstop against a simulator that never boots,
-    # not a performance budget.
-    timeout-minutes: 30
+    # The first run of this job reached the 30-minute cap having produced nothing after
+    # `Xcode build done. 118.7s` -- 22 minutes of silence at app launch. Twenty is enough
+    # to tell a stall from a slow build (the build itself took two minutes) and costs a
+    # third less when it is a stall.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Use the Xcode this test is measured against
+        # `macos-latest` defaults to whatever Xcode GitHub has most recently made default --
+        # 26.6 as of 2026-09-08, moved there on their schedule, announced in their release
+        # notes and nowhere in this repository. That is the same objection `FLUTTER_VERSION`
+        # above exists to answer: a gate that changes underneath you reports on a toolchain
+        # nobody chose.
+        #
+        # It is also the only difference left between the runner and the machine where these
+        # five tests pass. That was narrowed by elimination rather than guessed at: a cold
+        # boot reproduces (passes, 40s), and so does a simulator created from scratch for the
+        # purpose (passes) -- so it is neither device state nor a first boot. Local Xcode is
+        # 26.5, build 17F42, and the runner image carries `/Applications/Xcode_26.5.app` at
+        # that same build number.
+        #
+        # Stated as a failure rather than left to `xcode-select` to report obscurely: if the
+        # image drops that version, this says which of the two things went wrong.
+        run: |
+          set -euo pipefail
+          app=/Applications/Xcode_26.5.app
+          if [ ! -d "$app" ]; then
+            echo "$app is not on this runner any more. Nothing was tested, and this is"
+            echo "not a statement about the pin — pick a version from the image README"
+            echo "and check the integration test against it locally first."
+            exit 1
+          fi
+          sudo xcode-select -s "$app"
+          xcodebuild -version
+
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
@@ -305,7 +335,14 @@ jobs:
         # the permission is never consulted. `M15` tracks what is still owed on hardware --
         # this job does not shorten that list, and saying so here keeps a green badge from
         # being read as more than it is.
-        run: flutter test integration_test -d "$SIMULATOR_UDID" --reporter=expanded
+        #
+        # `--verbose` because the first run of this job stalled after the build and said
+        # nothing at all for 22 minutes. A silent stall is the one failure this job must not
+        # have: it is indistinguishable from a slow one, and neither is distinguishable from
+        # the pin being broken, which is the whole thing the badge is supposed to mean.
+        run: |
+          flutter devices
+          flutter test integration_test -d "$SIMULATOR_UDID" --reporter=expanded --verbose
 
   # ---------------------------------------------------------------------------------
   # Slow, and not on every push. It runs the whole suite once per mutation.
