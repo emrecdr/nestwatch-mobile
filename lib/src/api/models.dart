@@ -333,6 +333,142 @@ class TimeCode {
   String toString() => 'TimeCode($minutes min, code redacted)';
 }
 
+/// One row of `GET /api/sessions` — a device signed in to that PC.
+///
+/// **Captured off the wire on 2026-09-07**, from a v0.7.0 built out of `git archive v0.7.0`
+/// and run against a throwaway data directory. Three sessions were signed in with different
+/// `User-Agent` headers, one was revoked, and the shapes below are what came back. Not read
+/// off the Rust: `describe_session` is identical between `v0.7.0` and `origin/main`
+/// (verified by diff), so the released tag is what a parent's PC actually answers.
+///
+/// ```json
+/// { "handle": "2306c57d1bac", "current": false,
+///   "scope": {"kind": "dashboard"},
+///   "first_seen": 1788738328, "last_seen": 1788738328, "expires": 1791330328,
+///   "user_agent": "nestwatch-mobile/0.1.0 (android)" }
+/// ```
+class SessionDevice {
+  /// Twelve hex characters: a salted SHA-256 of the session id, never the id itself.
+  ///
+  /// **The salt is per-process and random**, which nestwatch's own comment states outright:
+  /// *"handles change when the service restarts."* So this is an address that is only valid
+  /// for as long as that PC keeps running, and it must never be persisted or held across a
+  /// refresh — a stale one answers 404, which is measured and handled rather than assumed.
+  final String handle;
+
+  /// True for the session this phone is using. Named by the server rather than worked out
+  /// here, because this app never sees its own session id — the cookie is opaque to it.
+  final bool current;
+
+  /// `scope.kind` as text, or null when the server sent no scope.
+  ///
+  /// Deliberately **not** parsed into [PairingScope]. That enum exists to make one
+  /// decision — whether this app can drive this pairing — and it answers `unrecognised` for
+  /// an unknown kind precisely so absence is never read as permission. Here nothing is being
+  /// decided: this is a description of somebody else's session, printed on a row. Reusing a
+  /// permission type to render a label is how the two jobs drift into one.
+  final String? scopeKind;
+
+  /// `scope.source` for an integration pairing — the name it grants time as.
+  final String? scopeSource;
+
+  /// Unix seconds, or null for a session that predates device-remembering.
+  final int? firstSeenEpoch;
+
+  /// Unix seconds, and **coarse by construction**.
+  ///
+  /// nestwatch derives it as `expires - SESSION_IDLE_DAYS`, so it is the last time the
+  /// session record was *saved*, not the last time it was used — and saves are days apart
+  /// because the sliding expiry only refreshes every five. Their comment says what may
+  /// honestly be built on it: *"'Active this week' is what the card can honestly say, and it
+  /// is enough to tell a live phone from one retired in August."*
+  ///
+  /// So this must never be rendered as a clock time. A row reading "last seen 14:32" would
+  /// be this app inventing a precision the number does not carry — the same failure as
+  /// showing `used_mins: 0` without `enforcer_age_secs` beside it. See [lastSeenPhrase].
+  final int lastSeenEpoch;
+
+  /// Unix seconds. When this session lapses if nothing touches it again.
+  final int expiresEpoch;
+
+  /// The `User-Agent` of the request that signed in, read once and capped at 256 bytes by
+  /// `auth::remember_device`. Null for a session signed in before that existed.
+  ///
+  /// Attacker-influenceable text on its way to a parent, so it is rendered as a plain string
+  /// and never as markup — the same care nestwatch takes on its own card.
+  final String? userAgent;
+
+  const SessionDevice({
+    required this.handle,
+    required this.current,
+    required this.lastSeenEpoch,
+    required this.expiresEpoch,
+    this.scopeKind,
+    this.scopeSource,
+    this.firstSeenEpoch,
+    this.userAgent,
+  });
+
+  static SessionDevice fromJson(Map<String, dynamic> json) {
+    final scope = json['scope'];
+    return SessionDevice(
+      handle: json['handle'] as String? ?? '',
+      current: json['current'] as bool? ?? false,
+      scopeKind: scope is Map<String, dynamic>
+          ? nonEmptyString(scope['kind'])
+          : null,
+      scopeSource: scope is Map<String, dynamic>
+          ? nonEmptyString(scope['source'])
+          : null,
+      firstSeenEpoch: (json['first_seen'] as num?)?.toInt(),
+      lastSeenEpoch: (json['last_seen'] as num?)?.toInt() ?? 0,
+      expiresEpoch: (json['expires'] as num?)?.toInt() ?? 0,
+      userAgent: nonEmptyString(json['user_agent']),
+    );
+  }
+
+  DateTime? get firstSeen => firstSeenEpoch == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(firstSeenEpoch! * 1000).toLocal();
+
+  /// Never print this. It is a bearer-adjacent address, and a log line carrying it is a
+  /// line that names which row a parent is about to sign out.
+  @override
+  String toString() => 'SessionDevice(${current ? 'this device' : 'another'})';
+}
+
+/// What `POST /api/sessions/{handle}/revoke` answered.
+///
+/// **Measured 2026-09-07**, all three outcomes, against a live v0.7.0:
+///
+/// * another device → `200 {"ok":true,"was_current":false}`
+/// * the same handle again → `404 {"error":"no such signed-in device"}`
+/// * this device → `200 {"ok":true,"was_current":true}`, and the very next request on that
+///   cookie answered `401 {"error":"authentication required"}`
+///
+/// That last pair settles a design question rather than leaving it to taste. Signing
+/// yourself out is allowed on purpose — nestwatch's comment says refusing it would mean
+/// *"the one device a parent is definitely holding is the one they cannot clear"* — and the
+/// session really is gone immediately, so a client that stays on the screen is a client
+/// showing a list it can no longer fetch.
+class SessionRevocation {
+  /// False when the handle matched nothing — a 404.
+  ///
+  /// Reported rather than thrown, the same shape and for the same reason as
+  /// [Decision.acted]: it is an ordinary race, not a fault. Handles are salted per server
+  /// *process*, so a list held across a restart of that PC is entirely stale, and every row
+  /// in it will answer 404. That is a refresh, not an error message.
+  final bool acted;
+
+  /// True when the session just revoked was this phone's own.
+  ///
+  /// The caller must treat this exactly as a lapsed sign-in: the cookie is dead, and the
+  /// next request proves it with a 401.
+  final bool wasCurrent;
+
+  const SessionRevocation({required this.acted, required this.wasCurrent});
+}
+
 /// What `POST /api/curfew/extend` answered: bedtime moved, and what that is worth.
 ///
 /// The mirror of [Decision], and it exists for the mirror-image reason. `curfew_note`

@@ -11,6 +11,32 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
 
 ### Added
 
+- **Signed-in devices, and signing one out.** nestwatch 0.7.0 added a per-device revoke so a
+  parent does not have to rotate the password and re-pair everything to clear one phone —
+  "the expensive remedy is one people postpone, which is the worst property a revocation
+  lever can have". This app announced itself to that card in an earlier commit and could not
+  read it. Now it can, from the identity dialog beside *Privacy* and *Forget this PC*, which
+  is where the other "what does this PC trust, and can I take it back" controls already live.
+  Not a fifth tab: a parent opens the app to answer a request, not to audit devices.
+  <br>**The shapes were captured, not inferred.** A v0.7.0 built out of `git archive v0.7.0`
+  — a published tree, not the sibling working copy — was installed into a throwaway data
+  directory and run on loopback; three sessions were signed in under different `User-Agent`
+  headers and revoked one at a time. That produced the row shape, `was_current: false` for
+  another device, `404 {"error":"no such signed-in device"}` for a handle used twice, and
+  `was_current: true` for this one followed by a `401` on the very next request.
+  <br>That last pair settled the design question by measurement. Revoking yourself is allowed
+  deliberately — refusing "would mean the one device a parent is definitely holding is the
+  one they cannot clear" — so the screen allows it, says plainly that the consequence lands
+  here, and then hands back to the password prompt exactly as a lapsed sign-in does, because
+  that is what it now is. A 404 is treated as a race rather than a fault: handles are salted
+  **per server process**, so a list held across a restart of that PC is entirely stale and
+  every row in it answers 404. Nothing is cached and no handle is persisted.
+  <br>*Last seen* is rendered a week at a time, and that is not vagueness. nestwatch derives
+  it as `expires - SESSION_IDLE_DAYS`, and the sliding expiry only saves every five days, so
+  the number cannot support a day; their comment sets the ceiling at "'Active this week' is
+  what the card can honestly say". `lastSeenPhrase` is deliberately not `ago`, a mutation
+  holds them apart, and a test asserts they disagree — printing "3 d ago" off that figure
+  would be the `used_mins: 0` failure in a new costume.
 - **"Later bedtime tonight", where the sentence that names it already was.** After an
   approve, `curfew_note` can arrive saying bedtime will swallow the minutes just granted,
   and it ends by telling the parent to *"Use \"Later bedtime tonight\" on the Curfew card to

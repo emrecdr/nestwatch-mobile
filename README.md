@@ -261,6 +261,17 @@ in the browser. The reply's `budget_note` is shown for the mirror of the reason
 where a parent whose child has no screen time left pushes bedtime back, is told it worked,
 and watches the PC lock anyway.
 
+**Signed-in devices sits behind the identity dialog, not in the tab bar.** It lists every
+session that PC holds and signs one out — `GET /api/sessions`, `POST
+/api/sessions/{handle}/revoke`. A parent reaches it when something has been lost, not when
+they are answering a request, so it lives beside *Privacy* and *Forget this PC*. Three
+properties are load-bearing and all three were measured against a live v0.7.0 rather than
+read off the Rust: handles are salted **per server process**, so nothing is cached and a
+stale handle's 404 is a refresh rather than an error; revoking your own session is allowed,
+answers `was_current: true`, and the next request 401s, so the screen hands back to the
+password prompt; and `last_seen` is derived as `expires - SESSION_IDLE_DAYS`, so it is
+rendered a week at a time because that is all the precision it has.
+
 **Lock is on the Screen tab for the same reason, and it is the only *control* endpoint this
 app calls.** nestwatch publishes lock, shutdown, and process kill. Locking passes §5's test
 — a single act, taken in the moment, and the moment is defined by not being at the desk —

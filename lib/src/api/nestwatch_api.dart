@@ -610,6 +610,63 @@ class NestwatchClient {
     });
   }
 
+  /// `GET /api/sessions` — every device signed in to that PC, newest first.
+  ///
+  /// Sorted by the server, and left in its order here. It sorts descending by `first_seen`
+  /// so a device that has just appeared is at the top — which its comment says is "the one
+  /// a parent is most likely to be looking for after a scare". Re-sorting on the phone
+  /// would be this app deciding that a different row matters more.
+  Future<List<SessionDevice>> sessions() async {
+    final (response, body) = await _send('GET', '/api/sessions');
+    _requireOk(response);
+    final rows = jsonDecode(body) as List<dynamic>;
+    return rows
+        .cast<Map<String, dynamic>>()
+        .map(SessionDevice.fromJson)
+        .toList();
+  }
+
+  /// `POST /api/sessions/{handle}/revoke` — sign one device out.
+  ///
+  /// ## A 404 is a race, not a fault
+  ///
+  /// Handles are a salted hash of the session id under a **per-process** salt, so every
+  /// handle this app holds becomes meaningless the moment that PC's service restarts — and
+  /// a list a parent has had on screen for a minute can go stale for the ordinary reason
+  /// too, because another device signed the same session out. Both answer
+  /// `404 {"error":"no such signed-in device"}`, measured.
+  ///
+  /// Reported rather than thrown, matching [approveTimeRequest]: the remedy is to re-read
+  /// the list, and a parent who is told "that device is already signed out" has been told
+  /// something true and useful, where an error dialog would be this app calling somebody
+  /// else's success a failure.
+  ///
+  /// ## Signing *yourself* out is allowed, and the caller has to handle it
+  ///
+  /// nestwatch permits it deliberately — refusing "would mean the one device a parent is
+  /// definitely holding is the one they cannot clear" — and answers `was_current: true`.
+  /// Measured: the very next request on that cookie is a 401. So a caller must treat a
+  /// `wasCurrent` revocation exactly as [NestwatchFailure.sessionExpired], immediately,
+  /// rather than staying on a screen whose next refresh cannot succeed.
+  Future<SessionRevocation> revokeSession(String handle) async {
+    final (response, body) = await _send(
+      'POST',
+      '/api/sessions/${Uri.encodeComponent(handle)}/revoke',
+    );
+    if (response.statusCode == HttpStatus.notFound) {
+      return const SessionRevocation(acted: false, wasCurrent: false);
+    }
+    _requireOk(response);
+    return SessionRevocation(
+      acted: true,
+      // Absent reads as false, which is the safe direction: the cost of missing a
+      // `was_current` is a screen that refreshes into a 401 and signs out one beat later,
+      // where inventing one would sign a parent out of a device they did not touch.
+      wasCurrent:
+          (jsonDecode(body) as Map<String, dynamic>)['was_current'] == true,
+    );
+  }
+
   /// `POST /api/curfew/extend` — push tonight's bedtime back by [minutes].
   ///
   /// ## Why this one, when curfew itself stays in the browser

@@ -30,6 +30,7 @@ import 'poller.dart';
 import 'privacy_screen.dart';
 import 'notifications_sheet.dart';
 import 'screenshot_screen.dart';
+import 'sessions_screen.dart';
 import 'time_codes_screen.dart';
 import 'time_requests_screen.dart';
 import 'usage_screen.dart';
@@ -294,6 +295,22 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          // Beside Privacy and "Forget this PC", because it answers the same question they
+          // do — what does this PC currently trust, and can I take it back. It is not a tab
+          // for the reason §5 gives about all four: a parent opens the app to answer a
+          // request, not to audit devices.
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                SessionsScreen.route(
+                  client: widget.client,
+                  onSessionEnded: widget.controller.signOut,
+                ),
+              );
+            },
+            child: const Text('Devices'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.of(context).pop();

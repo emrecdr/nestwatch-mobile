@@ -247,6 +247,9 @@ void main() {
           'needs a NestwatchClient and opens an event stream on init',
       'screenshot_screen.dart':
           'needs a NestwatchClient; the body is JPEG bytes off the PC',
+      'sessions_screen.dart':
+          'needs a NestwatchClient, and fetches on init; driven against a real '
+          'TLS stub by sessions_screen_test.dart instead',
       'usage_screen.dart': 'built by PolledScreen against a live client',
       'time_codes_screen.dart': 'built by PolledScreen against a live client',
       'time_requests_screen.dart':

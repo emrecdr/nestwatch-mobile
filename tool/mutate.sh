@@ -807,6 +807,46 @@ mutate "bedtime: the minutes chosen are not the minutes sent" \
   "      '/api/curfew/extend',
       jsonBody: {'minutes': 1},"
 
+# Revoking your own session succeeds, answers `was_current: true`, and the next request on
+# that cookie is a 401 -- all three measured against a live v0.7.0 on 2026-09-07. Treating
+# it as somebody else's device leaves a parent on a list that cannot be refreshed.
+mutate "sessions: signing yourself out is treated as signing out somebody else" \
+  lib/src/ui/sessions_screen.dart \
+  '      if (outcome.wasCurrent) {' \
+  '      if (false) {'
+
+# A 404 is a race, not a fault: another device got there first, or that PC restarted and
+# every handle went stale, because the salt is per process. Letting it throw turns somebody
+# else's success into an error in front of a parent.
+mutate "sessions: a handle that matched nothing is reported as a failure" \
+  lib/src/api/nestwatch_api.dart \
+  '    if (response.statusCode == HttpStatus.notFound) {
+      return const SessionRevocation(acted: false, wasCurrent: false);
+    }' \
+  ''
+
+# There is no undo: the device has to be handed the control password again. A cancelled
+# dialog must not sign anything out.
+mutate "sessions: cancelling the confirmation signs the device out anyway" \
+  lib/src/ui/sessions_screen.dart \
+  '    if (ok != true || !mounted) return;' \
+  '    if (!mounted) return;'
+
+# `last_seen` is derived as `expires - SESSION_IDLE_DAYS` and the sliding expiry saves every
+# five days, so it cannot support a day. Rendering it through `ago` prints "3 d ago" off a
+# number nobody measured to that precision -- the `used_mins: 0` failure in a new costume.
+mutate "sessions: last-seen is rendered at a precision the number does not have" \
+  lib/src/ui/relative_time.dart \
+  "  if (d.inDays < 7) return 'Active this week';" \
+  "  if (d.inDays < 7) return ago(lastSeen, now: now);"
+
+# A missing `was_current` must read as false. Inverting it signs a parent out of the app
+# because they signed out a device they are not holding.
+mutate "sessions: an absent was_current is read as yourself" \
+  lib/src/api/nestwatch_api.dart \
+  "          (jsonDecode(body) as Map<String, dynamic>)['was_current'] == true," \
+  "          (jsonDecode(body) as Map<String, dynamic>)['was_current'] != true,"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 
