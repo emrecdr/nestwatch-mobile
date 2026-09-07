@@ -123,6 +123,17 @@ jobs:
         with:
           repository: emrecdr/nestwatch
           path: nestwatch
+          # Tags, and the history behind them. `check_golden.sh` reads the golden files out
+          # of the `v<testedAgainst>` tag to ask whether that release actually produces
+          # them -- the one question its two version comparisons cannot answer between
+          # them. `actions/checkout` fetches no tags by default, so without this the check
+          # reports `UNREADABLE: no such tag` and fails, which is correct behaviour ("could
+          # not look" is never "they match") applied to a checkout that was never given
+          # what it needed.
+          #
+          # The same flag is on the `audit` job's checkout above, for the same shape of
+          # reason: a tag-reading check against a tagless clone answers about the clone.
+          fetch-depth: 0
 
       - name: Golden files and the version they came from
         # Exit 2 means "could not compare", which is neither a pass nor a drift. It is
