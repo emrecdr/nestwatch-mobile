@@ -315,18 +315,20 @@ repo with no release cadence — a red badge that means "the other side moved" r
 like a red badge that means "you broke it", and the whole value of this gate is that its
 failures are legible.
 
-**`check_findings.sh` has the same property as `check_golden.sh`, and it showed on the same
-day.** Run against `../nestwatch` on 2026-09-04 it reported `O10` and `O34` dangling; run
-against `git archive origin/main` it reported everything resolving. Both true — those ids
-live only in that checkout's *uncommitted* file, another session's work in progress. So the
-sentence `M20` records about the golden checker holds here word for word: it answers about
-whichever tree you point it at, and `NESTWATCH_REPO` defaults to a working tree.
+**The half of this that was an asymmetry between the two scripts is closed.**
+`check_findings.sh` had the same which-tree-is-this property as `check_golden.sh` and none
+of its warnings; it now says which commit the sibling is at, whether that commit is
+published, and whether the findings file on top of it is uncommitted — on every run, not
+only when something dangles, because here the failure mode is *silence*. An entry that
+exists only on somebody's disk makes a reference **resolve** that CI will report dangling,
+and the script going quiet is what that looks like from outside.
 
-Unlike `check_golden.sh`, this one has **no unpushed-tree warning**. It is a smaller risk —
-a dangling reference is already documented as a notification rather than an error, and
-nothing gets vendored on the strength of it — but the two scripts giving different amounts
-of help about the same trap is the kind of asymmetry that gets rediscovered rather than
-remembered.
+Measured 2026-09-08, with all four branches of that report exercised against real trees:
+the sibling checkout at `6982785` with an uncommitted findings file, an extracted archive,
+a fresh clone of `ad46682`, and a checkout with its `origin/main` ref removed. On that day
+the working tree and the pushed tree happened to answer identically — which is the point.
+Two trees agreeing is luck on a given day, not a property, and nothing in the old report
+distinguished the two.
 
 ### M23 · Nothing survives leaving the house, and the obvious fix is a privacy change
 

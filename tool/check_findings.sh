@@ -47,7 +47,57 @@ if [ ! -f "$THEIRS" ]; then
   exit 2
 fi
 
+# **Which tree is that, though?**
+#
+# `NESTWATCH_REPO` defaults to `../nestwatch`, a WORKING TREE that may hold anything: local
+# commits, unpushed work, a half-finished afternoon. CI clones the pushed branch instead,
+# so the same command answers about two different trees and both answers are true.
+#
+# `tool/check_golden.sh` has carried that warning since 2026-09-02, when goldens vendored
+# out of unpushed work passed locally and failed in CI. This script did not, and the
+# asymmetry was filed as `M25` rather than fixed: run against the checkout on 2026-09-04 it
+# reported `O10` and `O34` dangling; run against `git archive origin/main` it reported
+# everything resolving. Neither run was wrong. Neither run said which tree it had read.
+#
+# **The direction of the error is the opposite of the golden checker's, and worse.** There,
+# a file that exists only on disk produces false DRIFT — loud, and somebody goes and looks.
+# Here, an entry that exists only on disk makes a reference RESOLVE: the heading is right
+# there, the script says "all fine" and exits 0, and the notification this whole file
+# exists to deliver is the thing that goes missing. Silence is the failure mode. So this
+# reports on a clean run too, rather than only when it has something to complain about.
+#
+# Measured 2026-09-08: both trees answered identically, and every condition for them not to
+# was present and unreported — the sibling's findings file uncommitted, its HEAD not in
+# `origin/main`. Two trees agreeing is luck on a given day, not a property.
+#
+# Read from the local remote-tracking ref rather than the network, so this still works
+# offline. That ref can be stale, so this can call published work local; it cannot stay
+# silent about work that is not published, which is the direction that matters.
 echo "Checking references between $MINE and $THEIRS"
+
+sibling_sha=$(cd "$SIBLING" && git rev-parse --short HEAD 2>/dev/null)
+if [ -z "$sibling_sha" ]; then
+  # An extracted archive rather than a checkout — which is how M25 was measured, so it is a
+  # real way to run this and not a mistake. There is simply no commit to ask about.
+  echo "  that copy is not a git checkout — cannot tell you which commit it is"
+elif ! (cd "$SIBLING" && git rev-parse --verify -q origin/main >/dev/null); then
+  echo "  that checkout is at $sibling_sha, with no origin/main to compare it to"
+elif ! (cd "$SIBLING" && git merge-base --is-ancestor HEAD origin/main 2>/dev/null); then
+  echo "  that checkout is at $sibling_sha, which is NOT in its origin/main — you are"
+  echo "  reading local work, and CI resolves these against the pushed branch instead."
+  echo "  (If origin/main is merely stale, fetch and re-run.)"
+else
+  echo "  that checkout is at $sibling_sha, which is published"
+fi
+
+dirty=$(cd "$SIBLING" && git status --porcelain -- docs/OPEN-FINDINGS.md 2>/dev/null)
+if [ -n "$dirty" ]; then
+  echo "  and its findings file is uncommitted:"
+  echo "$dirty" | sed 's/^/        /'
+  echo "  That file is in no commit, so CI reads a different one. An entry present only"
+  echo "  here resolves a reference that CI will report dangling, and this script going"
+  echo "  quiet is exactly what that looks like from the outside."
+fi
 echo
 
 dangling=0
