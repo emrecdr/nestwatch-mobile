@@ -256,6 +256,58 @@ jobs:
         run: flutter build ios --no-codesign --release
 
   # ---------------------------------------------------------------------------------
+  # The pin, inside a running iOS app. Until now this ran nowhere but a developer's
+  # machine, and `docs/OPEN-FINDINGS.md` M30 was the entry saying so.
+  # ---------------------------------------------------------------------------------
+  integration-ios:
+    name: pin holds · ios simulator
+    # Gated on the fast gate for the same reason as the two build jobs.
+    needs: check
+    runs-on: macos-latest
+    # Measured on a developer's Mac 2026-09-08: 68s of Xcode build, then 1s of tests. The
+    # runner is slower and colder; this is a backstop against a simulator that never boots,
+    # not a performance budget.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      - name: Boot a simulator
+        # The picking and booting live in `tool/boot_simulator.sh` rather than here, because
+        # a recipe inside a workflow can only be rehearsed by pushing it -- and the specific
+        # thing M30 was afraid of is a red badge on this job that means "no simulator on the
+        # runner" while reading as "the pin does not hold on iOS". That script says which of
+        # the two happened, in those words, and it was run on a Mac before this was written.
+        #
+        # It exits 2 rather than 0 when there is nothing to boot, and `set -e` turns that
+        # into a failed step here -- deliberately, and for the reason the `contract` job
+        # gives above: in CI "could not look" means the runner is not what we think it is,
+        # which is worth a red badge, unlike on a developer's machine where it means Xcode
+        # is not installed.
+        run: |
+          set -euo pipefail
+          udid=$(bash tool/boot_simulator.sh)
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+
+      - name: The pin holds inside a running iOS app
+        # What this settles: ATS. `Info.plist` carries no ATS exception on purpose, and the
+        # inference that `dart:io` never consults ATS was sourced entirely from blog posts
+        # and tracker issues when the test was written. Every run of this job is a fresh
+        # measurement of it against whatever iOS the runner ships.
+        #
+        # What it does not settle: local-network privacy, the separate iOS gate on reaching
+        # a LAN address. The Simulator does not implement it and the test uses loopback, so
+        # the permission is never consulted. `M15` tracks what is still owed on hardware --
+        # this job does not shorten that list, and saying so here keeps a green badge from
+        # being read as more than it is.
+        run: flutter test integration_test -d "$SIMULATOR_UDID" --reporter=expanded
+
+  # ---------------------------------------------------------------------------------
   # Slow, and not on every push. It runs the whole suite once per mutation.
   # ---------------------------------------------------------------------------------
   mutation:
