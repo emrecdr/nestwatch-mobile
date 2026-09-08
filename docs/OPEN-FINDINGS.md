@@ -43,6 +43,13 @@ Same rules as the sibling repo's, for the same reasons:
   on one that does not resolve. Either update the comment or, usually better, let it stand on
   its own reasoning: it almost always can, and then it cannot rot.
 - **Verify before writing, and say how.** Mark measured claims as measured, with the date.
+- **The entry most likely to be wrong is the one written straight after the work.** Swept
+  2026-09-08: every checkable claim in the older entries held — the 60 s cadence, the
+  overridable `SUSPECT_PATTERN`, no mDNS anywhere in either tree — and three were wrong in
+  the entry written an hour earlier, including one that said a thing had "never run
+  anywhere else" when it had run twice and passed. The old ones were written *from* the
+  tree; the fresh one was written from remembering the afternoon. Re-read a new entry
+  against the tree before the session ends, because that is the one nobody will doubt.
 
 ## Writing across the two repos
 
