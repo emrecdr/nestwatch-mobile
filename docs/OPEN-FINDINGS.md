@@ -95,6 +95,68 @@ Last audited against the tree on **2026-09-06**.
 
 ## Open
 
+### M32 · The iOS pinning test stalls on a hosted runner, after the app has already started
+
+**Measured 2026-09-08, and this entry exists because a previous one was deleted too early.**
+The predecessor said the recipe was "not added blind, deliberately" and that the first run
+wanted watching. It was added, watched, and taken out again the same day. What is left over
+is a much sharper description of where the wall is.
+
+`integration_test/pinning_on_ios_test.dart` answers the one question about the pin that the
+host suite cannot — whether App Transport Security is in `dart:io`'s path — by driving a
+real handshake inside a running iOS app against a self-signed certificate on a bare IP. It
+passes on a Mac in about forty seconds, and it has never run anywhere else.
+
+**Where it stops**, from a `--verbose` run:
+
+```
+01:07:56  xcrun simctl launch … com.nestwatch.mobile --disable-vm-service-publication
+01:08:05  com.nestwatch.mobile: 13254          <- the app is running, with a pid
+01:08:05  Waiting for VM Service port to be available...
+01:19:06  cancelled by timeout-minutes         <- eleven minutes, nothing
+```
+
+Everything this repository controls works. `tool/boot_simulator.sh` picks and boots an
+iPhone on the newest available runtime; the Xcode build completes in about two minutes; the
+app launches. `flutter test` then waits for the VM Service port, which it discovers by
+reading the simulator's unified log rather than from the launch (`simctl launch` is passed
+`--disable-vm-service-publication`, and a `simctl spawn … log stream` follows it). That is
+the step that never completes.
+
+**It is intermittent, which is why the job came out rather than being fixed.** Four runs, all
+on the same code and the same runner image:
+
+| Xcode | outcome |
+|---|---|
+| 26.6, the image default | stalled, 22 min |
+| 26.5, pinned | passed, tests green in ~7 min |
+| 26.5, pinned | passed |
+| 26.5, pinned | **stalled, 11 min** |
+
+**Commit `e9245eb` asserts that the Xcode version was the cause. That is refuted**, and the
+correction belongs here because that commit cannot be rewritten. The reasoning there was a
+single-variable comparison across two runs, which is sound as far as it goes and was not far
+enough: two passes are consistent with a flake, and the third pinned run reproduced the
+original stall exactly. Pinning Xcode is still right — the image default moves on GitHub's
+schedule, announced nowhere in this repository, which is the same objection `FLUTTER_VERSION`
+answers — but it is not established as a fix for this.
+
+A gate that reds a third of the time for a reason outside this repository is worse than no
+gate: it is how a team learns to stop reading CI, which is the argument `M25` makes and the
+reason the predecessor entry hesitated in the first place.
+
+**What is kept.** `tool/boot_simulator.sh`, which works on both machines and is rehearsable
+by hand, so whoever picks this up starts a step in rather than rebuilding it. The removed job
+is in `git log` at `e9245eb`.
+
+**What would close it.** Somewhere the stall reproduces, because it does not on this Mac —
+five runs, including a cold boot and a simulator created from scratch, all passed in about
+forty seconds. Without a reproduction the next move is guesswork at twenty minutes an
+attempt, which is how three CI cycles were already spent. Worth reading first: whether
+Flutter's log-stream route to VM Service discovery has a known failure on iOS 26 simulators,
+and whether a newer Flutter changes it — which folds into `M21`, since this repo is three
+minors behind.
+
 ### M31 · The integration session golden is coming, and the test that needs it builds its payload by hand
 
 > **Cross-repo** · pairs with nestwatch (their work, not yet committed)

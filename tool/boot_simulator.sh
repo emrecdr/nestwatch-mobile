@@ -13,17 +13,24 @@
 #
 # and still have the explanation in the log next to whatever happened afterwards.
 #
-# ## Why this is a script rather than four lines of YAML
+# ## Nothing in CI calls this today, and that is not an oversight
 #
-# The register entry that asked for this job — since fixed and, by that file's rule,
-# deleted — said in the same breath why it had not been built: "a new job that fails for
-# setup reasons rather than for the property it checks is exactly the illegible red badge
-# `M25` argues against". That is the real risk here: a red `pin holds · ios simulator` that
-# actually means *this runner had no simulator* reads exactly like one that means *the pin
-# does not hold on iOS*, and those are not remotely the same news.
+# It was written for a `pin holds · ios simulator` job, which ran on 2026-09-08 and was
+# taken out again the same day. `M32` has the measurement; the short version is that the
+# stall is downstream of everything here — the app launches on the simulator and
+# `flutter test` never receives its VM Service port.
 #
-# It was right to worry. The first run of that job stalled silently for 22 minutes after a
-# successful build, and the badge said nothing about which of the two had happened.
+# This part works, on a hosted runner and on a Mac, and is left in place because the entry
+# is open and whoever picks it up should not have to rebuild it. Run it by hand:
+#
+#     udid=$(bash tool/boot_simulator.sh) && flutter test integration_test -d "$udid"
+#
+# The register entry that asked for that job said in the same breath why it had not been
+# built: "a new job that fails for setup reasons rather than for the property it checks is
+# exactly the illegible red badge `M25` argues against". A red `pin holds · ios simulator`
+# that actually means *this runner had no simulator* reads exactly like one that means *the
+# pin does not hold on iOS*, and those are not remotely the same news. It was right to
+# worry, and this script is the part of the answer that held up.
 #
 # A recipe that lives inside a workflow can only be rehearsed by pushing it. One that lives
 # here runs on the machine of whoever is about to change it, which is the whole reason the
