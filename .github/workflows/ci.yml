@@ -256,8 +256,8 @@ jobs:
         run: flutter build ios --no-codesign --release
 
   # ---------------------------------------------------------------------------------
-  # The pin, inside a running iOS app. Until now this ran nowhere but a developer's
-  # machine, and `docs/OPEN-FINDINGS.md` M30 was the entry saying so.
+  # The pin, inside a running iOS app. Until 2026-09-08 this ran nowhere but a developer's
+  # machine, at whatever moment somebody thought of it.
   # ---------------------------------------------------------------------------------
   integration-ios:
     name: pin holds · ios simulator
@@ -266,8 +266,8 @@ jobs:
     runs-on: macos-latest
     # The first run of this job reached the 30-minute cap having produced nothing after
     # `Xcode build done. 118.7s` -- 22 minutes of silence at app launch. Twenty is enough
-    # to tell a stall from a slow build (the build itself took two minutes) and costs a
-    # third less when it is a stall.
+    # to tell a stall from a slow build (the build itself takes two minutes) and costs a
+    # third less when it is a stall. A passing run is about seven.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -285,6 +285,19 @@ jobs:
         # purpose (passes) -- so it is neither device state nor a first boot. Local Xcode is
         # 26.5, build 17F42, and the runner image carries `/Applications/Xcode_26.5.app` at
         # that same build number.
+        #
+        # **And it was the cause.** Same commit, same runner, one variable changed:
+        #
+        #                       default (26.6)          pinned (26.5)
+        #   boot                ok                      ok
+        #   Xcode build         done, 118.7s            done, 115.8s
+        #   app launch          nothing, 22 min         5 tests green, ~80s
+        #
+        # The build was never the problem and neither was the simulator. Why is inference
+        # rather than measurement, and is written down as such: this image's default Xcode
+        # is 26.6 while its newest iOS *simulator runtime* is 26.5, so the default pairing
+        # has no matching runtime. Plausible, unproven, and not load-bearing -- the pin is
+        # justified either way by the paragraph above.
         #
         # Stated as a failure rather than left to `xcode-select` to report obscurely: if the
         # image drops that version, this says which of the two things went wrong.
@@ -310,9 +323,10 @@ jobs:
       - name: Boot a simulator
         # The picking and booting live in `tool/boot_simulator.sh` rather than here, because
         # a recipe inside a workflow can only be rehearsed by pushing it -- and the specific
-        # thing M30 was afraid of is a red badge on this job that means "no simulator on the
-        # runner" while reading as "the pin does not hold on iOS". That script says which of
-        # the two happened, in those words, and it was run on a Mac before this was written.
+        # thing the register entry feared was a red badge on this job that means "no
+        # simulator on the runner" while reading as "the pin does not hold on iOS". That
+        # script says which of the two happened, in those words, and it was run on a Mac
+        # before this was written.
         #
         # It exits 2 rather than 0 when there is nothing to boot, and `set -e` turns that
         # into a failed step here -- deliberately, and for the reason the `contract` job

@@ -22,6 +22,13 @@ Same rules as the sibling repo's, for the same reasons:
   not exist, and the entry stayed there marked withdrawn instead of moving here.
 - **Cite symbols, not line numbers.** `Poller.nudge` survives an edit; a line number is
   wrong within a week and nothing will tell you.
+- **Deleting an entry means fixing whatever cited it.** The rule above is asymmetric on
+  purpose: this file cites *code*, and is told to cite symbols because symbols survive. Code
+  citing *this file* cites a number that is deleted the moment the work is done — by design,
+  by the first rule here. `tool/check_findings.sh` follows those citations out of the two
+  findings files and into `lib/`, `test/`, `tool/`, `.github/` and the other docs, and fails
+  on one that does not resolve. Either update the comment or, usually better, let it stand on
+  its own reasoning: it almost always can, and then it cannot rot.
 - **Verify before writing, and say how.** Mark measured claims as measured, with the date.
 
 ## Writing across the two repos
@@ -187,28 +194,6 @@ WorkManager isolate, which needs no storage at all. Plausible and **unverified**
 method-channel call from an isolate spawned by a different plugin, and this repository does
 not ship a platform claim it has not watched work. Whoever takes it should measure it on a
 device first.
-
-### M30 · The iOS integration test has never run anywhere but a developer's machine
-
-Measured 2026-09-05: no job in `.github/workflows/ci.yml` invokes `integration_test/`. The
-`build-ios` job compiles for device and stops, and says so — what it proves is that the
-project builds and its `Info.plist` is well-formed.
-
-`integration_test/pinning_on_ios_test.dart` is the only test that can answer an
-iOS-specific question about the pin. It runs *inside* the app sandbox, which is why it
-reads its certificates from `inlined_fixtures.dart` rather than `test/fixtures/` — a
-difference `test/support/tls_server.dart` documents at length so nobody unifies the two.
-
-**What would close it**: a step on `macos-latest` that boots a simulator
-(`xcrun simctl boot`) and runs `flutter test integration_test`. The runner already has
-Xcode and the job already has a Flutter toolchain, so the marginal cost is boot time.
-
-**Not added blind, deliberately.** It cannot be verified from a machine that is not the
-runner, and a new job that fails for setup reasons rather than for the property it checks
-is exactly the illegible red badge `M25` argues against — "a red badge that means *the
-other side moved* reads exactly like a red badge that means *you broke it*, and the whole
-value of this gate is that its failures are legible." The recipe is above; the first run
-wants watching by whoever adds it.
 
 ### M24 · The control shipped; two things it depends on still live in prose
 

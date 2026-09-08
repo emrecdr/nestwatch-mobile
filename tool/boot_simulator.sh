@@ -15,12 +15,15 @@
 #
 # ## Why this is a script rather than four lines of YAML
 #
-# `docs/OPEN-FINDINGS.md` M30 asked for this job on 2026-09-05 and said in the same breath
-# why it had not been built: "a new job that fails for setup reasons rather than for the
-# property it checks is exactly the illegible red badge M25 argues against". That is the
-# real risk here — a red `pin holds · ios simulator` that actually means *this runner had
-# no simulator* reads exactly like one that means *the pin does not hold on iOS*, and those
-# are not remotely the same news.
+# The register entry that asked for this job — since fixed and, by that file's rule,
+# deleted — said in the same breath why it had not been built: "a new job that fails for
+# setup reasons rather than for the property it checks is exactly the illegible red badge
+# `M25` argues against". That is the real risk here: a red `pin holds · ios simulator` that
+# actually means *this runner had no simulator* reads exactly like one that means *the pin
+# does not hold on iOS*, and those are not remotely the same news.
+#
+# It was right to worry. The first run of that job stalled silently for 22 minutes after a
+# successful build, and the badge said nothing about which of the two had happened.
 #
 # A recipe that lives inside a workflow can only be rehearsed by pushing it. One that lives
 # here runs on the machine of whoever is about to change it, which is the whole reason the

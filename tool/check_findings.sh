@@ -147,9 +147,13 @@ while read -r from ref; do
 done <<< "$refs"
 
 # References within one file, which are the easy ones to get wrong precisely because they
-# look too simple to check. Added after a "pairs with M11" was written pointing at the
+# look too simple to check. Added after a "pairs with" was written pointing at the
 # connectivity entry when it meant the undo one — caught by a shell loop run by hand, which
 # is not a thing anybody will remember to do twice.
+#
+# That sentence used to name the id, and the id has since been fixed and deleted, so this
+# comment spent a while citing an entry that was not there — found on 2026-09-08 by the
+# check added below, which exists because of it. `git log` has the number.
 #
 # Cheap and local: no sibling checkout needed, so this half still runs when the other does
 # not. Scoped to entries for the same reason as above.
@@ -163,9 +167,46 @@ for pair in "$MINE M" "$THEIRS O"; do
       echo "  DANGLING      $id — cited inside $file, but no '### $id' in it" >> "$internal_report"
   done
 done
+# **And the citations that live in the source rather than in either findings file**, which
+# nothing has ever checked.
+#
+# This register is designed to be *deleted from*: its first rule is that a fixed entry goes,
+# because a reader budgets attention against the length of the list. So an `M##` written into
+# a comment is a pointer at an address that is guaranteed to disappear — not by accident,
+# but by the file's own working method. The asymmetry is worth naming, because it is what
+# makes this direction the dangerous one: the register cites *code*, and it is told to cite
+# symbols precisely because they survive an edit. Code citing the register cites a number
+# that does not.
+#
+# Not a hypothetical. Written on 2026-09-08, this check immediately found two: the entry
+# closed in the same commit, and a comment in this very file which had been naming a deleted
+# id long enough that nobody remembered.
+#
+# Counted with the same-file dangles rather than the cross-repo ones, because it is the same
+# kind of fact: the heading is in this repository or it is not, and nothing outside can
+# change the answer. Exit 1, "the thing being checked is wrong", per docs/VERSIONING.md.
+#
+# The two exclusions are the places that only look like citations. `test/fixtures/*.pem` and
+# `inlined_fixtures.dart` are base64, where something citation-shaped falls out of a key by
+# chance and means nothing at all — one of the committed fixtures contains such a run today.
+#
+# Note that a real id cannot be used as an example anywhere in this tree, including in this
+# sentence: the scan below would read it as a citation and ask this file to justify it. That
+# is the check being right rather than a limitation, and it caught its own author writing
+# one here within a minute of the check existing.
+for id in $(grep -rhoE '\bM[0-9]+\b' \
+      lib test tool integration_test .github README.md \
+      docs/PLAN.md docs/HARDENING.md docs/UX-REVIEW.md docs/VERSIONING.md \
+      docs/FINDINGS-INBOX.md \
+      --exclude-dir=fixtures --exclude='*.pem' --exclude='inlined_fixtures.dart' \
+      2>/dev/null | sort -u); do
+  grep -qE "^### $id( |·|\`)" "$MINE" ||
+    echo "  DANGLING      $id — cited in this repo's source, but no '### $id' in $MINE" >> "$internal_report"
+done
+
 internal=$(wc -l < "$internal_report" | tr -d ' ')
 if [ "$internal" -eq 0 ]; then
-  echo "  all same-file references resolve, both sides"
+  echo "  every reference inside this repository resolves, and both files' own do too"
 else
   cat "$internal_report"
   dangling=$((dangling + internal))
@@ -175,8 +216,9 @@ rm -f "$internal_report"
 echo
 # Two different facts, and folding them into one exit code makes CI red on good news.
 #
-# A **same-file** dangle is unambiguously a mistake in the file being checked: the entry it
-# names is right there or it is not, and nothing outside this repository can change that.
+# A dangle **inside one repository** -- within a findings file, or in a comment somewhere in
+# this tree citing the register -- is unambiguously a mistake here: the entry it names is
+# right there or it is not, and nothing outside this repository can change that.
 #
 # A **cross-repo** dangle cannot be told apart from here. Both files delete an entry when
 # it is fixed, so the reference most likely dangles because the other side shipped it --
@@ -185,19 +227,19 @@ echo
 # its own exit code rather than being reported as failure or hidden as success.
 #
 #   0  everything resolves
-#   1  a same-file reference dangles -- a real error, here
+#   1  a reference inside this repository dangles -- a real error, here
 #   3  only cross-repo references dangle -- go read them; cannot be decided by this script
 if [ "$internal" -gt 0 ]; then
-  echo "$internal same-file reference(s) dangling. That is an error in the file itself."
+  echo "$internal reference(s) inside this repository dangling. That is an error here."
   [ "$dangling" -gt "$internal" ] &&
     echo "$((dangling - internal)) cross-repo one(s) too — see above."
   exit 1
 fi
 if [ "$dangling" -eq 0 ]; then
-  echo "$checked cross-repo reference(s) resolving, and no dangling same-file ones."
+  echo "$checked cross-repo reference(s) resolving, and nothing dangling inside this one."
   exit 0
 fi
-echo "$dangling cross-repo reference(s) dangling, and no same-file ones."
+echo "$dangling cross-repo reference(s) dangling, and none inside this repository."
 echo
 echo "  This is not decided here. Either the other side fixed and deleted those entries --"
 echo "  which is good news, and makes whatever cited them work rather than a wait -- or the"
