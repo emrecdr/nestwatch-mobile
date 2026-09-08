@@ -10,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/models.dart';
 import 'package:nestwatch_mobile/src/ui/refusal_lines.dart';
 
+import 'support/source.dart';
+
 Refusals _of({int clock = 0, int resets = 0, int shutdowns = 0}) => Refusals(
   clockChanges: clock,
   dayResets: resets,
@@ -163,11 +165,24 @@ void main() {
       // **It does not say "and 4 others", and that was decided rather than overlooked.**
       // The dashboard behaves identically -- `refusedRows()` itemises the three it knows
       // and never mentions a remainder -- but it ships *with* the server, so it can never
-      // be behind one. This app can, which is the whole reason `ContractCheck` exists and
-      // already puts "that PC is running a newer nestwatch" in front of the parent. A
+      // be behind one. This app can, which is the whole reason `ContractCheck` exists. A
       // per-field "I did not recognise this" line would be a special case layered on a
       // mechanism that already covers it, which is the shape this repo treats as a sign
       // the fix is at the wrong depth.
+      //
+      // **One clause of that argument was wrong, and is corrected here rather than
+      // quietly dropped.** It used to say `ContractCheck` "already puts *that PC is
+      // running a newer nestwatch* in front of the parent". It does not. `isWarning` is
+      // `serverOlder` alone, so `serverNewer` never reaches `_caveats` and never bands a
+      // screen -- `home_screen.dart` says why in as many words, that being newer "still
+      // works everywhere". The message exists; it is in the identity dialog, behind a tap.
+      //
+      // Which leaves the refusals card as a counterexample to *that* claim: newer is
+      // exactly when this count is short, and it is the one agreement with no banner. The
+      // conclusion may still be right -- the depth argument above does not depend on the
+      // clause that was wrong -- but M33 records it so the trade is made knowing which
+      // half of it is true. Checked 2026-09-08 against `server_contract.dart` and
+      // `home_screen.dart`, not from memory.
       expect(refusalLines(refused), hasLength(1));
       expect(
         refusalLines(refused).single,
@@ -183,6 +198,65 @@ void main() {
       });
       expect(refused.total, 0);
       expect(refused.any, isFalse);
+    });
+
+    // The moment the decision above has to be made again, held so it cannot be missed.
+    //
+    // Naming a fourth kind of refusal takes two edits: a field on `Refusals`, and a
+    // sentence in `refusalLines`. Doing the first without the second is silent — the
+    // count parses, `total` already covered it, and the card renders exactly as before
+    // while one category goes unmentioned. Nothing would fail.
+    //
+    // Deliberately says nothing about a category this app does *not* parse, which is the
+    // question the test above weighs and settles the other way. This only asks that the
+    // model and the prose stay in step with each other.
+    //
+    // Read out of the source because Dart has no reflection here, which is the same
+    // reason `flag_secure_test` and `ios_config_test` read files: the check has to live
+    // somewhere and the only somewhere is the text.
+    test('every count on Refusals has a sentence to go with it', () {
+      final model = readSourceOrFail(
+        'lib/src/api/models.dart',
+        why: 'Refusals is the list of refusal kinds this app can name',
+      );
+      final start = model.indexOf('class Refusals {');
+      expect(
+        start,
+        isNot(-1),
+        reason: 'class Refusals is not where this expects it',
+      );
+      final body = model.substring(start, model.indexOf('\n}', start));
+
+      // `total` is the server's sum, not a kind, and has no sentence by design.
+      final counts = RegExp(r'^  final int (\w+);', multiLine: true)
+          .allMatches(body)
+          .map((m) => m.group(1)!)
+          .where((name) => name != 'total')
+          .toList();
+
+      // Without this the scan passes by reading nothing, which is the failure mode of
+      // every source-reading check in this repository.
+      expect(
+        counts,
+        contains('clockChanges'),
+        reason:
+            'the field scan has stopped matching, so it can no longer object',
+      );
+      expect(counts, hasLength(greaterThanOrEqualTo(3)));
+
+      final prose = readSourceOrFail(
+        'lib/src/ui/refusal_lines.dart',
+        why: 'the sentences composed for those counts',
+      );
+      for (final name in counts) {
+        expect(
+          prose,
+          contains('refused.$name'),
+          reason:
+              '`Refusals.$name` is parsed and never mentioned. The card would render '
+              'as though that kind of refusal did not happen.',
+        );
+      }
     });
 
     test('a payload with no `refused` at all is `none`, not zeros it invented', () {

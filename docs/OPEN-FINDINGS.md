@@ -95,6 +95,51 @@ Last audited against the tree on **2026-09-06**.
 
 ## Open
 
+### M33 · A fourth kind of refusal is coming, and the card is a closed list of three
+
+> **Cross-repo** · pairs with nestwatch (their work, not yet committed)
+
+Seen 2026-09-08 in the sibling checkout as an **uncommitted** change to two vendored
+goldens: `refused` gains `time_codes_refused`, and `usage-today.json`'s `refused_total` goes
+from 6 to 10. It is in no commit, so there is nothing to do yet — `check_golden.sh` reports
+both as `UNCOMMITTED` rather than as drift, and reported them unprompted while this repo was
+doing something else entirely, which is the whole reason that distinction was built.
+
+**What happens on the day it lands.** `Refusals.total` is read from `refused_total` as that
+PC summed it — deliberately, and `models.dart` says so: summing the parts locally "would be
+a fourth place to change on the day a fourth kind of refusal is counted". That half is
+already right. `refusalLines` is the other half, and it is a closed list of three sentences.
+So the card would appear (total 10 > 0), render three lines describing 6 events, show no
+total anywhere, and mention the remaining 4 nowhere.
+
+**Not a new proposal. It was weighed and settled the other way**, in
+`refusal_lines_test.dart` where the argument lives: a per-field "I did not recognise this"
+line is a special case layered on a mechanism that already covers it — `ContractCheck` —
+which is this repo's usual sign that a fix is at the wrong depth. That reasoning stands and
+is not re-raised here.
+
+**What is raised is that one clause of it was false**, checked today against the source
+rather than remembered. It claimed `ContractCheck` "already puts *that PC is running a newer
+nestwatch* in front of the parent". `ContractCheck.isWarning` is `serverOlder` **alone**, so
+`serverNewer` never reaches `home_screen`'s `_caveats` and never bands a screen; the message
+lives in the identity dialog, behind a tap. `home_screen.dart` states the reasoning — being
+newer "still works everywhere" — and the refusals card is a counterexample to exactly that:
+newer is precisely when this count is short, and it is the one agreement with no banner.
+
+The correction is filed where it was argued. The conclusion may well survive it, because the
+depth argument does not depend on the clause that was wrong. But it should be re-made
+knowing which half of it is true, and that is a UI decision rather than an engineering one:
+leave the card short, name the fourth kind, or reconsider whether `serverNewer` deserves a
+banner after all.
+
+**One half is already gated.** Naming a fourth kind takes two edits — a field on `Refusals`
+and a sentence in `refusalLines` — and doing the first without the second is silent: the
+count parses, the total already covered it, and the card renders exactly as before with one
+category unmentioned. `refusal_lines_test.dart` now reads both files and fails on a parsed
+count with no sentence. Both halves watched to fail: a removed sentence, and a blinded field
+scan. It says nothing about a category this app does not parse, which is the question above
+and is still open.
+
 ### M32 · The iOS pinning test stalls on a hosted runner, after the app has already started
 
 **Measured 2026-09-08, and this entry exists because a previous one was deleted too early.**
@@ -104,8 +149,12 @@ is a much sharper description of where the wall is.
 
 `integration_test/pinning_on_ios_test.dart` answers the one question about the pin that the
 host suite cannot — whether App Transport Security is in `dart:io`'s path — by driving a
-real handshake inside a running iOS app against a self-signed certificate on a bare IP. It
-passes on a Mac in about forty seconds, and it has never run anywhere else.
+real handshake inside a running iOS app against a self-signed certificate on a bare IP.
+
+**It does run on a hosted runner — that is the point of this entry.** Two of the four runs
+below went green there, five tests, in about seven minutes. What it does not do is run
+*reliably*, and an intermittent gate is the thing this repository will not keep. On a Mac it
+has never once failed.
 
 **Where it stops**, from a `--verbose` run:
 
@@ -149,9 +198,13 @@ reason the predecessor entry hesitated in the first place.
 by hand, so whoever picks this up starts a step in rather than rebuilding it. The removed job
 is in `git log` at `e9245eb`.
 
-**What would close it.** Somewhere the stall reproduces, because it does not on this Mac —
-five runs, including a cold boot and a simulator created from scratch, all passed in about
-forty seconds. Without a reproduction the next move is guesswork at twenty minutes an
+**What would close it.** Somewhere the stall reproduces, because it does not on this Mac.
+Four runs there, all green: the test alone against a warm simulator (68s of Xcode build, 1s
+of tests); the whole `integration_test/` directory, which confirmed the fixtures library is
+skipped rather than run as a test with no `main()` (18s build); the same after
+`simctl shutdown` and a cold boot, to imitate the runner (39s end to end); and one against a
+simulator created from scratch for the purpose and deleted afterwards, to rule out device
+state (23s build). None of them stalled, and none took more than about seventy seconds. Without a reproduction the next move is guesswork at twenty minutes an
 attempt, which is how three CI cycles were already spent. Worth reading first: whether
 Flutter's log-stream route to VM Service discovery has a known failure on iOS 26 simulators,
 and whether a newer Flutter changes it — which folds into `M21`, since this repo is three
