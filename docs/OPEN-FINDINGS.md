@@ -809,8 +809,8 @@ which is a state `server_events.dart` handles on purpose. A *live* stream cannot
 this harness: `NestwatchClient.close()` destroys the in-flight read and the resulting
 `HttpException` arrives after the test has completed, where nothing can catch it — and
 `flutter_test` cannot print it either, because demangling a `package:stack_trace` chain trips
-an assertion. Five shapes were tried; the file's header records them so the sixth person does
-not try the same five. Whether that close can meet a live stream in the running app is a
+an assertion. Four shapes were tried; the file's header records them so the fifth person does
+not try the same four. Whether that close can meet a live stream in the running app is a
 different question and is **not** claimed here.
 
 `polled_screen` is a sixth, counted apart because it is abstract and so is never constructed

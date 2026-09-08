@@ -21,11 +21,11 @@
 /// `StackFrame.fromStackTraceLine`. Setting `FlutterError.demangleStackTrace` to the
 /// identity is what made the real message visible; it is not a fix.
 ///
-/// Five shapes were tried and none contained it: a bare open response, a well-formed
-/// keepalive, disposing the widget first so `_events.stop()` cancels the subscription,
-/// closing the client inside the test, and taking the exception explicitly. Cancelling a
-/// subscription does not close the socket — the connection returns to the pool — so the
-/// destroy always outlives the scope that could handle it.
+/// Four shapes were tried and none contained it: a bare open response; a well-formed
+/// keepalive; disposing the widget first, so `_events.stop()` cancels the subscription
+/// before teardown; and closing the client inside the test while taking the exception
+/// explicitly. Cancelling a subscription does not close the socket — the connection
+/// returns to the pool — so the destroy always outlives the scope that could handle it.
 ///
 /// Worth someone's attention, and deliberately *not* claimed as an app defect here:
 /// whether `NestwatchClient.close()` can meet a live events stream in the running app is a
