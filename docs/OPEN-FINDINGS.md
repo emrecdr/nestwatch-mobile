@@ -765,6 +765,30 @@ any file in neither list — and on any listed name that no longer exists.
 loopback and pumping the screen against it. **"Needs a live client" was never the barrier it
 read as.** What they needed was a rig, and one test file had already built it.
 
+**What the last three would take, assessed rather than left as the word "platform".** Two
+routes, both real, neither free — measured against `notifications_sheet`, the largest of
+them:
+
+- **Mock the method channels.** `TestDefaultBinaryMessengerBinding` answers them, and this
+  one sheet reaches three plugins: `flutter_local_notifications` (`notificationsEnabled`
+  resolves `AndroidFlutterLocalNotificationsPlugin` and calls `areNotificationsEnabled`),
+  `flutter_foreground_task`, and `workmanager`. Its appeal is that `lib/` is untouched. Its
+  cost is that the test then asserts against channel and method names that are plugin
+  internals — neither repo owns them, and a plugin upgrade moves them silently.
+- **Inject the capability**, which is what `M17` did to break the `pairing → background`
+  cycle: the controller takes "a `Future<void> Function()` named for the capability it needs
+  rather than the collaborator that provides it". The sheet calls seven top-level functions
+  — `initWatchService`, `notificationsEnabled`, `isWatching`, `stopWatching`,
+  `requestNotificationPermission`, `enableBackgroundPolling`, `disableBackgroundPolling` —
+  so the shape is one authority with a real default.
+
+**The second is the better design and the first is the safer change**, which is the whole of
+the trade. Injection edits the path that delivers this app's central promise — PLAN.md §5's
+*"you'll hear about a request within about fifteen minutes"* — in code no test runs and no
+machine here can exercise, and a wire moved wrongly there is invisible until a parent misses
+something. That is the failure this repository is most careful about, so it is recorded as a
+choice with its price rather than taken because it is tidier.
+
 **Drawing the frame found a defect and a limit, which is the argument for doing it.** The
 defect: `TimeRequestsScreen`'s header row was two inflexible children either side of a
 `Spacer`, and a `Spacer` only absorbs slack — so at 320x568, the iPhone SE floor implied by
