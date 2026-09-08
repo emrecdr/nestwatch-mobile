@@ -43,7 +43,27 @@ class PairingBusy extends PairingState {
 class PairingNeedsFingerprintCheck extends PairingState {
   final PairInvite invite;
   final Fingerprint observed;
-  const PairingNeedsFingerprintCheck(this.invite, this.observed);
+
+  /// The pairing that saying yes would replace, or null on a first pairing.
+  ///
+  /// Reaching this screen with something already paired used to be ambiguous — most often
+  /// it was a PC that had simply changed address, which is benign. Since
+  /// [_reconnectKnownServer] takes that case, everyone who arrives here holding a pairing
+  /// is here for exactly one reason: **the certificate at this address is not the one on
+  /// file.** The screen's copy described first contact, which was survivable when it was
+  /// wrong for a minority and is not now that it is wrong for all of them.
+  ///
+  /// It also carries a consequence the screen never mentioned. `_persistIdentity`
+  /// overwrites, so agreeing here ends the pairing this app already has, and the old PC
+  /// needs pairing again. That is fine when it is what the parent meant and is not
+  /// something to find out afterwards.
+  final ServerIdentity? replacing;
+
+  const PairingNeedsFingerprintCheck(
+    this.invite,
+    this.observed, {
+    this.replacing,
+  });
 }
 
 /// Why the app is asking for the control password.
@@ -460,7 +480,9 @@ class PairingController {
         return;
       }
 
-      _emit(PairingNeedsFingerprintCheck(invite, observed));
+      // `known` is non-null only when it did not match, the branch above having
+      // returned otherwise.
+      _emit(PairingNeedsFingerprintCheck(invite, observed, replacing: known));
     }
   }
 

@@ -902,6 +902,37 @@ mutate "moved PC: a failed reconnect throws away the pin it already had" \
       _overrides.distrust();
       _emit(PairingFailed(e.message));"
 
+# ---------------------------------------------------- what agreeing costs, and saying so
+#
+# Everyone who reaches the fingerprint screen holding a pairing is there because the
+# certificate is not the one on file. Dropping the identity on the way to that screen is
+# the state it was in before, and it reads as a first pairing.
+mutate "replacement: the screen is not told a pairing would end" \
+  lib/src/pairing/pairing_controller.dart \
+  "      _emit(PairingNeedsFingerprintCheck(invite, observed, replacing: known));" \
+  "      _emit(PairingNeedsFingerprintCheck(invite, observed));"
+
+# "Trust this PC" is true of a first pairing and quietly incomplete of a replacement.
+mutate "replacement: the button stops naming what it will do" \
+  lib/src/ui/pairing_screen.dart \
+  "    : 'It matches — replace the paired PC';" \
+  "    : 'It matches — trust this PC';"
+
+# Two ordinary explanations with no third read as reassurance on the one screen whose
+# entire reason for existing is that only the parent can tell three stories apart.
+mutate "replacement: the warning drops the reason it is a warning" \
+  lib/src/ui/pairing_screen.dart \
+  "      'new certificate made for it. It is not expected otherwise — anything on the '
+      'network can answer for an address, which is what the comparison below is for.\n\n'" \
+  "      'new certificate made for it.\n\n'"
+
+# The consequence the screen never used to state at all.
+mutate "replacement: the warning stops saying the old PC has to be paired again" \
+  lib/src/ui/pairing_screen.dart \
+  "      'Trusting this one ends the pairing with \${replacing.authority}, and that PC would '
+      'have to be paired again.';" \
+  "      'Trusting this one connects to it instead.';"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 

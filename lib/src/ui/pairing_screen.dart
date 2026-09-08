@@ -13,6 +13,37 @@ import 'notice.dart';
 import 'privacy_screen.dart';
 import 'scan_screen.dart';
 
+/// What the fingerprint screen has to say when agreeing would end an existing pairing.
+///
+/// Null when there is nothing to replace, which is the ordinary first pairing.
+///
+/// Top-level and pure for the reason `bedtimeConfirmation` is: the words are the whole
+/// content of this decision, and reaching them through a widget test means standing up a
+/// TLS server and a controller to assert a paragraph. Out here a plain test holds them.
+///
+/// Three things, in the order a parent needs them: what is actually true, the two ordinary
+/// explanations *and* the one that is not ordinary, and the consequence of saying yes —
+/// which this screen never mentioned, though `_persistIdentity` overwrites and the old PC
+/// has to be paired again.
+String? replacementWarning(ServerIdentity? replacing, String here) {
+  if (replacing == null) return null;
+  return 'This app is already paired with ${replacing.authority}, and the certificate '
+      'at $here is not the one it holds for that PC.\n\n'
+      'That is expected if you are connecting to a different PC, or if this one had a '
+      'new certificate made for it. It is not expected otherwise — anything on the '
+      'network can answer for an address, which is what the comparison below is for.\n\n'
+      'Trusting this one ends the pairing with ${replacing.authority}, and that PC would '
+      'have to be paired again.';
+}
+
+/// The button that agrees, naming what it will do.
+///
+/// "Trust this PC" is true of a first pairing and quietly incomplete of a replacement: the
+/// same tap also un-pairs the PC a parent is currently watching.
+String trustButtonLabel(ServerIdentity? replacing) => replacing == null
+    ? 'It matches — trust this PC'
+    : 'It matches — replace the paired PC';
+
 class PairingScreen extends StatefulWidget {
   final PairingController controller;
   const PairingScreen({super.key, required this.controller});
@@ -110,8 +141,12 @@ class _PairingScreenState extends State<PairingScreen> {
   Widget _body(BuildContext context) => switch (widget.controller.state) {
     PairingIdle() => _idle(context),
     PairingBusy(:final what) => _busy(what),
-    PairingNeedsFingerprintCheck(:final invite, :final observed) =>
-      _confirmFirstUse(context, invite, observed),
+    PairingNeedsFingerprintCheck(
+      :final invite,
+      :final observed,
+      :final replacing,
+    ) =>
+      _confirmFirstUse(context, invite, observed, replacing),
     // Handled by the root widget, which swaps this screen for HomeScreen. The arm
     // exists so the switch stays exhaustive if that ever changes.
     PairingConnected() => const Center(child: CircularProgressIndicator()),
@@ -178,7 +213,9 @@ class _PairingScreenState extends State<PairingScreen> {
     BuildContext context,
     PairInvite invite,
     Fingerprint observed,
+    ServerIdentity? replacing,
   ) {
+    final replacement = replacementWarning(replacing, invite.authority);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -192,6 +229,12 @@ class _PairingScreenState extends State<PairingScreen> {
           'fingerprint and the app will check it for you.',
           tone: NoticeTone.advisory,
         ),
+        // Warning rather than advisory: the one above explains why a step exists, this
+        // one says an existing pairing is about to end.
+        if (replacement != null) ...[
+          const SizedBox(height: 12),
+          Notice(replacement, tone: NoticeTone.warning),
+        ],
         const SizedBox(height: 20),
         Text('On that PC, run:', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 6),
@@ -206,7 +249,7 @@ class _PairingScreenState extends State<PairingScreen> {
         const SizedBox(height: 20),
         FilledButton(
           onPressed: widget.controller.confirmFirstUse,
-          child: const Text('It matches — trust this PC'),
+          child: Text(trustButtonLabel(replacing)),
         ),
         const SizedBox(height: 8),
         OutlinedButton(

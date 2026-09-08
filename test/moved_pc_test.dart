@@ -37,6 +37,7 @@ import 'package:nestwatch_mobile/src/pairing/server_identity.dart';
 import 'package:nestwatch_mobile/src/pairing/session_store.dart';
 import 'package:nestwatch_mobile/src/pinning/fingerprint.dart';
 import 'package:nestwatch_mobile/src/pinning/pinned_http_overrides.dart';
+import 'package:nestwatch_mobile/src/ui/pairing_screen.dart';
 
 import 'support/certs.dart';
 import 'support/tls_server.dart';
@@ -269,6 +270,29 @@ void main() {
       await c.begin(theNewAddress());
 
       expect(c.state, isA<PairingNeedsFingerprintCheck>());
+      expect(
+        (c.state as PairingNeedsFingerprintCheck).replacing,
+        isNull,
+        reason: 'nothing to replace, so nothing to warn about',
+      );
+    });
+
+    test('and the screen is told what saying yes would end', () async {
+      await storeIdentity(
+        fingerprint: fingerprintOf('$fixtureDir/impostor.cert.pem'),
+      );
+      final c = await launched();
+
+      await c.begin(theNewAddress());
+
+      expect(
+        (c.state as PairingNeedsFingerprintCheck).replacing?.port,
+        server.port + 1,
+        reason:
+            'everyone who reaches this screen holding a pairing is now here for one '
+            'reason — the certificate is not the one on file — and agreeing ends the '
+            'pairing they have',
+      );
     });
 
     test(
@@ -281,5 +305,62 @@ void main() {
         expect(c.current?.fingerprint, server.pin);
       },
     );
+  });
+
+  /// The words themselves, held directly.
+  ///
+  /// `replacementWarning` and `trustButtonLabel` are top level and pure so this does not
+  /// need a widget, a TLS server and a controller in order to assert a paragraph — the
+  /// same reason `bedtimeConfirmation` was extracted, which also got a branch covered
+  /// that a widget test could not reach.
+  group('the words on that screen', () {
+    final replaced = ServerIdentity(
+      host: '10.0.0.5',
+      port: 8443,
+      fingerprint: Fingerprint.parse(
+        'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:'
+        'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99',
+      ),
+      provenance: PinProvenance.verifiedFromQrCode,
+      pairedAt: DateTime.utc(2026, 7, 1),
+    );
+
+    test('say nothing at all when there is nothing to replace', () {
+      expect(replacementWarning(null, '10.0.0.9:8443'), isNull);
+      expect(trustButtonLabel(null), contains('trust this PC'));
+    });
+
+    test('name both PCs, so it is clear which is which', () {
+      final said = replacementWarning(replaced, '10.0.0.9:8443')!;
+      expect(said, contains('10.0.0.5:8443'));
+      expect(said, contains('10.0.0.9:8443'));
+    });
+
+    test('offer the innocent explanations and the other one', () {
+      final said = replacementWarning(replaced, '10.0.0.9:8443')!;
+      expect(said, contains('a different PC'));
+      expect(said, contains('new certificate'));
+      expect(
+        said,
+        contains('anything on the network can answer for an address'),
+        reason:
+            'two ordinary explanations with no third would read as reassurance, and '
+            'this screen exists because only the parent can tell the three apart',
+      );
+    });
+
+    test('state the consequence, which the screen never used to', () {
+      expect(
+        replacementWarning(replaced, '10.0.0.9:8443'),
+        contains('would have to be paired again'),
+        reason:
+            '`_persistIdentity` overwrites — agreeing ends the pairing this app has, '
+            'and that is not a thing to find out afterwards',
+      );
+    });
+
+    test('and the button says what it will do', () {
+      expect(trustButtonLabel(replaced), contains('replace'));
+    });
   });
 }
