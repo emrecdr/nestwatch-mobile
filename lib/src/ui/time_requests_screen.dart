@@ -309,15 +309,30 @@ class _TimeRequestsScreenState extends State<TimeRequestsScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // `Expanded` rather than a `Spacer` after the headline, so this row has
+            // somewhere to give. With neither child flexible it had none: the two texts
+            // were laid out at their natural widths and anything wider than the card
+            // overflowed, which is content a parent cannot see.
+            //
+            // Found by rendering this screen at 320x568 — the iPhone SE floor implied by
+            // the deployment target — where it overflowed by 85px. That figure is not a
+            // measurement of a real phone: `flutter_test` draws every glyph as an em-wide
+            // box, so "30 more minutes" is 15x16sp there against roughly half of that in
+            // a real font. What it does measure is headroom, and there was none. Text
+            // scaling is an ordinary accessibility setting and routinely widens text by
+            // half again, which reaches the same place on a real device.
             Row(
               children: [
-                Text(
-                  '${request.minutes} more minutes',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Text(
+                    '${request.minutes} more minutes',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
-                const Spacer(),
-                if (at != null)
+                if (at != null) ...[
+                  const SizedBox(width: 8),
                   Text(ago(at), style: Theme.of(context).textTheme.bodySmall),
+                ],
               ],
             ),
             if (request.reason.isNotEmpty) ...[

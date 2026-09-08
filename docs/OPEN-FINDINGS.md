@@ -631,6 +631,23 @@ by a route M6 did not anticipate. Whether it can is a real question and not a fo
   raised about a third answer. Worth deciding deliberately rather than by whichever lands
   first.
 
+**What was actually decided, recorded 2026-09-08 because nothing here said.** Both fields
+are parsed by `UsageToday` and pinned by `models_golden_test.dart`; **neither is read by any
+screen.** The local verdict stands, computed from the pinned certificate's `notAfter` off
+the handshake, which is the path `M6` notes runs where no usage payload exists.
+
+That is defensible and it is not what this entry asked for — it is the decision going to
+whichever landed first, which the paragraph above says to avoid. What makes it safe rather
+than lucky is a gate: `check_golden.sh` holds `renewWarnDays` to their `RENEW_WARN_DAYS`
+through the `sed` that `M6` exists to delete, and reports `same (30)` today. The two answers
+agree because something enforces it, not because they share an input.
+
+So the coupling worth knowing before either entry moves: the server's verdict is redundant
+*while* the constants are held in step, and it is the fallback if they ever are not. Closing
+`M6` by vendoring the constant out of `limits.json` keeps the gate in another form and
+changes nothing here. Dropping `renewWarnDays` outright on the strength of `cert_expiring`
+would not, because that field arrives only with a usage payload.
+
 **Landed. They pushed on 2026-09-02** (`52c23e4`), and the contract check went red against
 the pushed branch exactly as it should. The golden files are vendored, `UsageToday` parses
 both fields, and `models_golden_test.dart` pins them — including `cert_days_left: null` in
@@ -735,20 +752,35 @@ throwing, but put ... on screen nowhere"*. The uncovered list caught its own fir
 omission unprompted — `poller.dart` was missing from both lists and the guard failed until
 it was classified.
 
-**What is still not drawn.** Four files: `home_screen`, and the three that need a platform
-channel rather than a client — `notifications_sheet` (a permission authority),
-`scan_screen` (the camera), `background_promise` (WorkManager registration). A comment
-saying so would be true today and silently wrong the day someone adds a screen, so the test
-reads `lib/src/ui/` and fails on any file in neither list — and on any listed name that no
-longer exists.
+**What is still not drawn.** Three files, and all three need a platform channel rather than
+a client: `notifications_sheet` (a permission authority), `scan_screen` (the camera),
+`background_promise` (WorkManager registration). A comment saying so would be true today and
+silently wrong the day someone adds a screen, so the test reads `lib/src/ui/` and fails on
+any file in neither list — and on any listed name that no longer exists.
 
-**It was nine.** Every one of the five that closed did so the same way, and none of them
-needed anything that did not already exist: `sessions_screen` by `sessions_screen_test`,
-`screenshot_screen` by `lock_screen_test`, `time_requests_screen` by `later_bedtime_test`,
-and `usage_screen` and `time_codes_screen` by `data_screens_test` — each standing up a TLS
-stub on loopback and pumping the screen against it. **"Needs a live client" was never the
-barrier it read as.** What those five needed was a rig, and one test file had already built
-it. `home_screen` is the same shape of work, with an event stream on init to arrange.
+**It was nine, and none of the six that closed needed anything that did not already exist**:
+`sessions_screen` by `sessions_screen_test`, `screenshot_screen` by `lock_screen_test`,
+`time_requests_screen` by `later_bedtime_test`, `usage_screen` and `time_codes_screen` by
+`data_screens_test`, and `home_screen` by `home_screen_test` — each standing up a TLS stub on
+loopback and pumping the screen against it. **"Needs a live client" was never the barrier it
+read as.** What they needed was a rig, and one test file had already built it.
+
+**Drawing the frame found a defect and a limit, which is the argument for doing it.** The
+defect: `TimeRequestsScreen`'s header row was two inflexible children either side of a
+`Spacer`, and a `Spacer` only absorbs slack — so at 320x568, the iPhone SE floor implied by
+the deployment target, it overflowed by 85px. That figure is not a real phone; `flutter_test`
+draws every glyph as an em-wide box, so text there is roughly twice its real width. What the
+figure does measure is headroom, and there was none, which text scaling reaches on a real
+device. `Expanded` now gives the row somewhere to give.
+
+The limit is the event stream. `home_screen_test` runs against a PC answering **404** there,
+which is a state `server_events.dart` handles on purpose. A *live* stream cannot be held by
+this harness: `NestwatchClient.close()` destroys the in-flight read and the resulting
+`HttpException` arrives after the test has completed, where nothing can catch it — and
+`flutter_test` cannot print it either, because demangling a `package:stack_trace` chain trips
+an assertion. Five shapes were tried; the file's header records them so the sixth person does
+not try the same five. Whether that close can meet a live stream in the running app is a
+different question and is **not** claimed here.
 
 `polled_screen` is a sixth, counted apart because it is abstract and so is never constructed
 directly — its `initState`, its `Poller` and its load switch run under all three of its

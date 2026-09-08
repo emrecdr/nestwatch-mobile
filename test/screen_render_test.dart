@@ -246,7 +246,9 @@ void main() {
     // Reasons, not just names. Each says what stands between the file and a pump.
     const notRendered = <String, String>{
       'home_screen.dart':
-          'needs a NestwatchClient and opens an event stream on init',
+          'needs a NestwatchClient and opens an event stream on init; pumped against a '
+          'real TLS stub by home_screen_test.dart instead, with that stream absent — '
+          'see its header for why a live one is not covered',
       'screenshot_screen.dart':
           'needs a NestwatchClient; the body is JPEG bytes off the PC. Pumped '
           'against a real TLS stub by lock_screen_test.dart instead',

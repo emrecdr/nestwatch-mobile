@@ -967,6 +967,33 @@ mutate "usage: every day claims extra minutes, including the zero ones" \
   "          if (usage.extraMinutes > 0) ...[" \
   "          if (usage.extraMinutes >= 0) ...["
 
+# ------------------------------------------------------- the frame, and a row with no give
+#
+# The shape this row had until 2026-09-08: two inflexible children and a Spacer between
+# them, which cannot rescue anything because a Spacer only absorbs slack. Found by
+# rendering the screen at 320x568 for the first time.
+mutate "requests: the header row has nowhere to give on a small phone" \
+  lib/src/ui/time_requests_screen.dart \
+  "                Expanded(
+                  child: Text(
+                    '\${request.minutes} more minutes',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                )," \
+  "                Text(
+                  '\${request.minutes} more minutes',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const Spacer(),"
+
+# Only `serverOlder` bands a screen: it is the one case where something is going to break
+# and the parent holds the fix. Widening it puts a strip in front of every parent whose PC
+# is merely ahead of their phone, which is the ordinary state after a nestwatch release.
+mutate "home: every version disagreement bands every screen" \
+  lib/src/api/server_contract.dart \
+  "  bool get isWarning => agreement == ContractAgreement.serverOlder;" \
+  "  bool get isWarning => agreement != ContractAgreement.agreed;"
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 
