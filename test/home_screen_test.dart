@@ -207,7 +207,16 @@ void main() {
     testWidgets('a PC this app was built against gets none', (tester) async {
       await tester.runAsync(() async {
         await show(tester, ContractCheck.testedAgainst);
+        // The word appears on this screen only inside the identity dialog, which a tap
+        // opens — so its absence here is the strip staying empty rather than the string
+        // being unreachable.
         expect(find.textContaining('nestwatch'), findsNothing);
+        expect(
+          find.text('Requests'),
+          findsOneWidget,
+          reason:
+              'the control: an absence proves nothing on a screen that rendered nothing',
+        );
       });
     });
 
