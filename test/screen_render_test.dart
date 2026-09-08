@@ -31,6 +31,8 @@ import 'package:nestwatch_mobile/src/ui/notice.dart';
 import 'package:nestwatch_mobile/src/ui/pairing_screen.dart';
 import 'package:nestwatch_mobile/src/ui/privacy_screen.dart';
 
+import 'support/source.dart';
+
 /// One thing to render, and the source file rendering it proves.
 ///
 /// A record was enough while an entry was a builder and a string. It stopped being enough
@@ -246,14 +248,16 @@ void main() {
       'home_screen.dart':
           'needs a NestwatchClient and opens an event stream on init',
       'screenshot_screen.dart':
-          'needs a NestwatchClient; the body is JPEG bytes off the PC',
+          'needs a NestwatchClient; the body is JPEG bytes off the PC. Pumped '
+          'against a real TLS stub by lock_screen_test.dart instead',
       'sessions_screen.dart':
           'needs a NestwatchClient, and fetches on init; driven against a real '
           'TLS stub by sessions_screen_test.dart instead',
       'usage_screen.dart': 'built by PolledScreen against a live client',
       'time_codes_screen.dart': 'built by PolledScreen against a live client',
       'time_requests_screen.dart':
-          'built by PolledScreen against a live client',
+          'built by PolledScreen against a live client; pumped directly against a '
+          'real TLS stub by later_bedtime_test.dart instead',
       'polled_screen.dart':
           'the generic that drives the four above; needs their client',
       'notifications_sheet.dart':
@@ -346,6 +350,78 @@ void main() {
           reason: 'a reason names test/$file, which does not exist',
         );
       }
+    });
+
+    // And the half that had already rotted by the time anybody looked.
+    //
+    // The check above asks whether a *named* test file exists. Nothing asked the reverse:
+    // whether a screen this list calls un-renderable is being rendered somewhere anyway.
+    // Two were, on 2026-09-08 -- `screenshot_screen.dart` by `lock_screen_test.dart` and
+    // `time_requests_screen.dart` by `later_bedtime_test.dart`, both of which stand up a
+    // real TLS stub and pump the screen against it. Their reasons still said the thing that
+    // stopped being true, which is exactly the drift the comment forty lines up warns
+    // about, one field over: the structure held and the prose underneath it did not.
+    //
+    // It matters beyond tidiness. This list is the measure of the rendering gap `M19`
+    // tracks, so a reason that undersells coverage makes the hole look bigger than it is,
+    // and the next person to close it starts by rewriting a test that already exists.
+    test('a screen rendered elsewhere says which file renders it', () {
+      // This file names every screen in the list, in the reasons themselves, and pumps
+      // widgets of its own. Excluding it is sound rather than convenient: anything it
+      // actually pumps is in `rendered`, which the test above already proves disjoint
+      // from `notRendered`.
+      final sources = <String, String>{};
+      for (final name
+          in Directory('test')
+              .listSync()
+              .whereType<File>()
+              .map((f) => f.uri.pathSegments.last)
+              .where((n) => n.endsWith('_test.dart'))
+              .where((n) => n != 'screen_render_test.dart')) {
+        sources[name] = readSourceOrFail(
+          'test/$name',
+          why:
+              'scanned for screens rendered despite being listed as not rendered',
+        );
+      }
+
+      var found = 0;
+      for (final entry in notRendered.entries) {
+        // `screenshot_screen.dart` -> `ScreenshotScreen`. A construction rather than a
+        // mention: naming a screen in a comment is not rendering it.
+        final widget = entry.key
+            .replaceAll('.dart', '')
+            .split('_')
+            .map((w) => w[0].toUpperCase() + w.substring(1))
+            .join();
+        final constructed = RegExp('\\b$widget\\s*\\(');
+
+        for (final source in sources.entries) {
+          if (!source.value.contains('pumpWidget') ||
+              !constructed.hasMatch(source.value)) {
+            continue;
+          }
+          found++;
+          expect(
+            entry.value,
+            contains(source.key),
+            reason:
+                '${entry.key} is listed as not rendered, and ${source.key} pumps '
+                '$widget. Whatever else is true of it, that reason is not, and this '
+                'list is what M19 measures the gap with.',
+          );
+        }
+      }
+
+      // Without this the scan can go blind -- a broken regex, a renamed constructor, a
+      // listing that reads nothing -- and pass by finding no screens to be wrong about.
+      expect(
+        found,
+        greaterThanOrEqualTo(3),
+        reason:
+            'three screens are rendered outside this file; finding fewer means the '
+            'scan has stopped seeing them rather than that somebody removed a test',
+      );
     });
   });
 }

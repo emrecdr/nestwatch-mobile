@@ -600,12 +600,25 @@ throwing, but put ... on screen nowhere"*. The uncovered list caught its own fir
 omission unprompted — `poller.dart` was missing from both lists and the guard failed until
 it was classified.
 
-**What is still not rendered, and why it is a list rather than a sentence.** Nine files
-need either a live `NestwatchClient` (`home_screen`, `screenshot_screen`, `polled_screen`
-and the three screens it drives) or a platform channel (`notifications_sheet`,
-`scan_screen`, `background_promise`). A comment saying so would be true today and silently
-wrong the day someone adds a screen, so the test reads `lib/src/ui/` and fails on any file
-in neither list — and on any listed name that no longer exists.
+**What is still not rendered, and why it is a list rather than a sentence.** Seven files
+need either a live `NestwatchClient` (`home_screen`, `polled_screen`, `usage_screen`,
+`time_codes_screen`) or a platform channel (`notifications_sheet`, `scan_screen`,
+`background_promise`). A comment saying so would be true today and silently wrong the day
+someone adds a screen, so the test reads `lib/src/ui/` and fails on any file in neither
+list — and on any listed name that no longer exists.
+
+**It was nine, and three of those are now rendered by other files** — `sessions_screen` by
+`sessions_screen_test`, `screenshot_screen` by `lock_screen_test`, `time_requests_screen` by
+`later_bedtime_test`, each standing up a real TLS stub and pumping the screen against it. So
+"needs a live client" was never the barrier it read as; what those three needed was a rig,
+and the rig exists. The four remaining client-side ones are the same shape of work.
+
+Two of those reasons stayed stale until 2026-09-08, which is the more useful half of this
+paragraph. The guard derives *membership* from the filesystem so a new screen cannot slip
+past — and never checked whether a reason was still true, so the prose rotted inside the
+structure built to stop exactly that, one field over. It now fails when a screen listed as
+un-rendered is pumped somewhere anyway, with a vacuity guard so a blinded scan cannot pass
+by finding nothing to object to. Both halves were watched to fail before being trusted.
 
 **What this does not close, stated plainly because the temptation is to claim it.** It
 would *not* have caught the blank white screen on iOS. That was `initNotifications()`
