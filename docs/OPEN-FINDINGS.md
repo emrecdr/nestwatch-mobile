@@ -596,9 +596,14 @@ checked by reading only. The one file that mentions `testWidgets` —
 shared rule out of four screens into pure logic. That closed the rule. It did not render
 anything.
 
-This is also visible in the mutation audit: of 39 files under `lib/src/`, 19 carry no
-mutation at all, and 13 of those 19 are `lib/src/ui/`. The suite tests logic thoroughly and
-draws nothing.
+This was also visible in the mutation audit: of 39 files under `lib/src/`, 19 carried no
+mutation at all, and 13 of those 19 were `lib/src/ui/`. The suite tested logic thoroughly
+and drew nothing.
+
+Re-measured 2026-09-08, after the tree grew: **45 files, 12 unmutated, 7 of them UI** —
+`background_promise`, `fingerprint_view`, `home_screen`, `notice`, `notifications_sheet`,
+`polled_screen`, `scan_screen`. Two of the seven are there because rendering came before
+mutating: `fingerprint_view` and `notice` are pumped and make no decision worth inverting.
 
 **Partly fixed.** `test/screen_render_test.dart` pumps `PrivacyScreen`, `FingerprintView`,
 `Notice` in all three tones, and `PairingScreen` — the largest UI file at 439 lines and the
@@ -615,18 +620,34 @@ throwing, but put ... on screen nowhere"*. The uncovered list caught its own fir
 omission unprompted — `poller.dart` was missing from both lists and the guard failed until
 it was classified.
 
-**What is still not rendered, and why it is a list rather than a sentence.** Seven files
-need either a live `NestwatchClient` (`home_screen`, `polled_screen`, `usage_screen`,
-`time_codes_screen`) or a platform channel (`notifications_sheet`, `scan_screen`,
-`background_promise`). A comment saying so would be true today and silently wrong the day
-someone adds a screen, so the test reads `lib/src/ui/` and fails on any file in neither
-list — and on any listed name that no longer exists.
+**What is still not drawn.** Four files: `home_screen`, and the three that need a platform
+channel rather than a client — `notifications_sheet` (a permission authority),
+`scan_screen` (the camera), `background_promise` (WorkManager registration). A comment
+saying so would be true today and silently wrong the day someone adds a screen, so the test
+reads `lib/src/ui/` and fails on any file in neither list — and on any listed name that no
+longer exists.
 
-**It was nine, and three of those are now rendered by other files** — `sessions_screen` by
-`sessions_screen_test`, `screenshot_screen` by `lock_screen_test`, `time_requests_screen` by
-`later_bedtime_test`, each standing up a real TLS stub and pumping the screen against it. So
-"needs a live client" was never the barrier it read as; what those three needed was a rig,
-and the rig exists. The four remaining client-side ones are the same shape of work.
+**It was nine.** Every one of the five that closed did so the same way, and none of them
+needed anything that did not already exist: `sessions_screen` by `sessions_screen_test`,
+`screenshot_screen` by `lock_screen_test`, `time_requests_screen` by `later_bedtime_test`,
+and `usage_screen` and `time_codes_screen` by `data_screens_test` — each standing up a TLS
+stub on loopback and pumping the screen against it. **"Needs a live client" was never the
+barrier it read as.** What those five needed was a rig, and one test file had already built
+it. `home_screen` is the same shape of work, with an event stream on init to arrange.
+
+`polled_screen` is a sixth, counted apart because it is abstract and so is never constructed
+directly — its `initState`, its `Poller` and its load switch run under all three of its
+subclasses, every one of which is now pumped.
+
+**The last two draw the vendored captures rather than an invented payload**, which is the
+part worth copying. A hand-written body cannot be wrong about itself — `M26`'s shape — so
+`data_screens_test` serves `test/golden/usage-today.json` and its `-unmeasured` sibling off
+disk and asserts them *against each other*: the refusals section shows on the day there were
+refusals and not on the day there were none. `tool/check_golden.sh` holds those files to
+what that PC actually sends, so a field that changes shape over there now reaches a
+rendering assertion instead of sliding past one. The same run put four mutations into two
+screens that had never carried any, including the one that matters most on that tab: a time
+code is masked until somebody asks for it, because anyone who reads it can spend it.
 
 Two of those reasons stayed stale until 2026-09-08, which is the more useful half of this
 paragraph. The guard derives *membership* from the filesystem so a new screen cannot slip

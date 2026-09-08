@@ -933,6 +933,40 @@ mutate "replacement: the warning stops saying the old PC has to be paired again"
       'have to be paired again.';" \
   "      'Trusting this one connects to it instead.';"
 
+# -------------------------------------------------- the two data tabs, now that they draw
+#
+# Neither screen carried a mutation until 2026-09-08, because neither was ever rendered:
+# `M19` counted 13 of 19 unmutated files under `lib/src/ui/`. These four are decisions those
+# screens make about what a parent is shown, and `data_screens_test.dart` draws both against
+# the vendored captures of what nestwatch actually sends.
+
+# Anyone who reads a time code can spend it, so revealing it is a deliberate act.
+mutate "time codes: the code is on screen before anybody asked for it" \
+  lib/src/ui/time_codes_screen.dart \
+  "          shown ? code.code : '•' * code.code.length," \
+  "          code.code,"
+
+# "A card that reads '0, 0, 0' every evening is a card that stops being read, and this one
+# has to still be noticeable on the evening it is not zero."
+mutate "usage: what was refused is shown on the evenings there was nothing" \
+  lib/src/ui/usage_screen.dart \
+  "          if (usage.refused.any) _refusedSection(context, usage.refused)," \
+  "          _refusedSection(context, usage.refused),"
+
+# An empty list with no explanation reads as "nothing was used", which is the opposite of
+# what a missing focus watcher means.
+mutate "usage: the empty list stops saying why it is empty" \
+  lib/src/ui/usage_screen.dart \
+  "          if (usage.focusMissing) _focusMissingNotice()," \
+  "          if (!usage.focusMissing) _focusMissingNotice(),"
+
+# Granted minutes change what the headline number means, so the line exists on the days
+# there were any -- and would be noise on the days there were not.
+mutate "usage: every day claims extra minutes, including the zero ones" \
+  lib/src/ui/usage_screen.dart \
+  "          if (usage.extraMinutes > 0) ...[" \
+  "          if (usage.extraMinutes >= 0) ...["
+
 echo
 echo "killed=$killed survived=$survived anchors-missing=$broken"
 

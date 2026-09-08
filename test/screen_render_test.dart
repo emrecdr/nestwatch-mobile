@@ -253,13 +253,20 @@ void main() {
       'sessions_screen.dart':
           'needs a NestwatchClient, and fetches on init; driven against a real '
           'TLS stub by sessions_screen_test.dart instead',
-      'usage_screen.dart': 'built by PolledScreen against a live client',
-      'time_codes_screen.dart': 'built by PolledScreen against a live client',
+      'usage_screen.dart':
+          'built by PolledScreen against a live client; drawn against the vendored '
+          'captures by data_screens_test.dart instead',
+      'time_codes_screen.dart':
+          'built by PolledScreen against a live client; drawn against the vendored '
+          'captures by data_screens_test.dart instead',
       'time_requests_screen.dart':
           'built by PolledScreen against a live client; pumped directly against a '
           'real TLS stub by later_bedtime_test.dart instead',
       'polled_screen.dart':
-          'the generic that drives the four above; needs their client',
+          'abstract, so never constructed directly and invisible to the check below. '
+          'Its three subclasses are all pumped — usage and time codes by '
+          'data_screens_test.dart, time requests by later_bedtime_test.dart — so its '
+          'initState, Poller and load switch do run',
       'notifications_sheet.dart':
           'needs a permission authority backed by a platform channel',
       'scan_screen.dart': 'needs the camera platform channel (mobile_scanner)',
