@@ -1,9 +1,15 @@
 # Open findings
 
-**Open work only.** Every entry describes something still true of this tree — found by a
-review pass or a verification attempt, judged real, and deliberately left undone, with the
-reasoning recorded so it does not have to be re-derived and so nobody re-raises what was
-already weighed.
+**Open work, and a handful of settled things kept on purpose.** Almost every entry
+describes something still true of this tree — found by a review pass or a verification
+attempt, judged real, and deliberately left undone, with the reasoning recorded so it does
+not have to be re-derived and so nobody re-raises what was already weighed.
+
+The exceptions carry `> **Settled**` and are the ones whose *lesson* outlived the defect.
+This paragraph used to say "Open work only", which was true when it was written and false
+for four entries by 2026-09-08 — a reader budgets attention against the length of the list,
+and being wrong about a fifth of it is the same defect this file keeps finding in the code
+it describes.
 
 Numbered `M##` so an entry can be cited in a commit without colliding with nestwatch's
 `O##` in `../nestwatch/docs/OPEN-FINDINGS.md`.
@@ -17,6 +23,13 @@ Same rules as the sibling repo's, for the same reasons:
   budgets attention against the length of the list, and every closed one spends some.
 - **When a finding is partly fixed, rewrite it to describe only what is still true.** A
   half-stale entry gets checked, found wrong, and costs the whole file its credibility.
+- **A settled entry may stay only if the lesson is reusable, and must say so in one line:**
+  `> **Settled** · <what it is kept for>`. The burden is on keeping it. "This was
+  interesting" is not enough — the test is whether a future reader would make the same
+  mistake without it. `M26` is the worked example: the defect took four lines to fix and the
+  shape it belongs to (a test whose *name* is broader than its *input* passes for the wrong
+  reason and reads as coverage forever after) has now been hit three times in this
+  repository. When in doubt, delete: `git log` holds everything.
 - **When a finding is withdrawn or refuted, say so where it was argued** rather than
   leaving it here. `docs/HARDENING.md` §3 is the worked example: the fix it proposed did
   not exist, and the entry stayed there marked withdrawn instead of moving here.
@@ -246,6 +259,8 @@ an engineering one, and it has not been made.
 
 
 ### M26 · A version number stood in for a fact the server states outright
+
+> **Settled** · kept for the failure shape, not for work
 
 **Fixed; kept because the *way* it was found is the reusable part.** The scope gate's
 exemption for old servers first keyed on `ContractCheck.serverOlder` — if that PC is behind,
@@ -675,6 +690,8 @@ three times. The lesson generalised across repositories before it had to be rele
 
 ### M17 · The architecture report said "one file move"; it was not
 
+> **Settled** · kept for the estimate, which was the finding's weakest part
+
 `docs/UX-REVIEW.md` and the published standing review both described the
 `pairing ↔ background` cycle as fixable by moving one class. Moving
 `SecureSeenRequestStore` out of `pairing/` removed one edge *source* and left the cycle
@@ -731,6 +748,8 @@ app sandbox where `test/fixtures/` does not exist, and reads its certificates fr
 `inlined_fixtures.dart`. Recorded here so that is not rediscovered as an oversight.
 
 ### M3 · The source-reading rule is shared; four data loads still read directly
+
+> **Settled** · kept so the remaining count is not re-raised as duplication
 
 **Mostly done.** `test/support/source.dart` holds `readSourceOrFail`, and every test that
 *asserts on source text* now uses it — `flag_secure_test`, `ios_config_test` and
@@ -882,6 +901,8 @@ defect. It had the mirror image — a label that never changed and so was never 
 and that one is fixed. Checking whether their fix applied here is how it was found.
 
 ### M13 · The bottom inset is handled; the rest was not the problem
+
+> **Settled** · kept because half of it was refuted by running the app
 
 **Done, and the entry was half wrong.** Running the app on a simulator and looking at it
 settled what reading could not: the **top** is handled — `Scaffold` and `AppBar` place the
