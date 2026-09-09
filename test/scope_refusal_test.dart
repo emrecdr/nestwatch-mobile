@@ -27,6 +27,9 @@
 /// the version was a proxy.
 library;
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
 import 'package:nestwatch_mobile/src/pairing/pairing_controller.dart';
@@ -82,6 +85,80 @@ void main() {
         scopeRefusal(session: _session(scope: const {'kind': 'kiosk'})),
         isNotNull,
       );
+    });
+  });
+
+  group('the payload that PC actually sends, rather than one written here', () {
+    // **Every other case in this file builds its own session**, which it has to: the
+    // distinction it turns on is between a key that is absent and a key that is null, and
+    // no single captured file can be both. That is a real reason, and it leaves a real
+    // gap -- a test cannot be wrong about a payload it invented, which is a different
+    // thing from being right about the one the server sends. `M31` is that gap.
+    //
+    // `session-integration.json` is nestwatch's own serde output, vendored on 2026-09-09
+    // once 0.8.0 pushed it. Waiting for the push rather than copying it out of the sibling
+    // working tree is the 2026-09-02 failure this repo already had once.
+    Map<String, dynamic> goldenSession() {
+      final file = File('test/golden/session-integration.json');
+      // Not a skip. A suite that passes because it found nothing to check is the failure
+      // mode this whole directory exists against.
+      expect(
+        file.existsSync(),
+        isTrue,
+        reason:
+            'test/golden/session-integration.json is missing; see its README',
+      );
+      return jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+    }
+
+    test(
+      'the real integration session is refused, for the reason it is refused',
+      () {
+        final refusal = scopeRefusal(
+          session: SessionInfo.fromJson(goldenSession()),
+        );
+        expect(
+          refusal,
+          isNotNull,
+          reason:
+              'this is the payload a parent produces by scanning the wrong one of two '
+              'identical-looking codes, and pairing on it used to succeed',
+        );
+        expect(refusal, contains('integration'));
+        expect(refusal!.toLowerCase(), isNot(contains('vpn')));
+      },
+    );
+
+    test('the hand-built payload above is shaped like the real one', () {
+      // The point of vendoring: if nestwatch renames `kind` or moves `source`, the file
+      // changes and the constructed cases in this file do not. Comparing the two is what
+      // turns that from a silent divergence into a failure.
+      final real = goldenSession();
+      expect(real['scope'], isA<Map<String, dynamic>>());
+      expect((real['scope'] as Map)['kind'], 'integration');
+      expect(
+        (real['scope'] as Map)['source'],
+        isNotNull,
+        reason:
+            'the constructed cases pass a source; the wire had better carry one',
+      );
+    });
+
+    test('a field this app has never heard of is ignored, not fatal', () {
+      // `provider` arrived with the integration work and nothing here reads it.
+      // `SessionInfo.fromJson` reads named keys, so an unknown sibling is harmless --
+      // which is obviously true right up until somebody adds a strict decoder, and this
+      // is the assertion that would fail on the day they do.
+      final real = goldenSession();
+      expect(
+        real.containsKey('provider'),
+        isTrue,
+        reason:
+            'if this key ever goes away, the claim below stops being about anything',
+      );
+      final session = SessionInfo.fromJson(real);
+      expect(session.authenticated, isTrue);
+      expect(scopeRefusal(session: session), isNotNull);
     });
   });
 

@@ -165,13 +165,20 @@ void main() {
       expect(usage.certDaysLeft, 700);
       expect(usage.certExpiring, isFalse);
 
-      // Arrived with nestwatch 0.6.0. `refused_total` is taken as sent rather than summed
-      // here, so this asserts the *server's* arithmetic reached the model -- a client that
-      // re-added the three parts would also produce 6 and would pass a weaker check.
+      // Arrived with nestwatch 0.6.0, and grew a fourth count in 0.8.0. `refused_total` is
+      // taken as sent rather than summed here, so this asserts the *server's* arithmetic
+      // reached the model.
+      //
+      // The old version of this comment said a client re-adding the parts "would also
+      // produce 6 and would pass a weaker check". That was the point, and 0.8.0 is the day
+      // it stopped being hypothetical: this payload carried 6 until `time_codes_refused`
+      // arrived, and a client summing the three it knew would now report 6 against a real
+      // 10 -- quietly, on the evening a child had four codes refused.
       expect(usage.refused.clockChanges, 2);
       expect(usage.refused.dayResets, 1);
       expect(usage.refused.shutdownCancels, 3);
-      expect(usage.refused.total, 6);
+      expect(usage.refused.timeCodesRefused, 4);
+      expect(usage.refused.total, 10);
       expect(usage.refused.any, isTrue);
 
       // null here, and it is the ordinary case: the base rules are in force, so there is

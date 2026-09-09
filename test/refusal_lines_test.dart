@@ -12,11 +12,17 @@ import 'package:nestwatch_mobile/src/ui/refusal_lines.dart';
 
 import 'support/source.dart';
 
-Refusals _of({int clock = 0, int resets = 0, int shutdowns = 0}) => Refusals(
+Refusals _of({
+  int clock = 0,
+  int resets = 0,
+  int shutdowns = 0,
+  int codes = 0,
+}) => Refusals(
   clockChanges: clock,
   dayResets: resets,
   shutdownCancels: shutdowns,
-  total: clock + resets + shutdowns,
+  timeCodesRefused: codes,
+  total: clock + resets + shutdowns + codes,
 );
 
 void main() {
@@ -45,13 +51,13 @@ void main() {
         // 1 and 2 because the singular and plural are different strings, and a word could
         // hide in either. 0 produces no line, which the next group covers.
         for (final n in [1, 2])
-          ...refusalLines(_of(clock: n, resets: n, shutdowns: n)),
+          ...refusalLines(_of(clock: n, resets: n, shutdowns: n, codes: n)),
       ];
 
       expect(
         everything,
-        hasLength(8),
-        reason: 'title, intro, and three lines twice',
+        hasLength(10),
+        reason: 'title, intro, and four lines twice',
       );
 
       for (final text in everything) {
@@ -112,8 +118,12 @@ void main() {
     // `singular at one`.
     test('the wording matches the dashboard, so one event has one name', () {
       // Copied from `refusedRows()` in nestwatch `assets/app.js`. Two surfaces inventing
-      // separate vocabularies for the same three facts is how a parent ends up wondering
+      // separate vocabularies for the same four facts is how a parent ends up wondering
       // whether they are reading about the same event.
+      //
+      // Re-read against their table on 2026-09-09 when 0.8.0 added the fourth: these three
+      // are unchanged there. Worth doing rather than assuming, because a copy stops being
+      // a copy without anything failing.
       expect(
         refusalLines(_of(clock: 2)).single,
         '2 clock changes ignored — screen time and bedtime kept using the trusted time',
@@ -127,14 +137,28 @@ void main() {
         '3 shutdowns cancelled on the PC — re-issued straight away, without a fresh '
         'countdown',
       );
+      // The fourth, from nestwatch 0.8.0. Both counts are pinned in full rather than one,
+      // because unlike the three above this pair differs *after* the dash as well as
+      // before it, so a plural bug here can hide in the half the others do not have.
+      expect(
+        refusalLines(_of(codes: 1)).single,
+        '1 time code refused — it was not an active code, so no time was added',
+      );
+      expect(
+        refusalLines(_of(codes: 2)).single,
+        '2 time codes refused — they were not active codes, so no time was added',
+      );
     });
 
-    test('all three, in the dashboard order', () {
-      final lines = refusalLines(_of(clock: 1, resets: 1, shutdowns: 1));
-      expect(lines, hasLength(3));
+    test('all four, in the dashboard order', () {
+      final lines = refusalLines(
+        _of(clock: 1, resets: 1, shutdowns: 1, codes: 1),
+      );
+      expect(lines, hasLength(4));
       expect(lines[0], contains('clock'));
       expect(lines[1], contains('day over'));
       expect(lines[2], contains('shutdown'));
+      expect(lines[3], contains('time code'));
     });
   });
 

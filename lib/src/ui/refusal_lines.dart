@@ -4,10 +4,17 @@
 ///
 /// nestwatch sends **counts, not sentences** — `refused` and `refused_total`, and nothing
 /// else. So a client has to compose the prose, and the dashboard already composes some.
-/// Two surfaces inventing separate vocabularies for the same three facts is how a parent
+/// Two surfaces inventing separate vocabularies for the same four facts is how a parent
 /// ends up reading "clock change ignored" on one screen and something subtly different on
 /// the other, and then wondering whether they are the same event. These match
 /// `refusedRows()` in nestwatch `assets/app.js` word for word.
+///
+/// That borrowing was tested rather than trusted on 2026-09-09, when nestwatch 0.8.0 added
+/// a fourth count. Its `refusedCodeOne`/`refusedCodeMany` were taken verbatim, and the
+/// three already here were re-read against theirs and are unchanged — which was the thing
+/// worth checking, since a copy stops being a copy silently. Their table has since grown
+/// two more languages; this app has one, and that is `M12`'s neighbourhood rather than
+/// this file's.
 ///
 /// The one deliberate difference is the count's position. The dashboard puts it in a badge
 /// beside the sentence; a phone row is narrower than that layout wants, so it leads the
@@ -55,6 +62,15 @@ List<String> refusalLines(Refusals refused) => [
     '${refused.shutdownCancels} '
         '${_plural(refused.shutdownCancels, 'shutdown cancelled on the PC', 'shutdowns cancelled on the PC')}'
         ' — re-issued straight away, without a fresh countdown',
+  // The whole sentence sits inside `_plural` here, where the three above put only the
+  // noun phrase there and append the clause. That is not a stylistic slip: nestwatch's
+  // `refusedCodeOne`/`refusedCodeMany` differ after the dash as well as before it — *it
+  // was not an active code* against *they were not active codes* — and splitting them to
+  // match the shape of the others would mean writing one of those halves here instead of
+  // borrowing it, which is the thing this file exists not to do.
+  if (refused.timeCodesRefused > 0)
+    '${refused.timeCodesRefused} '
+        '${_plural(refused.timeCodesRefused, 'time code refused — it was not an active code, so no time was added', 'time codes refused — they were not active codes, so no time was added')}',
 ];
 
 /// Mirrors `plural(n, one, many)` in nestwatch `assets/app.js`.

@@ -256,6 +256,23 @@ mutate "refusals: a zero count still gets a line" \
   '  if (refused.clockChanges > 0)' \
   '  if (refused.clockChanges >= 0)'
 
+# The fourth count, added in nestwatch 0.8.0, is read from a key that is already being read.
+# Both fields then carry `shutdown_cancels`, the card names the right number of things and
+# gets one of them wrong, and every existing assertion still passes -- `refused_total` is
+# taken as sent, so the total stays right while a part is silently a copy of its neighbour.
+mutate "refusals: the fourth kind is read from the wrong key" \
+  lib/src/api/models.dart \
+  "        timeCodesRefused: at('time_codes_refused')," \
+  "        timeCodesRefused: at('shutdown_cancels'),"
+
+# Same shape as the clock-changes mutation above, aimed at the line added with 0.8.0. A
+# zero grows a sentence saying zero, on the card whose rule is that it only appears when
+# something happened.
+mutate "refusals: a zero time-code count still gets a line" \
+  lib/src/ui/refusal_lines.dart \
+  '  if (refused.timeCodesRefused > 0)' \
+  '  if (refused.timeCodesRefused >= 0)'
+
 # Singular and plural collapse. Reads as "1 clock changes ignored" on the day it fires,
 # which is the day the card is being read most carefully.
 mutate "refusals: the count and its noun stop agreeing" \

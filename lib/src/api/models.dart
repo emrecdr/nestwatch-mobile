@@ -104,6 +104,15 @@ class Refusals {
   final int dayResets;
   final int shutdownCancels;
 
+  /// `time_codes_refused`, counted by nestwatch since 0.8.0.
+  ///
+  /// The fourth kind, and the one this class was written expecting: the doc on [total]
+  /// below refused to sum the parts locally precisely so that this day would need two
+  /// edits rather than four. It needed two — this field and its sentence in
+  /// `refusal_lines.dart` — and `refusal_lines_test.dart` fails on a count parsed here
+  /// with no sentence there, because adding only the first half is silent.
+  final int timeCodesRefused;
+
   /// `refused_total`, as that PC summed it — **not** re-added here.
   ///
   /// nestwatch sends the total beside the parts precisely so no client decides what counts
@@ -116,6 +125,7 @@ class Refusals {
     required this.clockChanges,
     required this.dayResets,
     required this.shutdownCancels,
+    required this.timeCodesRefused,
     required this.total,
   });
 
@@ -123,6 +133,7 @@ class Refusals {
     clockChanges: 0,
     dayResets: 0,
     shutdownCancels: 0,
+    timeCodesRefused: 0,
     total: 0,
   );
 
@@ -148,6 +159,7 @@ class Refusals {
         clockChanges: at('clock_changes'),
         dayResets: at('day_resets'),
         shutdownCancels: at('shutdown_cancels'),
+        timeCodesRefused: at('time_codes_refused'),
         total: (usage['refused_total'] as num?)?.toInt() ?? 0,
       );
     }

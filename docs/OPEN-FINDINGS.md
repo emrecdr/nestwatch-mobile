@@ -102,50 +102,37 @@ Last audited against the tree on **2026-09-06**.
 
 ## Open
 
-### M33 · A fourth kind of refusal is coming, and the card is a closed list of three
+### M33 · The fourth refusal is named; whether `serverNewer` deserves a banner is not
 
-> **Cross-repo** · pairs with nestwatch (their work, not yet committed)
+**The counting half is done, 2026-09-09.** nestwatch 0.8.0 shipped `time_codes_refused`,
+and this app names it: a field on `Refusals` and a sentence in `refusalLines`, which is
+exactly the two edits `models.dart` predicted when it refused to sum the parts locally
+rather than take `refused_total` as sent. Had it summed them, this would have been four
+places, and the card would have reported 6 on an evening the real figure was 10.
 
-Seen 2026-09-08 in the sibling checkout as an **uncommitted** change to two vendored
-goldens: `refused` gains `time_codes_refused`, and `usage-today.json`'s `refused_total` goes
-from 6 to 10. It is in no commit, so there is nothing to do yet — `check_golden.sh` reports
-both as `UNCOMMITTED` rather than as drift, and reported them unprompted while this repo was
-doing something else entirely, which is the whole reason that distinction was built.
+**The wording was borrowed, not written**, which is that file's standing rule and the reason
+this needed no design decision in the end: nestwatch's own `refusedCodeOne`/`refusedCodeMany`
+supply it. The three already here were re-read against their table at the same time and are
+unchanged — worth checking rather than assuming, because a copy stops being a copy silently.
+Their table has since grown Dutch and Turkish; this app has English only, which is `M12`'s
+neighbourhood rather than this entry's.
 
-**What happens on the day it lands.** `Refusals.total` is read from `refused_total` as that
-PC summed it — deliberately, and `models.dart` says so: summing the parts locally "would be
-a fourth place to change on the day a fourth kind of refusal is counted". That half is
-already right. `refusalLines` is the other half, and it is a closed list of three sentences.
-So the card would appear (total 10 > 0), render three lines describing 6 events, show no
-total anywhere, and mention the remaining 4 nowhere.
+**What is still open is the part that was never about time codes.** The argument for leaving
+the card silent about kinds it cannot name is that `ContractCheck` already covers the general
+case — a special-cased "I did not recognise this" line being a fix at the wrong depth. That
+argument stands. **One clause of it was false**, and remains false now that the immediate
+pressure is off:
 
-**Not a new proposal. It was weighed and settled the other way**, in
-`refusal_lines_test.dart` where the argument lives: a per-field "I did not recognise this"
-line is a special case layered on a mechanism that already covers it — `ContractCheck` —
-which is this repo's usual sign that a fix is at the wrong depth. That reasoning stands and
-is not re-raised here.
+`ContractCheck.isWarning` is `serverOlder` **alone**. So `serverNewer` never reaches
+`home_screen`'s `_caveats` and never bands a screen; the message exists only in the identity
+dialog, behind a tap. `home_screen.dart` gives the reasoning — being newer "still works
+everywhere" — and the refusals card was a live counterexample to exactly that: newer is
+precisely when a count is short, and it is the one agreement with no banner.
 
-**What is raised is that one clause of it was false**, checked today against the source
-rather than remembered. It claimed `ContractCheck` "already puts *that PC is running a newer
-nestwatch* in front of the parent". `ContractCheck.isWarning` is `serverOlder` **alone**, so
-`serverNewer` never reaches `home_screen`'s `_caveats` and never bands a screen; the message
-lives in the identity dialog, behind a tap. `home_screen.dart` states the reasoning — being
-newer "still works everywhere" — and the refusals card is a counterexample to exactly that:
-newer is precisely when this count is short, and it is the one agreement with no banner.
-
-The correction is filed where it was argued. The conclusion may well survive it, because the
-depth argument does not depend on the clause that was wrong. But it should be re-made
-knowing which half of it is true, and that is a UI decision rather than an engineering one:
-leave the card short, name the fourth kind, or reconsider whether `serverNewer` deserves a
-banner after all.
-
-**One half is already gated.** Naming a fourth kind takes two edits — a field on `Refusals`
-and a sentence in `refusalLines` — and doing the first without the second is silent: the
-count parses, the total already covered it, and the card renders exactly as before with one
-category unmentioned. `refusal_lines_test.dart` now reads both files and fails on a parsed
-count with no sentence. Both halves watched to fail: a removed sentence, and a blinded field
-scan. It says nothing about a category this app does not parse, which is the question above
-and is still open.
+It is not live today, because the fourth kind is named. It becomes live again on the day
+nestwatch counts a fifth, and this app is behind. **The question is whether `serverNewer`
+should band a screen at all**, and that is a UI decision rather than an engineering one —
+the reason it is left here rather than settled quietly. Nothing is broken while it waits.
 
 ### M32 · The iOS integration tests are gated again, on a third route; two others are ruled out
 
@@ -226,37 +213,34 @@ runner** -- it has never failed on this Mac, and neither had route 1 before it w
 difference is mechanical rather than hopeful, but one green run is not evidence of a stable
 one, and this entry exists partly because that inference was already made once and was wrong.
 
-### M31 · The integration session golden is coming, and the test that needs it builds its payload by hand
+### M31 · The integration session is parsed from nestwatch's own capture
 
-> **Cross-repo** · pairs with nestwatch (their work, not yet committed)
+> **Settled 2026-09-09.** Kept because it records why the hand-built payloads beside it stay.
 
-Seen 2026-09-06 in the sibling checkout as an **untracked** file —
-`tests/golden/session-integration.json`, carrying a new `provider` object beside an
-integration `scope`. It is in no commit, so nothing needs doing yet; `check_golden.sh` now
-says so in as many words rather than counting it as drift.
+`tests/golden/session-integration.json` was pushed with nestwatch 0.8.0 and is vendored
+here. `test/scope_refusal_test.dart` now parses **it** for the integration case, rather than
+only a payload written in this repository.
 
-**When it is pushed, this repo should vendor it, and the reason is not completeness.**
-`check_golden.sh` calls a golden this app lacks "a shape this app never parses", and for
-this one that is wrong. This app parses an integration session *deliberately*, in order to
-refuse it: `scopeRefusal` is the whole reason `PairingScope.integration` exists, and the
-refusal exists because a dashboard link and an integration link are byte-identical in form,
-so a parent hands over whichever was on screen.
+**Why that mattered.** A dashboard link and an integration link are byte-identical in form,
+so a parent hands over whichever was on screen; handed the integration one, this app used to
+pair successfully and then answer 403 on three tabs out of four, reported as "turn off your
+VPN". `scopeRefusal` exists for that, and every case testing it built its own input — the
+`M26` shape, where a test cannot be wrong about a payload it invented.
 
-And `test/scope_refusal_test.dart` builds that payload **by hand**. Its own header records
-that an earlier version of it could not tell an absent `scope` from a null one and leaned
-on `ContractCheck` to guess — a defect the mutation audit found. A hand-built fixture is the
-`M26` shape exactly: the test cannot be wrong about a payload it invented, which is a
-different thing from being right about the one the server sends. Vendoring the golden and
-parsing *it* closes that.
+**The hand-built sessions are still there, and are not a defect.** The distinction the rest
+of that file turns on is between a `scope` key that is *absent* and one that is *null* —
+absent means a pre-0.7.0 PC and must be left alone, null means a lapsed session and must be
+refused. No single captured file can be both, so those cases have to construct their input.
+What the golden adds is a check that the shape they construct is the shape that arrives.
 
-The `provider` object is a second reason. It is a field this app will ignore, and ignoring
-a field correctly is a claim worth one assertion — `SessionInfo.fromJson` reads named keys,
-so an unknown sibling is harmless, and that is exactly the sort of thing that is obviously
-true until someone adds a strict decoder.
+Three assertions came with it: the real payload is refused and the refusal says
+`integration` and nothing about VPNs; `scope.kind` and `scope.source` are where the
+constructed cases assume; and `provider` — a key this app never reads — is present and
+ignored rather than fatal, which is obviously true until somebody adds a strict decoder.
 
-**Wait for the push.** Vendoring from a working tree is the 2026-09-02 failure this repo
-already had once, and the entry above it in this file is the checker change that makes the
-distinction visible instead of leaving it to whoever is reading.
+**Vendored from `origin/main`, not from the sibling working tree**, whose HEAD was not an
+ancestor of it on the day. That is the 2026-09-02 failure this repo already had once, and
+`tool/check_golden.sh` now says which tree it read on every run.
 
 ### M28 · Android 17 turns local-network access into a permission, and a denial reads as being away from home
 
