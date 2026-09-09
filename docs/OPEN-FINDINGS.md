@@ -147,75 +147,84 @@ count with no sentence. Both halves watched to fail: a removed sentence, and a b
 scan. It says nothing about a category this app does not parse, which is the question above
 and is still open.
 
-### M32 · The iOS pinning test stalls on a hosted runner, after the app has already started
+### M32 · The iOS integration tests are gated again, on a third route; two others are ruled out
 
-**Measured 2026-09-08, and this entry exists because a previous one was deleted too early.**
-The predecessor said the recipe was "not added blind, deliberately" and that the first run
-wanted watching. It was added, watched, and taken out again the same day. What is left over
-is a much sharper description of where the wall is.
+**Rewritten 2026-09-09.** The previous version of this entry described a stall and said the
+next move was research. That was done, and it changed the answer twice.
 
 `integration_test/pinning_on_ios_test.dart` answers the one question about the pin that the
-host suite cannot — whether App Transport Security is in `dart:io`'s path — by driving a
-real handshake inside a running iOS app against a self-signed certificate on a bare IP.
+host suite cannot -- whether App Transport Security is in `dart:io`'s path -- by driving a
+real handshake inside a running iOS app. **It is a gate again**, as `integration-ios`, via
+`tool/ios_integration_test.sh`. What follows is why it took three routes.
 
-**It does run on a hosted runner — that is the point of this entry.** Two of the four runs
-below went green there, five tests, in about seven minutes. What it does not do is run
-*reliably*, and an intermittent gate is the thing this repository will not keep. On a Mac it
-has never once failed.
-
-**Where it stops**, from a `--verbose` run:
-
-```
-01:07:56  xcrun simctl launch … com.nestwatch.mobile --disable-vm-service-publication
-01:08:05  com.nestwatch.mobile: 13254          <- the app is running, with a pid
-01:08:05  Waiting for VM Service port to be available...
-01:19:06  cancelled by timeout-minutes         <- eleven minutes, nothing
-```
-
-Everything this repository controls works. `tool/boot_simulator.sh` picks and boots an
-iPhone on the newest available runtime; the Xcode build completes in about two minutes; the
-app launches. `flutter test` then waits for the VM Service port, which it discovers by
-reading the simulator's unified log rather than from the launch (`simctl launch` is passed
-`--disable-vm-service-publication`, and a `simctl spawn … log stream` follows it). That is
-the step that never completes.
-
-**It is intermittent, which is why the job came out rather than being fixed.** Four runs, all
-on the same code and the same runner image:
+**Route 1, `flutter test integration_test`: works here, stalls there.** It launches with
+`--disable-vm-service-publication` and then finds the Dart VM Service by scraping the
+simulator's unified log for the port. That discovery step is what hangs -- app running, pid
+assigned, `Waiting for VM Service port to be available...` forever. Four CI runs on identical
+code:
 
 | Xcode | outcome |
 |---|---|
 | 26.6, the image default | stalled, 22 min |
-| 26.5, pinned | passed, tests green in ~7 min |
+| 26.5, pinned | passed, ~7 min |
 | 26.5, pinned | passed |
 | 26.5, pinned | **stalled, 11 min** |
 
-**Commit `e9245eb` asserts that the Xcode version was the cause. That is refuted**, and the
-correction belongs here because that commit cannot be rewritten. The reasoning there was a
-single-variable comparison across two runs, which is sound as far as it goes and was not far
-enough: two passes are consistent with a flake, and the third pinned run reproduced the
-original stall exactly. Pinning Xcode is still right — the image default moves on GitHub's
-schedule, announced nowhere in this repository, which is the same objection `FLUTTER_VERSION`
-answers — but it is not established as a fix for this.
+Never once failed on a Mac here, across four local runs. It is not this repository's bug:
+flutter/flutter#136222, #144926 and #154685 are the same wall, reported by other people.
+`e9245eb` claimed the Xcode version was the cause; the third pinned run refuted that, and the
+pin is kept for reproducibility rather than as a fix.
 
-A gate that reds a third of the time for a reason outside this repository is worse than no
-gate: it is how a team learns to stop reading CI, which is the argument `M25` makes and the
-reason the predecessor entry hesitated in the first place.
+**Route 2, the XCTest route Flutter documents for CI: built, measured, and it does not work
+here.** `INTEGRATION_TEST_IOS_RUNNER` reflects each Dart test into a native XCTest case with
+no host side at all, so the stalling step is structurally absent. It was wired up on
+2026-09-09 -- `RunnerTests.m`, and the `RunnerTests` target given a
+`packageProductDependencies` on `FlutterGeneratedPluginSwiftPackage`, since this project has
+no Podfile and the published instructions assume CocoaPods. It compiles, links and runs, and
+produces **zero test cases**, on which `xcodebuild` prints `** TEST SUCCEEDED **` and exits 0.
 
-**What is kept.** `tool/boot_simulator.sh`, which works on both machines and is rehearsable
-by hand, so whoever picks this up starts a step in rather than rebuilding it. The removed job
-is in `git log` at `e9245eb`.
+That is the worst possible failure and it is why this was not simply left in place: a gate
+that runs nothing is indistinguishable, from the outside, from a gate that passed.
 
-**What would close it.** Somewhere the stall reproduces, because it does not on this Mac.
-Four runs there, all green: the test alone against a warm simulator (68s of Xcode build, 1s
-of tests); the whole `integration_test/` directory, which confirmed the fixtures library is
-skipped rather than run as a test with no `main()` (18s build); the same after
-`simctl shutdown` and a cold boot, to imitate the runner (39s end to end); and one against a
-simulator created from scratch for the purpose and deleted afterwards, to rule out device
-state (23s build). None of them stalled, and none took more than about seventy seconds. Without a reproduction the next move is guesswork at twenty minutes an
-attempt, which is how three CI cycles were already spent. Worth reading first: whether
-Flutter's log-stream route to VM Service discovery has a known failure on iOS 26 simulators,
-and whether a newer Flutter changes it — which folds into `M21`, since this repo is three
-minors behind.
+Four things were established and three hypotheses refuted, so whoever picks this up does not
+repeat them:
+
+- The bundle **does** load and run. A plain control case added beside the generated ones
+  passes, and it confirms the host app carries `IntegrationTestPlugin`.
+- The Dart half **does** work. Launched by hand, the app runs all five tests and passes them
+  in about half a second.
+- **Not the class name.** The generated class is named the same as the bundle; renaming it
+  changed nothing.
+- **Not symbol resolution.** A debug iOS build splits the app into a thin `Runner` launcher
+  and `Runner.debug.dylib`, and `BUNDLE_LOADER` points at the launcher, which carries none of
+  the plugin's symbols -- so the macro's compile-time reference to `FLTIntegrationTestRunner`
+  looked like it must bind to nil. It does not: both a runtime `NSClassFromString` and the
+  direct class reference find it.
+- **Not XCTest dropping `+testInvocations`.** A hand-written class of the same shape -- no
+  instance test methods, one generated at runtime -- produces its case and runs it.
+
+So the mechanism works and the macro's use of it yields nothing, and **which of those two
+facts is wrong was not established.** It was not distinguished whether the macro's
+`+testInvocations` is never called or is called and returns empty. That is the open question
+here, and it is worth answering, because route 2 is the better long-term shape.
+
+**Route 3, and what is now in CI.** Launch the app with `simctl` and read what the Dart test
+reporter prints -- the same text a person reads running it by hand. Neither of the two
+mechanisms that break is in the path: no VM Service, no XCTest discovery.
+
+Its whole design problem is the one both other routes fell into, so the script is written
+against silence rather than against failure. It refuses to pass when the app said nothing
+(exit 2, "could not look"), when the built app's entrypoint is not the test, when a run
+stops without a verdict, and when fewer than five tests ran -- because `All tests passed!` is
+printed just as happily by a run that executed nothing. All three outcomes were rehearsed on
+a Mac before the job existed: a clean pass, a deliberately inverted assertion (exit 1, naming
+the test), and a one-test file that passes and is refused anyway.
+
+**What is still open.** Two things, and neither is "does the pin hold on iOS", which is
+answered. First, the route-2 question above. Second, **whether route 3 is stable on a hosted
+runner** -- it has never failed on this Mac, and neither had route 1 before it was gated. The
+difference is mechanical rather than hopeful, but one green run is not evidence of a stable
+one, and this entry exists partly because that inference was already made once and was wrong.
 
 ### M31 · The integration session golden is coming, and the test that needs it builds its payload by hand
 
@@ -1124,8 +1133,17 @@ refused before anything reaches the server, and no pin refuses everything. `Info
 carries no ATS exception, so `dart:io` demonstrably does not consult it. PLAN §7's
 reservation, that the inference was "sound but still not documented", is retired.
 
-`flutter build ios --no-codesign --simulator` succeeds. Deployment target is 14.0, raised
-from Flutter's default 13.0 because `workmanager-apple` requires it.
+**And it is now checked on every push rather than remembered.** Those five tests are the
+`integration-ios` job, via `tool/ios_integration_test.sh`; getting them to run in CI at all
+took three attempts and `M32` has the reasons. Until 2026-09-09 this paragraph rested on a
+measurement taken once, by hand, eleven days earlier — which is exactly the kind of claim
+this file exists to be suspicious of.
+
+`flutter build ios --no-codesign --simulator` succeeds. Deployment target is 15.0 in all
+three build configurations, held there by `test/ios_config_test.dart`. It read 14.0 here
+until 2026-09-09 — raised to 15.0 on 2026-09-06 under `M21`, and this entry was not updated
+with it, so for three days two entries in this file disagreed about a number the Xcode
+project states plainly.
 
 **What is still owed, and it is the half a simulator cannot give.** PLAN §7 is explicit
 that the Simulator does not implement local-network privacy at all. The proof above uses

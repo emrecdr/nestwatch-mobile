@@ -256,6 +256,73 @@ jobs:
         run: flutter build ios --no-codesign --release
 
   # ---------------------------------------------------------------------------------
+  # The one question about the pin that only iOS can answer. Removed at `fd9aeec` and
+  # back on a route that does not contain the step that was stalling -- see M32.
+  # ---------------------------------------------------------------------------------
+  integration-ios:
+    name: pin holds · ios simulator
+    # Gated on the fast gate for the same reason as the two build jobs.
+    needs: check
+    runs-on: macos-latest
+    # The stalling runs sat silent for eleven and twenty-two minutes after the app had
+    # already launched. Twenty is enough to tell a stall from a slow build -- the build
+    # itself takes about two minutes -- and the script's own ceiling is 120s inside that.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Use the Xcode this test is measured against
+        # `macos-latest` defaults to whatever Xcode GitHub has most recently made default --
+        # 26.6 as of 2026-09-08, moved there on their schedule, announced in their release
+        # notes and nowhere in this repository. That is the same objection `FLUTTER_VERSION`
+        # above exists to answer: a gate that changes underneath you reports on a toolchain
+        # nobody chose.
+        #
+        # Note what this comment no longer claims. `e9245eb` asserted the Xcode version was
+        # the cause of the stall, on a two-run comparison; a third pinned run reproduced the
+        # stall and refuted it. The pin is kept because reproducibility is worth having on
+        # its own, not because it fixes anything. M32 has the four-run table.
+        #
+        # Stated as a failure rather than left to `xcode-select` to report obscurely: if the
+        # image drops that version, this says which of the two things went wrong.
+        run: |
+          set -euo pipefail
+          app=/Applications/Xcode_26.5.app
+          if [ ! -d "$app" ]; then
+            echo "$app is not on this runner any more. Nothing was tested, and this is"
+            echo "not a statement about the pin — pick a version from the image README"
+            echo "and check the integration test against it locally first."
+            exit 1
+          fi
+          sudo xcode-select -s "$app"
+          xcodebuild -version
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      - name: The pin holds inside a running iOS app
+        # Everything about picking a simulator, building, launching and reading the result
+        # lives in the script, because a recipe inside a workflow can only be rehearsed by
+        # pushing it. That script was run on a Mac before this job existed, in all three of
+        # its outcomes -- passing, a deliberately broken test, and a run too small to mean
+        # anything -- which is the part `e9245eb` skipped.
+        #
+        # It exits 2 for "could not look", and `set -e` makes that a failed step here on
+        # purpose, for the reason the `contract` job gives: in CI a missing simulator means
+        # the runner is not what we think it is.
+        #
+        # **What is not yet established**: that this is *stable* on a hosted runner. It has
+        # never failed on a Mac here, and neither had the route it replaces. What is
+        # different is mechanical rather than hopeful -- the step that hung is not in this
+        # path at all -- but one green run is not evidence of a stable one, and that mistake
+        # has already been made once in this file's history.
+        run: bash tool/ios_integration_test.sh
+
+  # ---------------------------------------------------------------------------------
   # Slow, and not on every push. It runs the whole suite once per mutation.
   # ---------------------------------------------------------------------------------
   mutation:

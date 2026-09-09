@@ -13,28 +13,36 @@
 #
 # and still have the explanation in the log next to whatever happened afterwards.
 #
-# ## Nothing in CI calls this today, and that is not an oversight
+# ## CI calls this again, through `tool/ios_integration_test.sh`
 #
-# It was written for a `pin holds · ios simulator` job, which ran on 2026-09-08 and was
-# taken out again the same day. `M32` has the measurement; the short version is that the
-# stall is downstream of everything here — the app launches on the simulator and
-# `flutter test` never receives its VM Service port.
+# It was written for a `pin holds · ios simulator` job, which ran on 2026-09-08 and was taken
+# out the same day. This header then said "nothing in CI calls this today, and that is not an
+# oversight", which was true for exactly one day: the job came back on 2026-09-09 on a route
+# that does not contain the step that was stalling. `M32` has all three routes and why two of
+# them were abandoned.
 #
-# This part works, on a hosted runner and on a Mac, and is left in place because the entry
-# is open and whoever picks it up should not have to rebuild it. Run it by hand:
+# Nothing here changed in between, which is the point worth keeping. The stall was downstream
+# of everything in this file -- the app launched on the simulator every time -- so when the
+# harness above it was replaced, this part was already right and did not have to be rebuilt.
 #
+# Run it by hand, either way round:
+#
+#     bash tool/ios_integration_test.sh                                    # what CI runs
 #     udid=$(bash tool/boot_simulator.sh) && flutter test integration_test -d "$udid"
 #
-# The register entry that asked for that job said in the same breath why it had not been
-# built: "a new job that fails for setup reasons rather than for the property it checks is
-# exactly the illegible red badge `M25` argues against". A red `pin holds · ios simulator`
+# The second is still the better one to iterate on -- it prints Dart test names directly --
+# and it is the one that stalls on a hosted runner, which is why it is not the gate.
+#
+# The register entry that asked for the original job said in the same breath why it had not
+# been built: "a new job that fails for setup reasons rather than for the property it checks
+# is exactly the illegible red badge `M25` argues against". A red `pin holds · ios simulator`
 # that actually means *this runner had no simulator* reads exactly like one that means *the
-# pin does not hold on iOS*, and those are not remotely the same news. It was right to
-# worry, and this script is the part of the answer that held up.
+# pin does not hold on iOS*, and those are not remotely the same news. It was right to worry,
+# and this script is the part of the answer that held up across all three attempts.
 #
 # A recipe that lives inside a workflow can only be rehearsed by pushing it. One that lives
 # here runs on the machine of whoever is about to change it, which is the whole reason the
-# other four `tool/*.sh` gates are scripts too.
+# other five `tool/*.sh` gates are scripts too.
 #
 # ## Newest available, rather than named
 #
