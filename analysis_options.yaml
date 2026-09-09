@@ -5,6 +5,25 @@
 # IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
 # invoked from the command line by running `flutter analyze`.
 
+# This block is written by the Flutter tool, not by anybody here.
+#
+# `flutter analyze` on 3.47 inserts it and says so -- "Upgrading analysis_options.yaml to
+# exclude build and platform directories". Deleting it does not work: the next `analyze` or
+# `pub get` puts it back, which was checked on 2026-09-09 by reverting the file and watching
+# it return within one command. So it is committed deliberately rather than fought, and this
+# comment exists because an unexplained block that regenerates itself is the kind of thing
+# somebody removes twice.
+#
+# It changes nothing here either way. `android/` and `ios/` hold no Dart at all, and `build/`
+# is generated output. The check that reads the Xcode project -- `test/ios_config_test.dart`,
+# holding the 15.0 deployment target across three build configurations -- opens it as a text
+# file and never asks the analyzer, so excluding `ios/**` does not blind it.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+
 # The following line activates a set of recommended lints for Flutter apps,
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml

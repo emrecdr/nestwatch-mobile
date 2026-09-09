@@ -38,7 +38,19 @@ permissions:
 env:
   # Pinned, not floating. `stable` moves, and a gate that changes underneath you reports on
   # a toolchain nobody chose. Matches the version this repo is developed against.
-  FLUTTER_VERSION: 3.44.6
+  #
+  # 3.44.6 -> 3.47.3 on 2026-09-10, which is `M21`'s first row and the one with a date behind
+  # it: the in-SDK Material and Cupertino libraries are deprecated in the November 2026
+  # stable, and this job runs `flutter analyze --fatal-infos --fatal-warnings`, so the day the
+  # pin crosses that release the fast gate reds on twenty-odd files at once.
+  #
+  # 3.47 is not that release. Checked rather than taken from a blog summary, one of which
+  # said the warnings had already started: `packages/flutter/lib/material.dart` at tag 3.47.3
+  # carries no deprecation annotation at all, and Flutter's own post puts formal deprecation
+  # "in the upcoming Fall stable release in November". So this moves the toolchain and leaves
+  # the import migration as a separate decision, which is what Flutter advises for an app of
+  # any size.
+  FLUTTER_VERSION: 3.47.3
 
 jobs:
   # ---------------------------------------------------------------------------------

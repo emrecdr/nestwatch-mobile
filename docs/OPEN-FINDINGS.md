@@ -544,55 +544,72 @@ The sweep itself carries the other caution: on iOS a subnet scan is the "network
 that raises local-network privacy, which `M15` records as unproven on hardware and
 *silently denied* in the background while undetermined.
 
-### M21 · Three platform clocks, one already past
+### M21 · The toolchain is on 3.47.3; what is left is Material leaving the SDK
 
-Measured 2026-09-02.
+**Upgraded 2026-09-10.** The table below is what remains, not what was.
 
 | | Here | Current | Consequence |
 |---|---|---|---|
-| Flutter | 3.44.6 | 3.47.1 | three minors behind; pinned in CI as `FLUTTER_VERSION` |
-| Dart | 3.12.2 | 3.13.1 | `sdk: ^3.12.2` already admits it |
-| iOS deployment | ~~14.0~~ **15.0** | 15.0 floor | **Done 2026-09-06.** Moved ahead of the upgrade, while it costs nobody anything |
+| Flutter | ~~3.44.6~~ **3.47.3** | 3.47.3 | **Done.** Pinned in CI as `FLUTTER_VERSION` |
+| Dart | ~~3.12.2~~ **3.13.3** | 3.13.3 | came with it; `sdk: ^3.12.2` left alone, and still admits it |
+| iOS deployment | **15.0** | 15.0 floor | **Done 2026-09-06**, and 3.47 raised the floor from 13 to 15 — the early move paid |
+| UIScene lifecycle | adopted | mandated | `ios/Runner/SceneDelegate.swift` exists; Xcode 27 builds that have not adopted it fail to launch |
 | Play target API | 36 | 36 | compliant — `flutter.targetSdkVersion` is 36 |
-| AGP / Kotlin | 9.0.1 / 2.3.20 | 9.1.0 / 2.4.0 | below 3.47's verified pair |
+| AGP / Kotlin / Gradle | 9.0.1 / 2.3.20 / 9.1.0 | see below | **exactly at 3.47.3's no-warning floor**, not below it |
+| Material in the SDK | in-SDK imports, 20 files | standalone 1.0 packages | the only row left, and the only one with a date |
 
-**The iOS floor is done, and was the one row here that could move on its own.** Raised to
-15.0 on 2026-09-06, ahead of the upgrade rather than during it, because this app has never
-been released — which is the only moment dropping a supported OS version costs nobody
-anything, and that moment ends at `M7`. `test/ios_config_test.dart` now holds it: the Xcode
-project states the number once per build configuration, three copies with nothing keeping
-them in step, and a person raising it in the Xcode UI changes whichever one is selected.
-Both halves of that check were watched to fail — one configuration disagreeing, and all
-three agreeing below the floor. It cannot be mutation-audited: `tool/mutate.sh` snapshots
-and restores `lib/` only, so a mutation aimed at `ios/` would apply and never be put back.
-That constraint is now stated in the script.
+**The upgrade cost nothing, which is worth recording rather than being pleased about.** No
+source file changed. 420 tests, `analyze --fatal-infos --fatal-warnings`, `dart format`, and
+all four checker scripts passed on 3.47.3 unmodified, and the iOS integration harness — whose
+whole job is parsing the Dart reporter's output — still reads it correctly. The one file the
+upgrade touched was `analysis_options.yaml`, and the Flutter tool touched it, not a person;
+that file now says so, because reverting it was watched to be undone by the next command.
 
-**The Play clock has run out rather than being close.** Since 31 August 2026 new apps and
-updates must target API 36 or be rejected in Play Console, with extensions available only
-to 1 November. The code side is compliant; what this changes is that `M7` — store
-paperwork only a Play Console can finish — now has a date rather than an intention.
+**Two claims in the previous version of this entry were wrong, and both were checked rather
+than remembered.**
 
-**The structural item is Material leaving the SDK, and it now has dates rather than a
-season.** Re-checked 2026-09-05 against Flutter's own release notes: the standalone
-`material_ui` and `cupertino_ui` **1.0** packages shipped with 3.47 in August 2026 and are
-opt-in with no warnings; the in-SDK libraries are **formally deprecated in the November
-2026 stable**, at which point the analyzer starts warning; the old imports are **removed in
-2027**. Every screen here imports `package:flutter/material.dart`.
+*"Below 3.47's verified pair (9.1.0 / 2.4.0)."* Those two numbers are the tooling's **upper
+bound of awareness** — `maxKnownAgpVersionWithFullKotlinSupport` and
+`maxKnownAndSupportedKgpVersion` — not a requirement. What 3.47.3 actually enforces lives in
+`DependencyVersionChecker.kt`, and the comparison is strict:
 
-Two things make it cheaper than it sounds, and both are worth knowing before it is
-scheduled: a migration tool rewrites the imports, and `MaterialUiCompatibilityBridge` lets
-an app move immediately while its dependencies still use the legacy SDK imports — which
-matters here, because `mobile_scanner`, `flutter_local_notifications` and
-`flutter_foreground_task` all ship Flutter UI.
+| | warn below | error below | here |
+|---|---|---|---|
+| AGP | 9.0.1 | 8.11.1 | **9.0.1** |
+| Kotlin | 2.3.20 | 2.2.20 | **2.3.20** |
+| Gradle | 9.1.0 | 8.14.0 | **9.1.0** |
+| Java | 17 | 17 | 17 in CI |
+| minSdk | 24 | 23 | 24 (`flutter.minSdkVersion`) |
 
-**The specific reason not to drift past November.** Deprecation turns every one of those
-imports into an analyzer warning, and CI runs `flutter analyze --fatal-infos
---fatal-warnings`. The day the pinned `FLUTTER_VERSION` crosses that release, the fast gate
-goes red on twenty-odd files at once — in the job whose entire value is that its failures
-are legible.
+Three rows sit exactly on the warn threshold and the check is `<`, so nothing warns. There is
+no Android work here, and raising those numbers would be change for its own sake.
 
-Two things land free on upgrade: 3.47 auto-detects Android high-contrast and colour
-inversion, which is on `M12`'s side of the ledger.
+*"Analyzer warnings across twenty-odd files the day the pin crosses November's release."* The
+date is right and the mechanism is right; what was nearly got wrong is **which** release. A
+blog roundup read while researching this said the deprecation warnings had already started in
+3.47, which would have meant the fast gate reddening the moment the pin moved.
+`packages/flutter/lib/material.dart` at tag 3.47.3 carries no deprecation annotation at all —
+its head is byte-identical to 3.44.6's — and Flutter's own post puts formal deprecation "in
+the upcoming Fall stable release in November". Read the SDK, not the write-ups about it.
+
+**What is left, and it is a decision rather than a task.** 20 files import
+`package:flutter/material.dart`; none import `cupertino.dart`; one imports `widgets.dart`.
+`dart fix --apply --code=migrate_design_widgets` rewrites them, and
+`MaterialUiCompatibilityBridge` lets this app move while `mobile_scanner`,
+`flutter_local_notifications` and `flutter_foreground_task` still use the legacy SDK imports.
+
+Three things to weigh before it is scheduled, in this repository's terms rather than
+Flutter's:
+
+- Flutter advises splitting the SDK upgrade and the design migration into separate changes,
+  which is why this entry stops here.
+- It adds `material_ui` as a **direct dependency**, and every `pub add` in this repo is
+  audited by `tool/audit_deps.sh` against the rule in `pinned_http_overrides.dart`. A UI
+  package is unlikely to reach the network, but "unlikely" is what that audit exists to stop
+  anyone relying on.
+- The deadline is real but not close: warnings in November 2026, removal in 2027. The cost of
+  waiting is zero until the pin crosses a release that warns, and `FLUTTER_VERSION` is pinned
+  here, so that day is chosen rather than arriving.
 
 ### M20 · nestwatch is about to send the expiry verdict, which is what M6 was waiting for
 
