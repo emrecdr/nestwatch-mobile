@@ -39,11 +39,11 @@ dependencies:
   # `flutter create` and were never imported; an unused HTTP package is one more thing to
   # re-audit on every `pub add` for no benefit, so it is gone rather than dormant.
   crypto: ^3.0.7
-  mobile_scanner: ^7.4.0
-  flutter_secure_storage: ^11.0.0
-  workmanager: ^0.10.9
-  flutter_local_notifications: ^22.3.0
-  flutter_foreground_task: ^11.0.1
+  mobile_scanner: ^7.4.2
+  flutter_secure_storage: ^11.2.0
+  workmanager: ^0.10.10
+  flutter_local_notifications: ^22.3.1
+  flutter_foreground_task: ^11.0.3
 dev_dependencies:
   flutter_test:
     sdk: flutter
