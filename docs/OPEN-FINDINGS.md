@@ -142,6 +142,36 @@ live again on the day a sixth arrives and this app is behind — which has now h
 six weeks, so it is a question of when. **Whether `serverNewer` should band a screen at all is
 a UI decision**, which is why it is still here rather than settled quietly.
 
+### M35 · The mutation audit costs 24s per mutation and has hit its ceiling once
+
+**Measured 2026-10-22**, from the timestamps of the run that failed: 109 mutations between
+18:30:14 and 19:14:25 is **24.3 seconds each**, because `tool/mutate.sh` reruns the whole
+suite once per mutation. The job was cut by `timeout-minutes: 45` one mutation short of
+printing its summary, so an audit that had killed 109 and lost none was reported as
+`cancelled`.
+
+The window is now 60 minutes, which holds about 145 mutations at that rate. There are 110.
+
+**So the next person to add a mutation is spending 24 seconds of every future push**, and
+raising the number again is the move to resist, because it hides a cost rather than paying
+it. Three things could be done instead, in the order they are worth considering:
+
+- **Run only the tests that can see the mutation.** Each `mutate` call names one file in
+  `lib/`, and most mutations are killed by one or two test files. Mapping them would cut the
+  great majority of the work, at the price of a map that can go stale — and a stale map here
+  fails *open*, reporting a kill that never ran, which is the direction this repo keeps
+  finding itself on the wrong side of (`M18`, `audit_deps.sh`). It would need the same
+  treatment: prove the chosen tests can fail before believing they passed.
+- **Shard across runners.** No correctness risk and no map to rot; it costs runner minutes
+  rather than wall-clock, and `tool/mutate.sh` would need to take a slice argument.
+- **Leave it, and keep paying.** Defensible while the number is small. The reason to write
+  this entry now rather than at the next timeout is that the first option is the only one
+  that gets *harder* the longer it is left, because the map has to be built against whatever
+  the suite has become.
+
+Nothing is wrong today. This exists so the next failure is recognised as a ceiling rather
+than diagnosed from scratch, which is what happened this time.
+
 ### M34 · The contract gate cannot go green until nestwatch tags v0.11.0
 
 **Filed 2026-10-22, and nothing in this repository can close it.**

@@ -154,6 +154,14 @@ jobs:
         run: bash tool/check_golden.sh
 
       - name: Cross-repo findings references resolve
+        # **Runs even when the step above failed, and that is not tidiness.** These are two
+        # independent questions -- do the golden files match, and do the register's
+        # cross-references resolve -- and by default a failure in the first skips the
+        # second. `M34` is about to hold the golden step red until nestwatch cuts a tag,
+        # which would have meant this check quietly not running on every push in the
+        # meantime. A gate that stops asking while still looking present is the failure
+        # this repository keeps finding in itself; see `tool/audit_deps.sh` and `M18`.
+        if: always()
         # The exit codes and what they mean are documented once, in that script's own
         # closing comment and in docs/VERSIONING.md — restating them here is a second copy
         # to keep in step, and the two had already drifted in wording.
@@ -345,7 +353,19 @@ jobs:
     # `check` failure makes it 9 minutes spent on a tree that already lost.
     needs: check
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # **Measured, not guessed, and it has been too small once.** On 2026-10-22 this job was
+    # cut at 45m20s having reported 109 of 110 mutations killed and none survived -- one
+    # short of printing its own summary, so a passing audit was reported as `cancelled`.
+    #
+    # The arithmetic, from that run's own timestamps: 109 mutations between 18:30:14 and
+    # 19:14:25 is 24.3s each, because every mutation reruns the whole suite. 110 of them is
+    # about 45 minutes before setup, which is exactly why 45 was not enough. 60 leaves room
+    # for roughly 145 at the current rate.
+    #
+    # So a new mutation costs about 24 seconds of this job, every push, forever. That is
+    # worth knowing before adding one, and `M35` records what to do when this ceiling is
+    # reached again rather than raising the number a third time.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
