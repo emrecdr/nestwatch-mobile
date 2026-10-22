@@ -102,37 +102,82 @@ Last audited against the tree on **2026-09-06**.
 
 ## Open
 
-### M33 · The fourth refusal is named; whether `serverNewer` deserves a banner is not
+### M33 · Five refusal kinds are named; whether `serverNewer` deserves a banner is not
 
-**The counting half is done, 2026-09-09.** nestwatch 0.8.0 shipped `time_codes_refused`,
-and this app names it: a field on `Refusals` and a sentence in `refusalLines`, which is
-exactly the two edits `models.dart` predicted when it refused to sum the parts locally
-rather than take `refused_total` as sent. Had it summed them, this would have been four
-places, and the card would have reported 6 on an evening the real figure was 10.
+**The counting half has now been done twice, 2026-09-09 and 2026-10-22.** nestwatch 0.8.0
+added `time_codes_refused`; 0.11.0 added `wrong_passwords`. Both took the two edits
+`models.dart` predicted — a field on `Refusals` and a sentence in `refusalLines` — because
+`refused_total` is taken as the server summed it rather than re-added here. On the 0.11.0
+payload the four previously-named parts come to 10 against a real total of 15, so a client
+that summed what it knew would have under-reported by five **on the evening somebody was
+working through passwords**, which is the evening the card exists for.
 
-**The wording was borrowed, not written**, which is that file's standing rule and the reason
-this needed no design decision in the end: nestwatch's own `refusedCodeOne`/`refusedCodeMany`
-supply it. The three already here were re-read against their table at the same time and are
-unchanged — worth checking rather than assuming, because a copy stops being a copy silently.
-Their table has since grown Dutch and Turkish; this app has English only, which is `M12`'s
-neighbourhood rather than this entry's.
+**The wording is borrowed, not written**, and that was checked against their table both
+times rather than assumed: `refusedPasswordOne`/`refusedPasswordMany` supply the fifth, and
+the four already here are unchanged in their source. A copy stops being a copy silently,
+which is the only reason to re-read it.
 
-**What is still open is the part that was never about time codes.** The argument for leaving
-the card silent about kinds it cannot name is that `ContractCheck` already covers the general
-case — a special-cased "I did not recognise this" line being a fix at the wrong depth. That
-argument stands. **One clause of it was false**, and remains false now that the immediate
-pressure is off:
+**The fifth row is the one most able to read as an accusation**, and it is the one case where
+borrowing their sentence is doing real work rather than keeping two surfaces tidy. Every one
+of these was already in that PC's access log, folded behind *Recent access* on the dashboard
+and nowhere at all on this phone — so somebody working through passwords looked, from here,
+exactly like a quiet evening. And the count cannot tell that apart from a parent mistyping
+their own password on a phone keyboard. The line says only that nobody was let in.
+`refusal_lines_test.dart`'s forbidden-word list grew `intruder`, `break-in` and `guessing`
+with this row, because the standing rule is easiest to break here.
+
+**What is still open is the part that was never about any particular count.** The argument for
+leaving the card silent about kinds it cannot name is that `ContractCheck` covers the general
+case, and a per-field "I did not recognise this" line would be a fix at the wrong depth. That
+argument stands. One clause of it is still false:
 
 `ContractCheck.isWarning` is `serverOlder` **alone**. So `serverNewer` never reaches
 `home_screen`'s `_caveats` and never bands a screen; the message exists only in the identity
-dialog, behind a tap. `home_screen.dart` gives the reasoning — being newer "still works
-everywhere" — and the refusals card was a live counterexample to exactly that: newer is
-precisely when a count is short, and it is the one agreement with no banner.
+dialog, behind a tap. `home_screen.dart` reasons that being newer "still works everywhere" —
+and the refusals card is the counterexample, twice over now: newer is exactly when a count is
+short, and it is the one agreement with no banner.
 
-It is not live today, because the fourth kind is named. It becomes live again on the day
-nestwatch counts a fifth, and this app is behind. **The question is whether `serverNewer`
-should band a screen at all**, and that is a UI decision rather than an engineering one —
-the reason it is left here rather than settled quietly. Nothing is broken while it waits.
+It is not live today, because five kinds are named against a server that counts five. It goes
+live again on the day a sixth arrives and this app is behind — which has now happened twice in
+six weeks, so it is a question of when. **Whether `serverNewer` should band a screen at all is
+a UI decision**, which is why it is still here rather than settled quietly.
+
+### M34 · The contract gate cannot go green until nestwatch tags v0.11.0
+
+**Filed 2026-10-22, and nothing in this repository can close it.**
+
+`tool/check_golden.sh` asks three questions. Two of them now pass: every vendored golden
+matches nestwatch's `origin/main`, and the version this app was tested against matches their
+`Cargo.toml` (0.11). The third reads the `v<testedAgainst>` tag to ask whether that release
+actually produces these files, and **there is no `v0.11.0` tag**. Their `main` carries the
+0.11.0 code and a CHANGELOG entry dated today; the release is not cut. `git ls-remote --tags`
+shows v0.9.0 and v0.10.0 and stops.
+
+So the job reports `UNREADABLE release v0.11.0: no such tag`, counts it as drift, and fails.
+
+**That is the check being right.** It exists to catch exactly this — goldens vendored from a
+tree that can still change — and it is catching it, because that is what was done here and
+the entry should say so plainly rather than dress it up.
+
+**Why it was done anyway, rather than waiting.** There was no green state available. The
+version comparison reads their `Cargo.toml`, which said 0.11 the moment they pushed, so this
+gate was already failing at `nestwatch=0.11, here=0.8` before anything was touched. Given a
+choice between failing on a stale contract and failing on an uncut release, the second leaves
+the app correct and names the one thing outstanding. `M31`'s rule — never vendor from a
+sibling **working tree** — is satisfied: this came from `origin/main` at `ce4a51f`, published.
+What it does not satisfy is the stronger test the tag check applies, and the difference
+between those two is the whole content of this entry.
+
+**What closes it.** nestwatch tagging `v0.11.0`, and nothing else. No edit here is needed:
+the goldens and `testedAgainst` already name 0.11.0, so the day that tag exists this gate goes
+green on the next run. If instead they change the 0.11.0 goldens before tagging, this gate
+says so — which is the protection being paid for.
+
+**What to resist.** Relaxing the tag check to a third outcome so the badge goes green. It
+would be easy to argue for, since this repo uses exit 3 for "not decidable here" elsewhere
+and did so for `check_findings.sh` in this same change. It is the wrong call here: a missing
+tag in their repo is not decidable here, but *vendoring from an uncut release* is a decision
+taken here, and the badge should keep saying so until it is not true any more.
 
 ### M32 · The iOS integration tests are gated again, on a third route; two others are ruled out
 

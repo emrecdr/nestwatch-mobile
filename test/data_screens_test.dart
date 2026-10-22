@@ -28,6 +28,7 @@
 /// is present on the day there were refusals and absent on the day there were none.
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -134,9 +135,57 @@ void main() {
                 'the pages list is the part furthest down the screen, so this is '
                 'also the assertion that the whole thing laid out',
           );
+          // The group list, populated in a capture for the first time since 0.11.0 --
+          // every release up to 0.10.0 sent `groups: []`, so this section had never been
+          // drawn from a real payload at any width.
+          expect(find.textContaining('Roblox'), findsWidgets);
+          expect(find.textContaining('25 / 60 min'), findsWidgets);
+          expect(
+            find.textContaining('10 min on the web'),
+            findsWidgets,
+            reason:
+                'the browser share of the group pool, and the only number on this '
+                'screen that comes from a key no release before 0.11.0 sent',
+          );
+          // And it appears once, under the group, rather than under every row. The
+          // presence assertion above is what stops this one passing because the string
+          // was never rendered at all.
+          expect(
+            find.textContaining('min on the web'),
+            findsOneWidget,
+            reason:
+                'an app row has no web share and sends no key; a line under one would '
+                'be a claim about something apps do not have',
+          );
         });
       });
     }
+
+    testWidgets('a group whose web share is zero gets no line saying zero', (
+      tester,
+    ) async {
+      // Derived from the vendored capture rather than written here: decode it, move one
+      // number, encode it back. So the shape is still nestwatch's and only the field
+      // under test differs -- which is the whole claim, since `webMinutes` keeps null and
+      // zero apart on purpose and nothing else in `test/golden/` carries a zero.
+      final payload =
+          jsonDecode(_golden('usage-today.json')) as Map<String, dynamic>;
+      ((payload['groups'] as List).first as Map<String, dynamic>)['web_mins'] =
+          0;
+      bodies['/api/usage/today'] = jsonEncode(payload);
+
+      await tester.runAsync(() async {
+        await show(tester, usage(), _sizes.values.last);
+        // The control. Without it this test passes just as happily when the group row
+        // stopped rendering altogether, which is the failure it would most like to hide.
+        expect(
+          find.textContaining('Roblox'),
+          findsWidgets,
+          reason: 'the group is still drawn; only its web share is zero',
+        );
+        expect(find.textContaining('min on the web'), findsNothing);
+      });
+    });
 
     testWidgets('and shows what was refused, on a day there was any', (
       tester,

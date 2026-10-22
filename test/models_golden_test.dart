@@ -156,7 +156,24 @@ void main() {
       expect(usage.focused.map((r) => r.name), ['minecraft', 'chrome']);
       expect(usage.perApp.single.limitMinutes, 60);
       expect(usage.pages.single.name, 'Poki - Free Online Games');
-      expect(usage.groups, isEmpty);
+      // Populated since 0.11.0, and the first golden that exercises this list at all --
+      // it was `[]` in every release up to 0.10.0, so the Groups section had never been
+      // built from a real payload. A group can now carry words as well as programs, so one
+      // limit covers a game in its own program and the same game on a web page.
+      expect(usage.groups.single.name, 'Roblox');
+      expect(usage.groups.single.minutes, 25);
+      expect(usage.groups.single.limitMinutes, 60);
+      expect(
+        usage.groups.single.webMinutes,
+        10,
+        reason:
+            'the browser share of the pool; 25 of 60 used, 10 of it on a page rather '
+            'than in the program',
+      );
+      // And the rows that have no such idea say so by sending no key, which is a different
+      // answer from zero and is why `webMinutes` is nullable.
+      expect(usage.perApp.single.webMinutes, isNull);
+      expect(usage.focused.first.webMinutes, isNull);
 
       // Arrived in the payload on 2026-09-01. Pinned here even though no screen reads
       // them yet (M20): the point of this file is that the wire shape is recorded from
@@ -178,7 +195,15 @@ void main() {
       expect(usage.refused.dayResets, 1);
       expect(usage.refused.shutdownCancels, 3);
       expect(usage.refused.timeCodesRefused, 4);
-      expect(usage.refused.total, 10);
+      expect(usage.refused.wrongPasswords, 5);
+      expect(
+        usage.refused.total,
+        15,
+        reason:
+            'as that PC summed it. The four named parts come to 10; a client re-adding '
+            'them would under-report by 5 on the evening somebody was working through '
+            'passwords, which is the evening this card matters most',
+      );
       expect(usage.refused.any, isTrue);
 
       // null here, and it is the ordinary case: the base rules are in force, so there is

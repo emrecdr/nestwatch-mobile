@@ -157,14 +157,24 @@ done <<< "$refs"
 #
 # Cheap and local: no sibling checkout needed, so this half still runs when the other does
 # not. Scoped to entries for the same reason as above.
+#
+# **The two files' own references are counted separately, and that distinction cost a red
+# badge before it existed.** Until 2026-10-22 both went into one bucket and failed with
+# "that is an error here". Then nestwatch pushed a release citing `O84` and `O101`, neither
+# of which has a heading in their file — two ids written nowhere in this tree — and this
+# gate reddened *this* repository for bookkeeping entirely inside *theirs*. Nothing here
+# could fix it, which is the definition of the third outcome the closing comment sets out.
+# A gate that fails for someone else's typo is how a team learns to stop reading CI, which
+# is `M25`'s whole argument.
 echo
 internal_report=$(mktemp)
-for pair in "$MINE M" "$THEIRS O"; do
+theirs_report=$(mktemp)
+for pair in "$MINE M $internal_report" "$THEIRS O $theirs_report"; do
   set -- $pair
-  file="$1"; prefix="$2"
+  file="$1"; prefix="$2"; report="$3"
   for id in $(sed -n '/^## Open/,$p' "$file" | grep -ohE "\b$prefix[0-9]+\b" | sort -u); do
     grep -qE "^### $id( |·|\`)" "$file" ||
-      echo "  DANGLING      $id — cited inside $file, but no '### $id' in it" >> "$internal_report"
+      echo "  DANGLING      $id — cited inside $file, but no '### $id' in it" >> "$report"
   done
 done
 # **And the citations that live in the source rather than in either findings file**, which
@@ -205,20 +215,34 @@ for id in $(grep -rhoE '\bM[0-9]+\b' \
 done
 
 internal=$(wc -l < "$internal_report" | tr -d ' ')
+theirs=$(wc -l < "$theirs_report" | tr -d ' ')
 if [ "$internal" -eq 0 ]; then
-  echo "  every reference inside this repository resolves, and both files' own do too"
+  echo "  every reference inside this repository resolves"
 else
   cat "$internal_report"
-  dangling=$((dangling + internal))
 fi
-rm -f "$internal_report"
+# Reported in the same breath, because it is worth reading, and counted with the cross-repo
+# ones, because it is not actionable here. Saying whose it is in the line itself, so nobody
+# has to open the script to find out why a dangle is not a failure this time.
+if [ "$theirs" -gt 0 ]; then
+  cat "$theirs_report"
+  echo "                ...and that id is cited in nestwatch's own file, not in anything"
+  echo "                here. Theirs to fix; reported rather than failed."
+  dangling=$((dangling + theirs))
+fi
+dangling=$((dangling + internal))
+rm -f "$internal_report" "$theirs_report"
 
 echo
 # Two different facts, and folding them into one exit code makes CI red on good news.
 #
-# A dangle **inside one repository** -- within a findings file, or in a comment somewhere in
-# this tree citing the register -- is unambiguously a mistake here: the entry it names is
-# right there or it is not, and nothing outside this repository can change that.
+# A dangle **inside this repository** -- within `docs/OPEN-FINDINGS.md`, or in a comment
+# somewhere in this tree citing the register -- is unambiguously a mistake here: the entry it
+# names is right there or it is not, and nothing outside this repository can change that.
+#
+# A dangle inside **the sibling's** findings file reads identically and is not the same fact:
+# it is their entry, their id and their fix, and this gate cannot do anything about it. It is
+# still printed, because it is worth knowing, but it is counted with the cross-repo ones.
 #
 # A **cross-repo** dangle cannot be told apart from here. Both files delete an entry when
 # it is fixed, so the reference most likely dangles because the other side shipped it --

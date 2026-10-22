@@ -17,12 +17,14 @@ Refusals _of({
   int resets = 0,
   int shutdowns = 0,
   int codes = 0,
+  int passwords = 0,
 }) => Refusals(
   clockChanges: clock,
   dayResets: resets,
   shutdownCancels: shutdowns,
   timeCodesRefused: codes,
-  total: clock + resets + shutdowns + codes,
+  wrongPasswords: passwords,
+  total: clock + resets + shutdowns + codes + passwords,
 );
 
 void main() {
@@ -35,6 +37,12 @@ void main() {
     // cannot fail. The words are checked against every string this file can produce,
     // including the heading and the intro, not only the numbered lines.
     const forbidden = [
+      // Added with the fifth row, which is the one in this card most able to read as an
+      // accusation: a count of wrong passwords invites "someone tried to break in", and
+      // the same number is produced by a parent mistyping their own on a phone.
+      'intruder',
+      'break-in',
+      'guessing',
       'tamper',
       'caught',
       'cheat',
@@ -51,13 +59,15 @@ void main() {
         // 1 and 2 because the singular and plural are different strings, and a word could
         // hide in either. 0 produces no line, which the next group covers.
         for (final n in [1, 2])
-          ...refusalLines(_of(clock: n, resets: n, shutdowns: n, codes: n)),
+          ...refusalLines(
+            _of(clock: n, resets: n, shutdowns: n, codes: n, passwords: n),
+          ),
       ];
 
       expect(
         everything,
-        hasLength(10),
-        reason: 'title, intro, and four lines twice',
+        hasLength(12),
+        reason: 'title, intro, and five lines twice',
       );
 
       for (final text in everything) {
@@ -121,8 +131,8 @@ void main() {
       // separate vocabularies for the same four facts is how a parent ends up wondering
       // whether they are reading about the same event.
       //
-      // Re-read against their table on 2026-09-09 when 0.8.0 added the fourth: these three
-      // are unchanged there. Worth doing rather than assuming, because a copy stops being
+      // Re-read against their table on 2026-09-09 when 0.8.0 added the fourth, and again on
+      // 2026-10-22 when 0.11.0 added the fifth: these are unchanged there both times. Worth doing rather than assuming, because a copy stops being
       // a copy without anything failing.
       expect(
         refusalLines(_of(clock: 2)).single,
@@ -148,17 +158,27 @@ void main() {
         refusalLines(_of(codes: 2)).single,
         '2 time codes refused — they were not active codes, so no time was added',
       );
+      // The fifth, from 0.11.0. Both counts pinned for the same reason as the fourth.
+      expect(
+        refusalLines(_of(passwords: 1)).single,
+        '1 wrong password refused on the sign-in page — nobody was let in',
+      );
+      expect(
+        refusalLines(_of(passwords: 9)).single,
+        '9 wrong passwords refused on the sign-in page — nobody was let in',
+      );
     });
 
-    test('all four, in the dashboard order', () {
+    test('all five, in the dashboard order', () {
       final lines = refusalLines(
-        _of(clock: 1, resets: 1, shutdowns: 1, codes: 1),
+        _of(clock: 1, resets: 1, shutdowns: 1, codes: 1, passwords: 1),
       );
-      expect(lines, hasLength(4));
+      expect(lines, hasLength(5));
       expect(lines[0], contains('clock'));
       expect(lines[1], contains('day over'));
       expect(lines[2], contains('shutdown'));
       expect(lines[3], contains('time code'));
+      expect(lines[4], contains('wrong password'));
     });
   });
 

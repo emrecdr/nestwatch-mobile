@@ -273,6 +273,39 @@ mutate "refusals: a zero time-code count still gets a line" \
   '  if (refused.timeCodesRefused > 0)' \
   '  if (refused.timeCodesRefused >= 0)'
 
+# The fifth count, added in nestwatch 0.11.0, read from the key beside it. The card then
+# names the right number of kinds and gets one of their figures wrong, and `refused_total`
+# is taken as sent so the total stays right while a part is quietly a copy of its
+# neighbour -- the same shape as the fourth-kind mutation above, which is why it is worth
+# having both rather than trusting that one covers the pattern.
+mutate "refusals: the fifth kind is read from the wrong key" \
+  lib/src/api/models.dart \
+  "        wrongPasswords: at('wrong_passwords')," \
+  "        wrongPasswords: at('time_codes_refused'),"
+
+# A zero grows a sentence saying zero, on the row most able to alarm somebody: "0 wrong
+# passwords refused" under a card that only appears when something happened.
+mutate "refusals: a zero wrong-password count still gets a line" \
+  lib/src/ui/refusal_lines.dart \
+  '  if (refused.wrongPasswords > 0)' \
+  '  if (refused.wrongPasswords >= 0)'
+
+# `web_mins` loses the difference between absent and zero. Every row then has a web share,
+# including per-app and page rows, which have no such idea and send no key -- so the model
+# starts answering a question about them that nestwatch never asked.
+mutate "usage: a row with no web share is given one of zero" \
+  lib/src/api/models.dart \
+  "    webMinutes: (json['web_mins'] as num?)?.toInt()," \
+  "    webMinutes: (json['web_mins'] as num?)?.toInt() ?? 0,"
+
+# The render guard stops distinguishing a group that was never browsed from one that was.
+# Caught only because the zero case is a test of its own: no vendored golden carries a
+# group with a zero web share, so this mutation would otherwise have survived the suite.
+mutate "usage: a zero web share gets a line saying zero" \
+  lib/src/ui/usage_screen.dart \
+  '                      if (row.webMinutes != null && row.webMinutes! > 0)' \
+  '                      if (row.webMinutes != null && row.webMinutes! >= 0)'
+
 # Singular and plural collapse. Reads as "1 clock changes ignored" on the day it fires,
 # which is the day the card is being read most carefully.
 mutate "refusals: the count and its noun stop agreeing" \

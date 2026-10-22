@@ -217,7 +217,23 @@ class _UsageScreenState extends State<UsageScreen>
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
-                Expanded(child: Text(row.name)),
+                // A second line under the name rather than another child in this Row.
+                // `Spacer` and friends only absorb slack, so a third inflexible child here
+                // is how the requests header overflowed by 85px at 320pt -- see a8cc78f.
+                // A sub-line cannot push anything sideways.
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(row.name),
+                      if (row.webMinutes != null && row.webMinutes! > 0)
+                        Text(
+                          '${row.webMinutes} min on the web',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                    ],
+                  ),
+                ),
                 Text(
                   row.limitMinutes == null
                       ? '${row.minutes} min'

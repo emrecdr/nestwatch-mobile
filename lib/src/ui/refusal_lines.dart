@@ -4,13 +4,13 @@
 ///
 /// nestwatch sends **counts, not sentences** — `refused` and `refused_total`, and nothing
 /// else. So a client has to compose the prose, and the dashboard already composes some.
-/// Two surfaces inventing separate vocabularies for the same four facts is how a parent
+/// Two surfaces inventing separate vocabularies for the same five facts is how a parent
 /// ends up reading "clock change ignored" on one screen and something subtly different on
 /// the other, and then wondering whether they are the same event. These match
 /// `refusedRows()` in nestwatch `assets/app.js` word for word.
 ///
 /// That borrowing was tested rather than trusted on 2026-09-09, when nestwatch 0.8.0 added
-/// a fourth count. Its `refusedCodeOne`/`refusedCodeMany` were taken verbatim, and the
+/// a fourth count, and again on 2026-10-22 when 0.11.0 added a fifth. Its `refusedCodeOne`/`refusedCodeMany` were taken verbatim, and the
 /// three already here were re-read against theirs and are unchanged — which was the thing
 /// worth checking, since a copy stops being a copy silently. Their table has since grown
 /// two more languages; this app has one, and that is `M12`'s neighbourhood rather than
@@ -71,6 +71,19 @@ List<String> refusalLines(Refusals refused) => [
   if (refused.timeCodesRefused > 0)
     '${refused.timeCodesRefused} '
         '${_plural(refused.timeCodesRefused, 'time code refused — it was not an active code, so no time was added', 'time codes refused — they were not active codes, so no time was added')}',
+  // The fifth, from 0.11.0, and last in the dashboard's own order. Whole sentence inside
+  // `_plural` for the same reason as the one above it: `refusedPasswordOne` and
+  // `refusedPasswordMany` differ in the noun only, but splitting the clause out would mean
+  // writing half of it here instead of borrowing it.
+  //
+  // Note what it does not say. These are counted per password checked, and a parent's own
+  // typo on a phone keyboard counts exactly the same as somebody working through a list —
+  // so the line says only that nobody was let in, which is the whole of what the count
+  // supports. The group above is the standing rule; this row is the easiest place in the
+  // card to break it.
+  if (refused.wrongPasswords > 0)
+    '${refused.wrongPasswords} '
+        '${_plural(refused.wrongPasswords, 'wrong password refused on the sign-in page — nobody was let in', 'wrong passwords refused on the sign-in page — nobody was let in')}',
 ];
 
 /// Mirrors `plural(n, one, many)` in nestwatch `assets/app.js`.

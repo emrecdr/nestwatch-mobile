@@ -73,10 +73,24 @@ class UsageRow {
   /// `null` where the row carries no limit (focus and page rows do not).
   final int? limitMinutes;
 
+  /// `web_mins`, on group rows only, from nestwatch 0.11.0. `null` everywhere else.
+  ///
+  /// A group can now carry words as well as programs, so one limit covers a game in its
+  /// own program and the same game on a web page. [minutes] is the whole pool either way;
+  /// this is how much of it was the browser.
+  ///
+  /// Null and zero are kept apart on purpose, and it is the same distinction
+  /// `scope_refusal_test.dart` turns on. A per-app row has no such idea and sends no key;
+  /// a group whose web share is genuinely nothing sends `0`. Rendering "0 min on the web"
+  /// under a group nobody browsed would be an answer to a question nobody asked, and
+  /// rendering it under an *app* row would be a claim about something apps do not have.
+  final int? webMinutes;
+
   const UsageRow({
     required this.name,
     required this.minutes,
     this.limitMinutes,
+    this.webMinutes,
   });
 
   /// `per_app` and `groups` send `{name, used_mins, limit_mins}`; `focused` and `pages`
@@ -85,6 +99,7 @@ class UsageRow {
     name: json['name'] as String? ?? '',
     minutes: ((json['used_mins'] ?? json['minutes']) as num?)?.toInt() ?? 0,
     limitMinutes: (json['limit_mins'] as num?)?.toInt(),
+    webMinutes: (json['web_mins'] as num?)?.toInt(),
   );
 }
 
@@ -113,6 +128,19 @@ class Refusals {
   /// with no sentence there, because adding only the first half is silent.
   final int timeCodesRefused;
 
+  /// `wrong_passwords`, counted by nestwatch since 0.11.0.
+  ///
+  /// The fifth kind, and the first to arrive after the shape above had been exercised
+  /// once — so this time it was two edits again rather than a surprise. Counted per
+  /// password checked; a device already locked out is turned away before any check, so it
+  /// is not counted here.
+  ///
+  /// Worth knowing why it matters more than its size suggests: every one of these was
+  /// already in that PC's access log, folded away behind *Recent access* on the dashboard
+  /// and nowhere at all on this phone. Somebody working through passwords looked, from
+  /// here, exactly like a quiet evening.
+  final int wrongPasswords;
+
   /// `refused_total`, as that PC summed it — **not** re-added here.
   ///
   /// nestwatch sends the total beside the parts precisely so no client decides what counts
@@ -126,6 +154,7 @@ class Refusals {
     required this.dayResets,
     required this.shutdownCancels,
     required this.timeCodesRefused,
+    required this.wrongPasswords,
     required this.total,
   });
 
@@ -134,6 +163,7 @@ class Refusals {
     dayResets: 0,
     shutdownCancels: 0,
     timeCodesRefused: 0,
+    wrongPasswords: 0,
     total: 0,
   );
 
@@ -160,6 +190,7 @@ class Refusals {
         dayResets: at('day_resets'),
         shutdownCancels: at('shutdown_cancels'),
         timeCodesRefused: at('time_codes_refused'),
+        wrongPasswords: at('wrong_passwords'),
         total: (usage['refused_total'] as num?)?.toInt() ?? 0,
       );
     }
