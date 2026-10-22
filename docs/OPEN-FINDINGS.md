@@ -144,15 +144,24 @@ a UI decision**, which is why it is still here rather than settled quietly.
 
 ### M35 · The mutation audit costs 24s per mutation and has hit its ceiling once
 
-**Measured 2026-10-22**, from the timestamps of the run that failed: 109 mutations between
-18:30:14 and 19:14:25 is **24.3 seconds each**, because `tool/mutate.sh` reruns the whole
-suite once per mutation. The job was cut by `timeout-minutes: 45` one mutation short of
-printing its summary, so an audit that had killed 109 and lost none was reported as
-`cancelled`.
+**Measured 2026-10-22, twice, and the two measurements are the point.** The run that failed
+did 109 mutations in 44m11s — 24.3s each — and was cut by `timeout-minutes: 45` one mutation
+short of printing its summary, so an audit that had killed 109 and lost none was reported as
+`cancelled`. The very next run, same 110 mutations and same code, finished all of them in
+41m16s: **22.5s each**.
 
-The window is now 60 minutes, which holds about 145 mutations at that rate. There are 110.
+So the rate is not a constant, it is roughly **22–25s per mutation depending on the runner**,
+because `tool/mutate.sh` reruns the whole suite once per mutation and a hosted runner's speed
+varies by more than the margin 45 minutes left. The first version of this entry gave 24.3s as
+*the* rate, measured accurately off one run and still overstated as a general figure — which
+matters here, because the conclusion to draw is not "it takes 24.3s" but **"the window was
+inside the variance, and that is what decided it."**
 
-**So the next person to add a mutation is spending 24 seconds of every future push**, and
+The window is 60 minutes now, which holds about 145 mutations at the pessimistic rate. There
+are 110.
+
+**So the next person to add a mutation is spending about 24 seconds of every future push**,
+and
 raising the number again is the move to resist, because it hides a cost rather than paying
 it. Three things could be done instead, in the order they are worth considering:
 

@@ -357,12 +357,13 @@ jobs:
     # cut at 45m20s having reported 109 of 110 mutations killed and none survived -- one
     # short of printing its own summary, so a passing audit was reported as `cancelled`.
     #
-    # The arithmetic, from that run's own timestamps: 109 mutations between 18:30:14 and
-    # 19:14:25 is 24.3s each, because every mutation reruns the whole suite. 110 of them is
-    # about 45 minutes before setup, which is exactly why 45 was not enough. 60 leaves room
-    # for roughly 145 at the current rate.
+    # The arithmetic, from that run's own timestamps: 109 mutations in 44m11s is 24.3s each,
+    # because every mutation reruns the whole suite. The next run did all 110 in 41m16s,
+    # which is 22.5s each on the same code -- so the real figure is 22-25s depending on the
+    # runner, and 45 minutes sat inside that variance. That is what decided it, rather than
+    # any one rate. 60 leaves room for about 145 at the pessimistic end.
     #
-    # So a new mutation costs about 24 seconds of this job, every push, forever. That is
+    # So a new mutation costs roughly 24 seconds of this job, every push, forever. That is
     # worth knowing before adding one, and `M35` records what to do when this ceiling is
     # reached again rather than raising the number a third time.
     timeout-minutes: 60
