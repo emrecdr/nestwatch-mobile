@@ -237,7 +237,7 @@ jobs:
       # reject them, which is the intended state until M7. The artifact name says so, so
       # that nobody has to read this comment to find out.
       - name: Keep the installable APKs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: nestwatch-mobile-DEBUG-SIGNED-apk-${{ github.run_number }}
           # x86_64 is deliberately not among these: it is emulator-only, and it is the
