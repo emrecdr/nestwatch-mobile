@@ -259,18 +259,6 @@ else
   fi
 fi
 
-# The renewal threshold the phone warns at, which must be the one nestwatch warns at.
-#
-# nestwatch's own comment says RENEW_WARN_DAYS is `pub` so that `doctor` "nags at the same
-# threshold as the service log". A phone disagreeing with both would be a third answer.
-theirs_warn=$(sed -n 's/^pub const RENEW_WARN_DAYS: u64 = \([0-9]*\);.*/\1/p' \
-  "$SRC/src/cert.rs" 2>/dev/null | head -1)
-mine_warn=$(sed -n 's/^const int renewWarnDays = \([0-9]*\);.*/\1/p' \
-  lib/src/pinning/certificate_expiry.dart | head -1)
-
-echo
-compare "renew warning (days)" "$theirs_warn" "$mine_warn" \
-  "A parent would get two answers to the same question."
 
 echo
 # Said before the verdict, so it is read whichever way the verdict goes. A reader who sees

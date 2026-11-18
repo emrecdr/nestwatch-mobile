@@ -692,8 +692,8 @@ class NestwatchClient {
   /// `limits.json` does **not** publish it — re-checked 2026-09-06, the vendored file
   /// carries `code_len`, `login_lockout_secs`, `login_max_fails`, `max_active_codes` and
   /// `max_code_minutes`, and nothing else. A free-entry control would therefore need a
-  /// copy of a number that lives in someone else's Rust, which is the fifth reader `M6`
-  /// is open in order to delete. Preset choices sit well inside any plausible cap and need
+  /// copy of a number that lives in someone else's Rust, the kind of reader this app removed
+  /// for the renewal threshold. Preset choices sit well inside any plausible cap and need
   /// no copy, so the caller offers those and this takes whatever it is given.
   Future<CurfewExtension> extendCurfew(int minutes) async {
     final (response, body) = await _send(

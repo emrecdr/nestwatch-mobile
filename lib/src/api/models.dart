@@ -236,9 +236,9 @@ class UsageToday {
   /// That PC's own verdict on whether the certificate is close enough to lapsing to say
   /// so, computed there against its `RENEW_WARN_DAYS` and sent rather than implied.
   ///
-  /// This is what `nestwatch#O72` was reaching for and better than what it proposed:
-  /// publishing the threshold would have had every client apply it separately, and
-  /// publishing the answer removes the comparison instead. nestwatch's own test says it —
+  /// Publishing the answer removes the comparison from every client, which is better than
+  /// publishing only the threshold for each to apply. The threshold is published too, in
+  /// `limits.json`, for the handshake path where no usage payload has arrived. nestwatch's own test says it —
   /// "sending `cert_expiring` means the browser compares nothing."
   ///
   /// **Nothing reads this yet, deliberately.** See `docs/OPEN-FINDINGS.md` M20: this app's

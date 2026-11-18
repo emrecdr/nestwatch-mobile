@@ -19,6 +19,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nestwatch_mobile/src/api/models.dart';
 import 'package:nestwatch_mobile/src/api/nestwatch_api.dart';
+import 'package:nestwatch_mobile/src/pinning/certificate_expiry.dart';
 
 void main() {
   Object? golden(String name) {
@@ -127,6 +128,10 @@ void main() {
       expect(TimeCodeLimits.maxActive, limits['max_active_codes']);
       expect(LoginLimits.maxAttempts, limits['login_max_fails']);
       expect(LoginLimits.lockoutSeconds, limits['login_lockout_secs']);
+      // The renewal warning comes from the handshake, on screens no usage payload reaches,
+      // so the threshold is compiled in rather than taken from `cert_expiring`. It must be
+      // the one that PC's `doctor` and service log warn at.
+      expect(renewWarnDays, limits['renew_warn_days']);
     });
 
     test('and the sentences built from them say the real numbers', () {

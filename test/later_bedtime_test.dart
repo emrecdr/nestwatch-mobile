@@ -9,7 +9,7 @@
 /// telling a parent something correct and pointing them at a device they may not be near.
 /// `docs/OPEN-FINDINGS.md` M24 argues the fix is to make the sentence true here rather
 /// than to paraphrase a verdict that PC computed against its own trusted clock, which is
-/// the comparison `M6` and `nestwatch#O72` exist to stop clients making.
+/// the comparison nestwatch sends its verdicts to stop clients making.
 ///
 /// ## The first test is the one that will age
 ///
@@ -88,7 +88,7 @@ void main() {
   test('the offered extensions need no copy of a server constant', () {
     // `extend_curfew` validates against `timereq::MAX_REQUEST_MINUTES` (240) and
     // `limits.json` does not publish it — re-checked 2026-09-06. A free-entry field would
-    // need this app to hold that number, which is the fifth reader M6 is open to delete.
+    // need this app to hold that number, a copy of a server constant it does not keep.
     // These are a product choice that happens to sit well inside any plausible cap; the
     // assertion is that they stay that way, not that they mirror anything.
     expect(laterBedtimeChoices, isNotEmpty);

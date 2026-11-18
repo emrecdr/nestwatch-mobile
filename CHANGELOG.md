@@ -173,6 +173,11 @@ Nothing has been released yet, so everything is still under `[Unreleased]`. See
 
 ### Changed
 
+- **Tested against nestwatch 0.12.1, and the renewal threshold comes from `limits.json`.**
+  The golden files are that release's, and `limits.json` now publishes `renew_warn_days`:
+  `models_golden_test.dart` holds this app's renewal warning to it, and
+  `tool/check_golden.sh` no longer reads nestwatch's `src/cert.rs` with a `sed` to check it.
+  The line naming a routine in force on the usage tab gained its first test, both ways.
 - **The minimum iOS is 15.0, up from 14.0.** Flutter 3.47 lifts the SDK's own floor from 13
   to 15, so this had to move before that upgrade rather than during it — and it moved now
   because this app has never been released, which is the only moment dropping a supported OS

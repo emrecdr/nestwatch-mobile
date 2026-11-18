@@ -26,7 +26,8 @@ const String laterBedtimeLabel = 'Later bedtime tonight';
 ///
 /// The endpoint validates against `timereq::MAX_REQUEST_MINUTES` (240) and `limits.json`
 /// does not publish it, so a free-entry field would need this app to hold a copy of a
-/// constant that lives in nestwatch's Rust — the fifth reader `M6` exists to delete. These
+/// constant that lives in nestwatch's Rust — the kind of reader this app removed for the
+/// renewal threshold. These
 /// three sit well inside any plausible cap and need no copy at all. They are a product
 /// choice, not a mirror of a limit, which is the same footing the time-code presets are on.
 const List<int> laterBedtimeChoices = [15, 30, 60];

@@ -113,7 +113,7 @@ jobs:
   # ---------------------------------------------------------------------------------
   # The cross-repo contract. This is the job that only exists because both repos are
   # public: before there was CI, `check_golden.sh` needed two checkouts on one machine
-  # and a person choosing to run it (see nestwatch#O72).
+  # and a person choosing to run it.
   # ---------------------------------------------------------------------------------
   contract:
     name: contract against nestwatch
@@ -157,10 +157,10 @@ jobs:
         # **Runs even when the step above failed, and that is not tidiness.** These are two
         # independent questions -- do the golden files match, and do the register's
         # cross-references resolve -- and by default a failure in the first skips the
-        # second. `M34` is about to hold the golden step red until nestwatch cuts a tag,
-        # which would have meant this check quietly not running on every push in the
-        # meantime. A gate that stops asking while still looking present is the failure
-        # this repository keeps finding in itself; see `tool/audit_deps.sh` and `M18`.
+        # second. The golden step once sat red for a day waiting on a nestwatch tag, which
+        # would have meant this check quietly not running on every push in the meantime. A
+        # gate that stops asking while still looking present is the failure this repository
+        # keeps finding in itself; see `tool/audit_deps.sh`, whose needle once could not match.
         if: always()
         # The exit codes and what they mean are documented once, in that script's own
         # closing comment and in docs/VERSIONING.md — restating them here is a second copy

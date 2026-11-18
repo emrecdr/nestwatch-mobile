@@ -10,8 +10,8 @@
 # Both files carry the same rule: **when a finding is fixed, delete its entry.** So a
 # reference resolving today and missing tomorrow does not mean somebody was careless. It
 # means the other side FIXED IT — and for a blocked entry, that is the exact moment it
-# stops being blocked and becomes work. M6 says "delete the sed once nestwatch publishes
-# the constant"; the way this repo learns that day arrived is the O72 heading vanishing.
+# stops being blocked and becomes work. The renewal threshold was the first: this repo waited
+# for nestwatch to publish it, and learned the day had come when that heading vanished.
 #
 # So a dangling reference is not an error to tidy away. It is the notification.
 #

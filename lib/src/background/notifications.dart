@@ -111,8 +111,8 @@ Future<bool> notificationsEnabled() async {
 /// Top-level rather than a local inside [notifyTimeRequests] so a plain test can hold the
 /// real object. The alternative was reading this file's text for the word `onlyAlertOnce`,
 /// which proves that a string is present rather than that a notification carries a flag —
-/// a distinction `docs/OPEN-FINDINGS.md` M18 records this repo getting wrong once, in a
-/// scanner that could not match its own needle. Source-scraping is right for the manifest
+/// a distinction this repo got wrong once, in the dependency audit, a scanner that could not
+/// match its own needle. Source-scraping is right for the manifest
 /// and the `Info.plist`, where there is no runtime handle at all. Here there is one.
 const NotificationDetails timeRequestDetails = NotificationDetails(
   iOS: DarwinNotificationDetails(categoryIdentifier: timeRequestCategoryId),

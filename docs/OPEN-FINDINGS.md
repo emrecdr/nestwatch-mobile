@@ -56,11 +56,11 @@ Same rules as the sibling repo's, for the same reasons:
 nestwatch keeps the same file, and the two now cite each other. That makes this a channel,
 and a channel needs an address rather than a sentence.
 
-**Cite a counterpart as `repo#ID`** — `nestwatch#O72`, `nestwatch-mobile#M6` — anywhere in
+**Cite a counterpart as `repo#ID`** — `nestwatch#O4`, `nestwatch-mobile#M20` — anywhere in
 the entry's prose. On an entry that crosses the boundary, open it with one line:
 
 ```
-> **Cross-repo** · filed by `nestwatch` · blocked on `nestwatch#O72`
+> **Cross-repo** · filed by `nestwatch` · blocked on `nestwatch#O4`
 ```
 
 Only the parts that apply, and only when they are not the default:
@@ -75,8 +75,8 @@ Only the parts that apply, and only when they are not the default:
 Both files delete an entry the moment it is fixed. So a reference that resolved yesterday
 and dangles today does not mean somebody was sloppy — it means *the other side shipped it*,
 and for a `blocked on` entry that is the exact moment the wait ends and the work begins.
-`M6` is the worked example: the way this repo learns that nestwatch published the constant
-is the `O72` heading disappearing.
+The renewal threshold was the first case: this repo waited for nestwatch to publish it, and
+learned on 2026-11-18 that the day had come when that entry's heading disappeared.
 
 A dangling reference is therefore not an error to tidy away. It is the notification, and
 the script says so rather than reporting a failure. Its third outcome is the usual one —
@@ -169,7 +169,7 @@ it. Three things could be done instead, in the order they are worth considering:
   `lib/`, and most mutations are killed by one or two test files. Mapping them would cut the
   great majority of the work, at the price of a map that can go stale — and a stale map here
   fails *open*, reporting a kill that never ran, which is the direction this repo keeps
-  finding itself on the wrong side of (`M18`, `audit_deps.sh`). It would need the same
+  finding itself on the wrong side of (`audit_deps.sh`'s needle that could not match). It would need the same
   treatment: prove the chosen tests can fail before believing they passed.
 - **Shard across runners.** No correctness risk and no map to rot; it costs runner minutes
   rather than wall-clock, and `tool/mutate.sh` would need to take a slice argument.
@@ -180,43 +180,6 @@ it. Three things could be done instead, in the order they are worth considering:
 
 Nothing is wrong today. This exists so the next failure is recognised as a ceiling rather
 than diagnosed from scratch, which is what happened this time.
-
-### M34 · The contract gate cannot go green until nestwatch tags v0.11.0
-
-**Filed 2026-10-22, and nothing in this repository can close it.**
-
-`tool/check_golden.sh` asks three questions. Two of them now pass: every vendored golden
-matches nestwatch's `origin/main`, and the version this app was tested against matches their
-`Cargo.toml` (0.11). The third reads the `v<testedAgainst>` tag to ask whether that release
-actually produces these files, and **there is no `v0.11.0` tag**. Their `main` carries the
-0.11.0 code and a CHANGELOG entry dated today; the release is not cut. `git ls-remote --tags`
-shows v0.9.0 and v0.10.0 and stops.
-
-So the job reports `UNREADABLE release v0.11.0: no such tag`, counts it as drift, and fails.
-
-**That is the check being right.** It exists to catch exactly this — goldens vendored from a
-tree that can still change — and it is catching it, because that is what was done here and
-the entry should say so plainly rather than dress it up.
-
-**Why it was done anyway, rather than waiting.** There was no green state available. The
-version comparison reads their `Cargo.toml`, which said 0.11 the moment they pushed, so this
-gate was already failing at `nestwatch=0.11, here=0.8` before anything was touched. Given a
-choice between failing on a stale contract and failing on an uncut release, the second leaves
-the app correct and names the one thing outstanding. `M31`'s rule — never vendor from a
-sibling **working tree** — is satisfied: this came from `origin/main` at `ce4a51f`, published.
-What it does not satisfy is the stronger test the tag check applies, and the difference
-between those two is the whole content of this entry.
-
-**What closes it.** nestwatch tagging `v0.11.0`, and nothing else. No edit here is needed:
-the goldens and `testedAgainst` already name 0.11.0, so the day that tag exists this gate goes
-green on the next run. If instead they change the 0.11.0 goldens before tagging, this gate
-says so — which is the protection being paid for.
-
-**What to resist.** Relaxing the tag check to a third outcome so the badge goes green. It
-would be easy to argue for, since this repo uses exit 3 for "not decidable here" elsewhere
-and did so for `check_findings.sh` in this same change. It is the wrong call here: a missing
-tag in their repo is not decidable here, but *vendoring from an uncut release* is a decision
-taken here, and the badge should keep saying so until it is not true any more.
 
 ### M32 · The iOS integration tests are gated again, on a third route; two others are ruled out
 
@@ -440,8 +403,8 @@ pushed `tests/golden/limits.json`: it carries `code_len`, `login_lockout_secs`,
 Presets are what let the control ship without it — 15, 30 and 60 sit well inside any
 plausible cap and need no copy — and that is a way *around* the gap rather than a way to
 close it. A free-entry field, or a "custom" option, still needs this app to hold a copy of a
-constant that lives in nestwatch's Rust, which is the fifth reader `M6` is open in order to
-delete. It belongs in `limits.json` for exactly the reason `max_code_minutes` already is.
+constant that lives in nestwatch's Rust, the kind of reader this repo removed for the renewal
+threshold. It belongs in `limits.json` for exactly the reason `max_code_minutes` already is.
 
 **Neither is filed on the nestwatch side.** That repository has no `FINDINGS-INBOX.md`, and
 its working tree has been dirty with another session's changes every time this was checked —
@@ -488,7 +451,7 @@ and collapsing presence back into value — and both were watched to die.
 broader than its *input* passes for the wrong reason and reads as coverage forever after.
 Nothing in a green suite can find that; the audit found it by changing the code until a
 claim stopped being defended. It is the same failure this repo has recorded twice before —
-`docs/OPEN-FINDINGS.md` M18 for a scanner that could not match its own needle, and the
+the dependency audit, a scanner that could not match its own needle, and the
 `_curfewNote` test that built its object by hand and never went through `fromJson`.
 
 ### M25 · The contract moved four hours after CI last saw it, and nothing was watching
@@ -695,9 +658,7 @@ Flutter's:
   waiting is zero until the pin crosses a release that warns, and `FLUTTER_VERSION` is pinned
   here, so that day is chosen rather than arriving.
 
-### M20 · nestwatch is about to send the expiry verdict, which is what M6 was waiting for
-
-> **Cross-repo** · pairs with `nestwatch#O72`
+### M20 · The expiry verdict arrived; what is left is that two clocks can disagree
 
 **Seen 2026-09-01, in the sibling checkout's local tree at `8ab193f` — not yet pushed.**
 `GET /api/usage/today` gains two fields:
@@ -712,40 +673,40 @@ Flutter's:
 so the **server applies its own threshold and sends the verdict**. Their own test comment
 says it plainly: *"Sending `cert_expiring` means the browser compares nothing."*
 
-**This is not what `nestwatch#O72` proposed, and it is better.** O72's fix was to publish
+**This is not what nestwatch's threshold entry proposed, and it is better.** Its fix was to publish
 the constant `RENEW_WARN_DAYS` in `limits.json` so each client could apply it. Publishing
 the *answer* instead removes the comparison from every client at once, rather than
 standardising the input to a comparison each one still performs.
 
-**What it means for `M6`.** That entry waits to delete `tool/check_golden.sh`'s `sed` over
-`src/cert.rs`. If the app stops needing the threshold, the `sed` goes — which is M6 closed
-by a route M6 did not anticipate. Whether it can is a real question and not a formality:
+**What it means for the `sed` entry.** That entry waited to delete `tool/check_golden.sh`'s `sed` over
+`src/cert.rs`. If the app stops needing the threshold, the `sed` goes — which would close it
+by a route it did not anticipate. Whether it can is a real question and not a formality:
 
 - Our warning is computed from the pinned certificate's `notAfter`, taken from the
   handshake, and is therefore available on **every** connection. `cert_expiring` arrives
   only with a usage payload, so only on that screen and only when the request succeeds.
-- O72 argued this exact point in the other direction about `VALIDITY_DAYS`: the handshake
+- That entry argued this exact point in the other direction about `VALIDITY_DAYS`: the handshake
   figure "describes the certificate in front of it rather than the one this version would
   issue". That reasoning did not stop applying because a new field appeared.
 - So the likely shape is that the server's verdict is used to *agree with*, not replace,
-  the local one — and that two sources that can disagree is precisely the problem O72
+  the local one — and that two sources that can disagree is precisely the problem that entry
   raised about a third answer. Worth deciding deliberately rather than by whichever lands
   first.
 
 **What was actually decided, recorded 2026-09-08 because nothing here said.** Both fields
 are parsed by `UsageToday` and pinned by `models_golden_test.dart`; **neither is read by any
 screen.** The local verdict stands, computed from the pinned certificate's `notAfter` off
-the handshake, which is the path `M6` notes runs where no usage payload exists.
+the handshake, which is the path the `sed` entry noted runs where no usage payload exists.
 
 That is defensible and it is not what this entry asked for — it is the decision going to
 whichever landed first, which the paragraph above says to avoid. What makes it safe rather
 than lucky is a gate: `check_golden.sh` holds `renewWarnDays` to their `RENEW_WARN_DAYS`
-through the `sed` that `M6` exists to delete, and reports `same (30)` today. The two answers
+through the `sed` that entry existed to delete, and reports `same (30)` today. The two answers
 agree because something enforces it, not because they share an input.
 
 So the coupling worth knowing before either entry moves: the server's verdict is redundant
 *while* the constants are held in step, and it is the fallback if they ever are not. Closing
-`M6` by vendoring the constant out of `limits.json` keeps the gate in another form and
+the `sed` entry by vendoring the constant out of `limits.json` keeps the gate in another form and
 changes nothing here. Dropping `renewWarnDays` outright on the strength of `cert_expiring`
 would not, because that field arrives only with a usage payload.
 
@@ -771,7 +732,7 @@ currently detects and which would quietly distort every "used today" figure on t
 screen as well. That is worth building deliberately, and it is a different feature from the
 expiry warning.
 
-**What this does NOT do: close `M6`.** Tempting, since `cert_expiring` is the verdict and a
+**What this did NOT do: close the `sed` entry.** Tempting, since `cert_expiring` is the verdict and a
 verdict needs no threshold — but `renewWarnDays` is still read by
 `CertificateExpiry.of()`, which runs from the handshake on screens that never fetch usage.
 Deleting the `sed` needs the threshold to be unnecessary, not merely duplicated. It is
@@ -819,6 +780,13 @@ hold anything. The same command gives two different true answers. Reading either
 *the* answer, without saying which tree it came from, is how "we are aligned" gets said
 about a state nobody has shipped. Its output does name the commit it compared against; that
 line is the part to read.
+
+**The `sed` half closed on 2026-11-18.** nestwatch 0.12.1 publishes the threshold as
+`renew_warn_days` in `limits.json`; `models_golden_test.dart` holds `renewWarnDays` to it,
+and `check_golden.sh` no longer reads their Rust. What this entry still holds is the row of
+the table above it was always going to end on: the phone and the PC can tell different
+times, nothing here detects it, and it would quietly distort every *used today* figure as
+well. That is a feature to build deliberately, not part of the expiry warning.
 
 ### M19 · The suite had 253 tests and rendered nothing
 
@@ -934,52 +902,6 @@ throwing out of `main()` before any screen was built, and pumping a screen never
 `main()`. A screenshot found that one, and a screenshot is still what finds the next of its
 kind. Rendering coverage and running-app coverage are different things, and 268 green tests
 say nothing about the second.
-
-### M18 · The dependency audit proved it could read, never that its needle could match
-
-> **Cross-repo** · pairs with `nestwatch#O79`
-
-The mobile half below is done; their half is not, so this stays paired rather than
-closed — `nestwatch#O79`'s own open remainder is that `KNOWN_SAFE` excuses a *file* rather
-than a *needle*. Two different ways one absence-scan's non-vacuity check can be too weak,
-found independently on the same day.
-
-`tool/audit_deps.sh` is this repo's only **absence-asserting** source scan: it claims no
-shipped package reaches the network outside `HttpOverrides`. On nestwatch#O79's taxonomy
-that is the direction that fails *open* — break it and it reports success.
-
-It already carried a control, added after the previous version of this audit spent months
-grepping for `SecureSocket` and matching nothing. But the control asks a weaker question
-than the audit answers:
-
-```sh
-grep -rqE 'import|class|void|final' "$lib"   # can the grep READ a tree?
-grep -rlE "$SUSPECT"               "$lib"   # can $SUSPECT MATCH one?
-```
-
-Those are different patterns, and only the second is the claim. **Measured 2026-08-31**
-against a fixture holding a real positive: the well-formed pattern found it; a `$SUSPECT`
-with one stray `[` returned nothing — grep exits 2 and writes to the stderr this script
-discards, so every package reads as clean — while the control passed for both runs and the
-script still printed *"so the grep can see."* One mistyped character while adding a term
-and the audit goes silent, in the direction that looks like good news.
-
-**Fixed.** Each alternative in `$SUSPECT` is now asserted against a planted positive
-before the pub-cache is opened, so non-vacuity rests on a fixture rather than on whatever
-the cache happens to hold. `SUSPECT_PATTERN` is overridable for the same reason `CACHE`
-and `LOCKFILE` are — the broken pattern above was watched to fire (`DETECTOR FAILED`,
-exit 2) rather than assumed to.
-
-**What it still does not cover**, recorded because *"all 7 terms"* reads stronger than it
-is: a term is checked against a positive built from itself, so a plausible typo naming no
-real API passes — `SocketsButTypoed$$` was tried and did. This closes the pattern going
-blind. It cannot close the list being wrong, and nothing mechanical can.
-
-**Why this was worth doing on their finding rather than waiting for ours to fail.** The
-audit is exactly the shape nestwatch#O79 describes, and this repo's recurring defect is
-the same one: a check that stops checking while still reporting success. It had already
-happened here twice — the original `SecureSocket` grep, and mutation anchors going stale
-three times. The lesson generalised across repositories before it had to be relearned.
 
 ### M17 · The architecture report said "one file move"; it was not
 
@@ -1097,45 +1019,6 @@ no reason to close it. Cancelling first and closing second is worse: the close d
 the socket and a detached subscription lets `HttpException` reach the zone. No entry was
 filed for the app, because it was checked: `ServerEvents` never cancels-then-closes, so
 its handler is attached for the stream's whole life.
-
-### M6 · The `sed` over nestwatch's `src/cert.rs` should be deleted, not maintained
-
-> **Cross-repo** · blocked on `nestwatch#O72`
-
-`tool/check_golden.sh` reads `RENEW_WARN_DAYS` out of the sibling repo's Rust to keep
-`renewWarnDays` honest. It has an `UNREADABLE` branch and both failure modes were watched to
-fire — but it is a bespoke reader of another repository's source, which is the channel both
-repos retired when `limits.json` was introduced.
-
-`nestwatch#O72` is the other half, and proposes publishing the constant in `limits.json`.
-This entry is this side's: once that lands, vendor the enlarged file and delete the reader.
-Nothing here needs doing until then — and the way this repo finds out that day arrived is
-`tool/check_findings.sh` reporting that reference dangling, because a fixed entry is a
-deleted entry on both sides.
-
-**`nestwatch#O72` is now overtaken on its own subject, though not closed.** They shipped
-`cert_expiring` (see `M20`) — the verdict rather than the constant. O72 proposed publishing
-`RENEW_WARN_DAYS` so each client could apply it; sending the answer removes the comparison
-from every client at once. This entry still waits, because `renewWarnDays` is read by the
-handshake path that runs where no usage payload exists.
-
-**Three facts `nestwatch#O72` argues from stopped being true on 2026-08-31**, and the other
-side should know before weighing it again. It says, measured 2026-08-27, that this
-repository has *"no CI of any kind — no `.github/`, no runner config of any flavour"*; that
-*"the client's [CI] never runs this one"*; and that drift *"needs both checkouts on one
-machine and a person choosing to run it."*
-
-There is now `.github/workflows/ci.yml`, and because both repositories are public it checks
-out `emrecdr/nestwatch` and runs `tool/check_golden.sh` against it on every push and pull
-request — no token, no person. The manual gate O72 describes is the thing that changed.
-
-**This does not close O72, and the direction of its argument survives intact.** Its case was
-explicitly *"consolidation, not automation"* — one bespoke reader of another repository's
-source replaced by a gate already covering five other values. That is still true, and a
-`sed` matching `pub const RENEW_WARN_DAYS: u64 = <n>;` is still a reader of their Rust
-whether a robot runs it or a person does. What changed is only the *cost of leaving it*,
-which O72 gives as a reader *"that only speaks when somebody runs it."* It now speaks on
-every push. So this stays blocked on their side rather than becoming urgent.
 
 ### M12 · The screen reader still has no map of a screen
 

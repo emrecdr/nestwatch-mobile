@@ -234,6 +234,43 @@ void main() {
         );
       });
     });
+
+    // Why the budget is what it is when a scheduled routine set it. Both captures carry
+    // `active_routine: null`, so a routine's name is the one field set here — on the real
+    // capture, not a payload written for the test — and the plain capture is the other
+    // direction: no routine, no line.
+    testWidgets('and says which routine set the numbers', (tester) async {
+      final day =
+          jsonDecode(_golden('usage-today.json')) as Map<String, dynamic>;
+      bodies['/api/usage/today'] = jsonEncode({
+        ...day,
+        'active_routine': 'Homework',
+      });
+      await tester.runAsync(() async {
+        await show(tester, usage(), _sizes.values.first);
+        expect(tester.takeException(), isNull);
+        expect(
+          find.textContaining('Routine Homework is running now'),
+          findsOneWidget,
+        );
+      });
+    });
+
+    testWidgets('and says nothing of a routine when none set them', (
+      tester,
+    ) async {
+      await tester.runAsync(() async {
+        await show(tester, usage(), _sizes.values.first);
+        expect(find.textContaining('55 min used today'), findsWidgets);
+        expect(
+          find.textContaining('is running now'),
+          findsNothing,
+          reason:
+              'the capture carries active_routine: null, and the test above proves '
+              'the line appears when a routine is named',
+        );
+      });
+    });
   });
 
   group('the time-codes tab keeps the code covered', () {

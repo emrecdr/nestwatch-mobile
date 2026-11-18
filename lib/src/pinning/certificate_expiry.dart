@@ -34,7 +34,8 @@ library;
 /// that constant is `pub` so `doctor` "nags at the same threshold as the service log",
 /// because "two different answers to 'is this cert about to lapse?' would have the parent
 /// reading a diagnostic that contradicts the warning in their log file". A phone that
-/// disagreed with both would be a third answer. `tool/check_golden.sh` compares them.
+/// disagreed with both would be a third answer. nestwatch publishes it as `renew_warn_days`
+/// in `limits.json`, and `test/models_golden_test.dart` holds this to it.
 const int renewWarnDays = 30;
 
 /// Inside this many days, the warning earns a strip on every screen rather than a line in

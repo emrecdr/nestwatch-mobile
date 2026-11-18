@@ -563,8 +563,8 @@ as `repo#ID`. `tool/check_findings.sh` follows those references in both directio
 It is worth having for one reason. Both files **delete** an entry when it is fixed — so a
 reference that resolved yesterday and dangles today is not sloppiness, it is the other side
 having shipped something, and for an entry that was *waiting* on it that is exactly when the
-wait ends. `M6` waits on `nestwatch#O72`; the way this repo finds out that day came is the
-`O72` heading vanishing.
+wait ends. The renewal threshold was the first case: this app waited on nestwatch publishing
+it, and found out its day had come by that entry's heading vanishing.
 
 So the script reports a dangling reference as likely good news rather than as a failure, and
 its third outcome is the usual one: no sibling checkout, nothing compared, exit 2.
